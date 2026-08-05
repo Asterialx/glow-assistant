@@ -5,8 +5,9 @@ import basicSsl from "@vitejs/plugin-basic-ssl";
 import { fileURLToPath, URL } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
-// HTTPS so phones on LAN can use getUserMedia (mic). Open https://192.168.x.x:1420
-const useHttps = process.env.VITE_DEV_HTTPS !== "0";
+// Opt-in only: VITE_DEV_HTTPS=1 for phone LAN mic testing.
+// Default HTTP so `tauri ios/android/desktop dev` can reach http://localhost:1420.
+const useHttps = process.env.VITE_DEV_HTTPS === "1";
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), ...(useHttps ? [basicSsl()] : [])],
