@@ -4,10 +4,8 @@ import {
   Briefcase,
   ChevronRight,
   Globe,
-  Grid2X2,
   MoreHorizontal,
   Paperclip,
-  Plug,
   Plus,
   ScrollText,
 } from "lucide-react";
@@ -17,21 +15,21 @@ import { useModeStore } from "../../stores/modeStore";
 import { useUiStore } from "../../stores/uiStore";
 import { createProject, listConversations, setConversationProject } from "../../db";
 import { cn } from "../../lib/utils";
+import { useIsMobile } from "../../lib/useMediaQuery";
 import { enableChromeAgent, enableGlowDesign } from "../../lib/glowExtensions";
 
 type SubKey = "project" | "skills" | "connector" | null;
 
 const SKILLS = [
-  { id: "morning", label: "morning", prompt: "/skill morning\nPlan my morning: top 3 priorities and a short focus block." },
+  {
+    id: "morning",
+    label: "morning",
+    prompt: "/skill morning\nPlan my morning: top 3 priorities and a short focus block.",
+  },
   {
     id: "skill-creator",
     label: "skill-creator",
     prompt: "/skill skill-creator\nHelp me draft a new reusable skill with name, trigger, and steps.",
-  },
-  {
-    id: "design-reflect",
-    label: "design-reflect",
-    prompt: "/skill design-reflect\nReflect on this UI and propose a clickable HTML prototype.",
   },
 ];
 
@@ -43,6 +41,7 @@ interface Props {
 export function PlusActionMenu({ fileRef, onClose }: Props) {
   const locale = useUiStore((s) => s.locale);
   const ru = locale === "ru";
+  const isMobile = useIsMobile();
   const mode = useModeStore((s) => s.mode);
   const webSearch = useModeStore((s) => s.webSearch);
   const setWebSearch = useModeStore((s) => s.setWebSearch);
@@ -80,28 +79,33 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
     onClose();
   };
 
-  const applySkill = (prompt: string, alsoDesign = false) => {
-    if (alsoDesign) enableGlowDesign();
+  const applySkill = (prompt: string) => {
     setDraft(draft ? `${draft}\n${prompt}` : prompt);
     onClose();
   };
 
+  const toggleSub = (key: SubKey) => setSub((s) => (s === key ? null : key));
+
   return (
-    <div ref={rootRef} className="absolute bottom-full left-0 z-50 mb-2 flex items-end gap-1.5">
-      <div className="w-[280px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
+    <div
+      ref={rootRef}
+      className={cn(
+        "absolute bottom-full left-0 z-50 mb-2",
+        isMobile ? "flex w-[min(280px,calc(100vw-1.5rem))] flex-col gap-1.5" : "flex items-end gap-1.5",
+      )}
+    >
+      <div className="w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)] sm:w-[280px]">
         <MenuRow
           icon={<Paperclip size={16} strokeWidth={1.7} />}
-          label="Add files or photos"
-          trailing={<span className="text-[12px] text-[var(--fg-faint)]">Ctrl+U</span>}
+          label={ru ? "Файлы или фото" : "Add files or photos"}
           onClick={openFiles}
         />
         <MenuRow
           icon={<Archive size={16} strokeWidth={1.7} />}
-          label="Add to project"
+          label={ru ? "В проект" : "Add to project"}
           trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
           active={sub === "project"}
-          onMouseEnter={() => setSub("project")}
-          onClick={() => setSub("project")}
+          onClick={() => toggleSub("project")}
         />
 
         <div className="my-1.5 border-t border-[var(--border)]" />
@@ -111,38 +115,39 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
           label="Skills"
           trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
           active={sub === "skills"}
-          onMouseEnter={() => setSub("skills")}
-          onClick={() => setSub("skills")}
+          onClick={() => toggleSub("skills")}
         />
-        <MenuRow
-          icon={<Grid2X2 size={16} strokeWidth={1.7} />}
-          label="Add connector"
-          trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
-          active={sub === "connector"}
-          onMouseEnter={() => setSub("connector")}
-          onClick={() => setSub("connector")}
-        />
-        <MenuRow
-          icon={<Plug size={16} strokeWidth={1.7} />}
-          label="Add plugins…"
-          onMouseEnter={() => setSub(null)}
-          onClick={() => {
-            setAppsOpen(true);
-            onClose();
-          }}
-        />
+
+        {!isMobile && (
+          <>
+            <MenuRow
+              icon={<Briefcase size={16} strokeWidth={1.7} />}
+              label="Add connector"
+              trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
+              active={sub === "connector"}
+              onClick={() => toggleSub("connector")}
+            />
+            <MenuRow
+              icon={<MoreHorizontal size={16} strokeWidth={1.7} />}
+              label="Add plugins…"
+              onClick={() => {
+                setAppsOpen(true);
+                onClose();
+              }}
+            />
+          </>
+        )}
 
         <div className="my-1.5 border-t border-[var(--border)]" />
 
         <MenuRow
           icon={<Globe size={16} strokeWidth={1.7} />}
-          label="Web search"
+          label={ru ? "Веб-поиск" : "Web search"}
           trailing={
             webSearch ? (
               <span className="text-[11px] font-medium text-[var(--accent)]">ON</span>
             ) : undefined
           }
-          onMouseEnter={() => setSub(null)}
           onClick={() => {
             setWebSearch(!webSearch);
             onClose();
@@ -151,7 +156,7 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
       </div>
 
       {sub === "project" && (
-        <SubPanel>
+        <SubPanel stacked={isMobile}>
           {projects.length === 0 && (
             <p className="px-3 py-2 text-[12px] text-[var(--fg-faint)]">
               {ru ? "Пока нет проектов" : "No projects yet"}
@@ -175,56 +180,51 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
           <div className="my-1 border-t border-[var(--border)]" />
           <MenuRow
             icon={<Plus size={15} strokeWidth={1.7} />}
-            label="Start a new project"
+            label={ru ? "Новый проект" : "Start a new project"}
             onClick={async () => {
-                const name = window.prompt(ru ? "Название проекта" : "Project name");
-                if (!name?.trim()) return;
-                const created = await createProject(mode, name.trim(), "");
-                setProjects([created, ...projects]);
-                setActiveProjectId(created.id);
-                if (activeConversationId) {
-                  await setConversationProject(mode, activeConversationId, created.id);
-                  setConversations(await listConversations(mode));
-                }
-                onClose();
-              }}
+              const name = window.prompt(ru ? "Название проекта" : "Project name");
+              if (!name?.trim()) return;
+              const created = await createProject(mode, name.trim(), "");
+              setProjects([created, ...projects]);
+              setActiveProjectId(created.id);
+              if (activeConversationId) {
+                await setConversationProject(mode, activeConversationId, created.id);
+                setConversations(await listConversations(mode));
+              }
+              onClose();
+            }}
           />
         </SubPanel>
       )}
 
       {sub === "skills" && (
-        <SubPanel>
+        <SubPanel stacked={isMobile}>
           {SKILLS.map((s) => (
             <MenuRow
               key={s.id}
               icon={<ScrollText size={15} strokeWidth={1.7} />}
               label={s.label}
-              onClick={() => applySkill(s.prompt, s.id === "design-reflect")}
+              onClick={() => applySkill(s.prompt)}
             />
           ))}
-          <div className="my-1 border-t border-[var(--border)]" />
-          <MenuRow
-            icon={<Briefcase size={15} strokeWidth={1.7} />}
-            label="Manage skills"
-            onClick={() => {
-              setSettingsTab("skills");
-              setSettingsOpen(true);
-              onClose();
-            }}
-          />
-          <MenuRow
-            icon={<Plus size={15} strokeWidth={1.7} />}
-            label="Browse skills"
-            onClick={() => {
-              setSettingsTab("skills");
-              setSettingsOpen(true);
-              onClose();
-            }}
-          />
+          {!isMobile && (
+            <>
+              <div className="my-1 border-t border-[var(--border)]" />
+              <MenuRow
+                icon={<Briefcase size={15} strokeWidth={1.7} />}
+                label="Manage skills"
+                onClick={() => {
+                  setSettingsTab("skills");
+                  setSettingsOpen(true);
+                  onClose();
+                }}
+              />
+            </>
+          )}
         </SubPanel>
       )}
 
-      {sub === "connector" && (
+      {sub === "connector" && !isMobile && (
         <SubPanel>
           <MenuRow
             icon={<Globe size={15} strokeWidth={1.7} />}
@@ -257,24 +257,20 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
               onClose();
             }}
           />
-          <MenuRow
-            icon={<MoreHorizontal size={15} strokeWidth={1.7} />}
-            label="Add custom connector"
-            onClick={() => {
-              setSettingsTab("connectors");
-              setSettingsOpen(true);
-              onClose();
-            }}
-          />
         </SubPanel>
       )}
     </div>
   );
 }
 
-function SubPanel({ children }: { children: ReactNode }) {
+function SubPanel({ children, stacked }: { children: ReactNode; stacked?: boolean }) {
   return (
-    <div className="min-w-[220px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]",
+        stacked ? "w-full" : "min-w-[220px]",
+      )}
+    >
       {children}
     </div>
   );
@@ -285,15 +281,15 @@ function MenuRow({
   label,
   trailing,
   onClick,
-  onMouseEnter,
   active,
+  onMouseEnter,
 }: {
   icon: ReactNode;
   label: string;
   trailing?: ReactNode;
-  onClick?: () => void;
-  onMouseEnter?: () => void;
+  onClick: () => void;
   active?: boolean;
+  onMouseEnter?: () => void;
 }) {
   return (
     <button
@@ -301,13 +297,11 @@ function MenuRow({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       className={cn(
-        "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13.5px] text-[var(--fg)]",
-        active ? "bg-[var(--bg-hover)]" : "hover:bg-[var(--bg-hover)]",
+        "flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-[13.5px] hover:bg-[var(--bg-hover)]",
+        active && "bg-[var(--bg-hover)]",
       )}
     >
-      <span className="flex h-5 w-5 shrink-0 items-center justify-center text-[var(--fg)]">
-        {icon}
-      </span>
+      <span className="text-[var(--fg-muted)]">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {trailing}
     </button>

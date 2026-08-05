@@ -43,6 +43,8 @@ import {
 import { PanelLeft, Search, X } from "lucide-react";
 import { feedbackPreferenceHints } from "../../lib/feedbackProfile";
 import { hydrateExtensionMcp, useExtensionsStore } from "../../lib/extensions/registry";
+import { useIsMobile } from "../../lib/useMediaQuery";
+import { cn } from "../../lib/utils";
 
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
@@ -60,6 +62,7 @@ export function AppShell() {
   const artifactsOpen = useUiStore((s) => s.artifactsOpen);
   const openArtifacts = useUiStore((s) => s.openArtifacts);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const isMobile = useIsMobile();
 
   const {
     activeConversationId,
@@ -116,6 +119,15 @@ export function AppShell() {
     })();
     onGameMode((s) => setGameModeActive(s.active));
   }, [setGameModeActive]);
+
+  // Phone: start with sidebar closed; turn off desktop-only modes
+  useEffect(() => {
+    if (!isMobile) return;
+    setSidebarOpen(false);
+    setDesignMode(false);
+    setChromeAgentActive(false);
+    void setMcpEnabled("chrome", false);
+  }, [isMobile, setSidebarOpen, setDesignMode, setChromeAgentActive]);
 
   useEffect(() => {
     if (!ready) return;
@@ -611,56 +623,75 @@ export function AppShell() {
 
   return (
     <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
-      {sidebarOpen && (
-        <ClaudeSidebar
-          onNewChat={async () => {
-            setActiveConversationId(null);
-            setMessages([]);
-            setBranchPath([]);
-            setArtifacts([]);
-            useUiStore.getState().closeArtifacts();
-          }}
-          onSelectConversation={async (id) => {
-            setActiveConversationId(id);
-            await loadConversation(id);
-          }}
-          onProjectsChanged={async () => setProjects(await listProjects(mode))}
-          onConversationsChanged={async () => {
-            await reloadConversations();
-          }}
+      {sidebarOpen && isMobile && (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/40"
+          aria-label="Close menu"
+          onClick={() => setSidebarOpen(false)}
         />
+      )}
+      {sidebarOpen && (
+        <div
+          className={cn(
+            isMobile && "fixed inset-y-0 left-0 z-50 shadow-2xl",
+          )}
+        >
+          <ClaudeSidebar
+            onNavigate={() => {
+              if (isMobile) setSidebarOpen(false);
+            }}
+            onNewChat={async () => {
+              setActiveConversationId(null);
+              setMessages([]);
+              setBranchPath([]);
+              setArtifacts([]);
+              useUiStore.getState().closeArtifacts();
+              if (isMobile) setSidebarOpen(false);
+            }}
+            onSelectConversation={async (id) => {
+              setActiveConversationId(id);
+              await loadConversation(id);
+              if (isMobile) setSidebarOpen(false);
+            }}
+            onProjectsChanged={async () => setProjects(await listProjects(mode))}
+            onConversationsChanged={async () => {
+              await reloadConversations();
+            }}
+          />
+        </div>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center gap-1 px-2">
+        <header className="flex h-12 shrink-0 items-center gap-0.5 px-1.5 sm:h-11 sm:gap-1 sm:px-2">
           <button
             type="button"
-            className="rounded-lg p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
+            className="touch-target rounded-xl p-2.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] sm:rounded-lg sm:p-2"
             onClick={() => setSidebarOpen(!sidebarOpen)}
             aria-label="Toggle sidebar"
           >
-            <PanelLeft size={16} strokeWidth={1.7} />
+            <PanelLeft size={isMobile ? 20 : 16} strokeWidth={1.7} />
           </button>
           <button
             type="button"
-            className="rounded-lg p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+            className="touch-target rounded-xl p-2.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:rounded-lg sm:p-2"
             onClick={() => setSettingsOpen(true)}
             aria-label="Search / settings"
           >
-            <Search size={16} strokeWidth={1.7} />
+            <Search size={isMobile ? 20 : 16} strokeWidth={1.7} />
           </button>
-          {gameModeActive && (
+          {gameModeActive && !isMobile && (
             <span className="ml-2 rounded-full bg-[var(--accent-soft)] px-2.5 py-0.5 text-[11px] text-[var(--accent)]">
               Game Mode
             </span>
           )}
-          {designMode && (
-            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[#dbeafe] py-0.5 pl-2.5 pr-1 text-[11px] font-medium text-[#1d4ed8]">
-              Design mode
+          {designMode && !isMobile && (
+            <span className="ml-1 inline-flex max-w-[40vw] items-center gap-1 truncate rounded-full bg-[#dbeafe] py-0.5 pl-2 pr-1 text-[11px] font-medium text-[#1d4ed8] sm:ml-2 sm:max-w-none sm:pl-2.5">
+              <span className="truncate">Design</span>
               <button
                 type="button"
                 onClick={() => setDesignMode(false)}
-                className="rounded-full p-0.5 hover:bg-[#93c5fd]/50"
+                className="touch-target rounded-full p-1 hover:bg-[#93c5fd]/50 sm:p-0.5"
                 title="Turn off Design mode"
                 aria-label="Disable Design mode"
               >
@@ -668,8 +699,8 @@ export function AppShell() {
               </button>
             </span>
           )}
-          {chromeAgentActive && (
-            <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] py-0.5 pl-2.5 pr-1 text-[11px] text-[var(--accent)]">
+          {chromeAgentActive && !isMobile && (
+            <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] py-0.5 pl-2.5 pr-1 text-[11px] text-[var(--accent)]">
               Chrome agent
               <button
                 type="button"
@@ -688,7 +719,7 @@ export function AppShell() {
           <div className="ml-auto pr-2 text-[12px] text-[var(--fg-faint)]">Glow</div>
         </header>
 
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
           <ChatPane
             messages={branchPath}
             widgetsByMessage={widgetsByMessage}
@@ -718,17 +749,24 @@ export function AppShell() {
             streaming={streaming}
           />
           {artifactsOpen && (
-            <ArtifactsPanel
-              artifacts={artifacts}
-              activeId={activeArtifactId}
-              onSelect={setActiveArtifactId}
-            />
+            <div
+              className={cn(
+                isMobile && "absolute inset-0 z-30 bg-[var(--bg)]",
+              )}
+            >
+              <ArtifactsPanel
+                artifacts={artifacts}
+                activeId={activeArtifactId}
+                onSelect={setActiveArtifactId}
+                fullScreen={isMobile}
+              />
+            </div>
           )}
         </div>
       </div>
 
       <SettingsModal />
-      <AppsAndExtensions />
+      {!isMobile && <AppsAndExtensions />}
     </div>
   );
 }

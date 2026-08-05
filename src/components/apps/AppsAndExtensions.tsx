@@ -20,29 +20,29 @@ export function AppsAndExtensions() {
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-[var(--border)] px-4">
         <button
           type="button"
-          className="rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          className="touch-target rounded-xl p-2.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:rounded-lg sm:p-1.5"
           onClick={() => setOpen(false)}
         >
-          <Menu size={16} />
+          <Menu size={18} />
         </button>
         <button
           type="button"
-          className="rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          className="touch-target rounded-xl p-2.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:rounded-lg sm:p-1.5"
           onClick={() => setOpen(false)}
         >
-          <ArrowLeft size={16} />
+          <ArrowLeft size={18} />
         </button>
-        <h1 className="text-[15px] font-medium">Apps and extensions</h1>
+        <h1 className="truncate text-[15px] font-medium">Apps and extensions</h1>
         <button
           type="button"
-          className="ml-auto rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          className="touch-target ml-auto rounded-xl p-2.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:rounded-lg sm:p-1.5"
           onClick={() => setOpen(false)}
         >
           <X size={16} />
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-8 md:px-10">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 md:px-10 md:py-8">
         <p className="mb-6 text-center font-[family-name:var(--font-display)] text-[1.5rem] text-[var(--fg)]">
           {ru ? "Больше с Glow — там, где ты работаешь" : "Do more with Glow, everywhere you work"}
         </p>

@@ -82,29 +82,38 @@ pub struct ShellResult {
 
 #[tauri::command]
 pub fn run_shell_command(command: String, cwd: Option<String>) -> Result<ShellResult, String> {
-    #[cfg(target_os = "windows")]
-    let mut cmd = {
-        let mut c = Command::new("cmd");
-        c.args(["/C", &command]);
-        c
-    };
-    #[cfg(not(target_os = "windows"))]
-    let mut cmd = {
-        let mut c = Command::new("sh");
-        c.args(["-c", &command]);
-        c
-    };
-
-    if let Some(dir) = cwd {
-        cmd.current_dir(dir);
+    #[cfg(mobile)]
+    {
+        let _ = (command, cwd);
+        return Err("Shell commands are not available on iOS/Android.".into());
     }
 
-    let output = cmd.output().map_err(|e| e.to_string())?;
-    Ok(ShellResult {
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        code: output.status.code().unwrap_or(-1),
-    })
+    #[cfg(desktop)]
+    {
+        #[cfg(target_os = "windows")]
+        let mut cmd = {
+            let mut c = Command::new("cmd");
+            c.args(["/C", &command]);
+            c
+        };
+        #[cfg(not(target_os = "windows"))]
+        let mut cmd = {
+            let mut c = Command::new("sh");
+            c.args(["-c", &command]);
+            c
+        };
+
+        if let Some(dir) = cwd {
+            cmd.current_dir(dir);
+        }
+
+        let output = cmd.output().map_err(|e| e.to_string())?;
+        Ok(ShellResult {
+            stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+            stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+            code: output.status.code().unwrap_or(-1),
+        })
+    }
 }
 
 #[tauri::command]

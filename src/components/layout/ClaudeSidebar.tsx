@@ -21,6 +21,7 @@ import { useModeStore } from "../../stores/modeStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
 import { t } from "../../lib/i18n";
+import { useIsMobile } from "../../lib/useMediaQuery";
 import { cn } from "../../lib/utils";
 import type { AppMode, Conversation } from "../../lib/types";
 import {
@@ -37,6 +38,8 @@ interface Props {
   onSelectConversation: (id: string) => void;
   onProjectsChanged: () => void;
   onConversationsChanged: () => void;
+  /** Called after a nav action that should close a mobile drawer. */
+  onNavigate?: () => void;
 }
 
 export function ClaudeSidebar({
@@ -44,6 +47,7 @@ export function ClaudeSidebar({
   onSelectConversation,
   onProjectsChanged,
   onConversationsChanged,
+  onNavigate,
 }: Props) {
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
@@ -52,6 +56,7 @@ export function ClaudeSidebar({
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const setSettingsTab = useUiStore((s) => s.setSettingsTab);
   const setAppsOpen = useUiStore((s) => s.setAppsOpen);
+  const isMobile = useIsMobile();
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const setActiveConversationId = useChatStore((s) => s.setActiveConversationId);
@@ -170,7 +175,7 @@ export function ClaudeSidebar({
   };
 
   return (
-    <aside className="flex h-full w-[260px] shrink-0 flex-col bg-[var(--bg-sidebar)]">
+    <aside className="flex h-full w-[min(288px,86vw)] shrink-0 flex-col bg-[var(--bg-sidebar)] sm:w-[260px]">
       <div className="px-3 pt-3">
         <div className="inline-flex rounded-full bg-[var(--bg)] p-0.5">
           {modes.map(({ id, label, icon: Icon }) => {
@@ -179,15 +184,18 @@ export function ClaudeSidebar({
               <button
                 key={id}
                 type="button"
-                onClick={() => setMode(id)}
+                onClick={() => {
+                  setMode(id);
+                  onNavigate?.();
+                }}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors",
+                  "flex items-center gap-1.5 rounded-full px-3 py-2 text-[12.5px] font-medium transition-colors sm:py-1.5",
                   active
                     ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm"
                     : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                 )}
               >
-                <Icon size={13} strokeWidth={1.7} />
+                <Icon size={15} strokeWidth={1.7} />
                 {label}
               </button>
             );
@@ -199,7 +207,7 @@ export function ClaudeSidebar({
         <button
           type="button"
           onClick={onNewChat}
-          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-[13.5px] font-medium text-[var(--fg)] hover:bg-[var(--bg-hover)]"
+          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-3 text-[13.5px] font-medium text-[var(--fg)] hover:bg-[var(--bg-hover)] sm:py-2"
         >
           <Plus size={16} strokeWidth={1.7} />
           {t(locale, "newChat")}
@@ -433,27 +441,31 @@ export function ClaudeSidebar({
 
       <div className="relative border-t border-[var(--border)] p-2">
         {menuOpen && (
-          <div className="absolute bottom-full left-2 mb-2 w-[220px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
-            {[
-              { key: "settings", tab: "general" },
-              { key: "billing", tab: "billing" },
-              { key: "agents", tab: "agents" },
-              { key: "language", tab: "language" },
-              { key: "appearance", tab: "appearance" },
-            ].map((item) => (
+          <div className="absolute bottom-full left-2 mb-2 w-[min(220px,calc(100%-1rem))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
+            {(isMobile
+              ? [
+                  { key: "settings", tab: "general", label: locale === "ru" ? "Настройки" : "Settings" },
+                  { key: "account", tab: "account", label: locale === "ru" ? "Аккаунт" : "Account" },
+                  { key: "privacy", tab: "privacy", label: locale === "ru" ? "Приватность" : "Privacy" },
+                ]
+              : [
+                  { key: "settings", tab: "general", label: t(locale, "settings") },
+                  { key: "billing", tab: "billing", label: t(locale, "billing") },
+                  { key: "agents", tab: "agents", label: "Agents & MCP" },
+                ]
+            ).map((item) => (
               <button
                 key={item.key}
                 type="button"
-                className="flex w-full px-3.5 py-2.5 text-left text-[13.5px] hover:bg-[var(--bg-hover)]"
+                className="flex w-full px-3.5 py-3 text-left text-[13.5px] hover:bg-[var(--bg-hover)] sm:py-2.5"
                 onClick={() => {
                   setSettingsTab(item.tab);
                   setSettingsOpen(true);
                   setMenuOpen(false);
+                  onNavigate?.();
                 }}
               >
-                {item.key === "agents"
-                  ? "Agents & MCP"
-                  : t(locale, item.key as "settings")}
+                {item.label}
               </button>
             ))}
             <div className="border-t border-[var(--border)] px-3.5 py-2.5 text-[13px] text-[var(--fg-faint)]">
@@ -465,7 +477,7 @@ export function ClaudeSidebar({
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2 hover:bg-[var(--bg-hover)]"
+            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2.5 hover:bg-[var(--bg-hover)] sm:py-2"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[12px] font-semibold text-[var(--accent)]">
               {(userName || "G").slice(0, 1).toUpperCase()}
@@ -478,20 +490,22 @@ export function ClaudeSidebar({
             </div>
             <ChevronDown size={14} className="shrink-0 text-[var(--fg-faint)]" />
           </button>
-          <button
-            type="button"
-            className="group relative shrink-0 rounded-lg p-2 text-[var(--fg-faint)] hover:bg-[var(--bg-hover)]"
-            title="Get apps and extensions"
-            onClick={() => {
-              setMenuOpen(false);
-              setAppsOpen(true);
-            }}
-          >
-            <Download size={15} />
-            <span className="pointer-events-none absolute bottom-full right-0 mb-2 hidden whitespace-nowrap rounded-full bg-[var(--fg)] px-3 py-1.5 text-[11px] font-medium text-[var(--bg)] shadow-lg group-hover:block">
-              Get apps and extensions
-            </span>
-          </button>
+          {!isMobile && (
+            <button
+              type="button"
+              className="group relative shrink-0 rounded-lg p-2 text-[var(--fg-faint)] hover:bg-[var(--bg-hover)]"
+              title="Get apps and extensions"
+              onClick={() => {
+                setMenuOpen(false);
+                setAppsOpen(true);
+              }}
+            >
+              <Download size={15} />
+              <span className="pointer-events-none absolute bottom-full right-0 mb-2 hidden whitespace-nowrap rounded-full bg-[var(--fg)] px-3 py-1.5 text-[11px] font-medium text-[var(--bg)] shadow-lg group-hover:block">
+                Get apps and extensions
+              </span>
+            </button>
+          )}
         </div>
       </div>
     </aside>

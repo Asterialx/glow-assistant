@@ -17,8 +17,10 @@ import { useModeStore } from "../../stores/modeStore";
 import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
 import {
+  isAppleMobile,
   prefetchSpeechModel,
   resolveSttLang,
+  startBestVoiceRecorder,
   startLiveSpeech,
   startVoiceRecorder,
   transcribeAudioBlob,
@@ -31,6 +33,7 @@ import {
   readRmsLevel,
   type MicAnalyser,
 } from "../../lib/speech/micAnalyser";
+import { useIsMobile } from "../../lib/useMediaQuery";
 import { setMcpEnabled } from "../../lib/tauri";
 import { useExtensionsStore } from "../../lib/extensions/registry";
 
@@ -43,8 +46,6 @@ interface Props {
 const BASE_ACCEPT =
   "image/*,.pdf,.txt,.md,.csv,.json,.stl,.obj,.dcm,.dicom,.ipynb,.py,.ts,.tsx,.js,.jsx,.html,.css";
 
-const DOT_COUNT = 48;
-
 export function SmartInputBar({ onSend, disabled, centered }: Props) {
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
@@ -55,6 +56,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
   const setChromeAgentActive = useModeStore((s) => s.setChromeAgentActive);
   const webSearch = useModeStore((s) => s.webSearch);
   const setWebSearch = useModeStore((s) => s.setWebSearch);
+  const isMobile = useIsMobile();
   const extAccept = useExtensionsStore((s) => s.enabledAcceptAttr());
   const fileAccept = extAccept ? `${BASE_ACCEPT},${extAccept}` : BASE_ACCEPT;
   const lang = resolveSttLang(locale);
@@ -70,9 +72,8 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
     localStorage.getItem("glow.micDevice") || "",
   );
   const [level, setLevel] = useState(0);
-  const [levels, setLevels] = useState<number[]>(() => Array(DOT_COUNT).fill(0));
   const [holdToRecord, setHoldToRecord] = useState(
-    localStorage.getItem("glow.holdToRecord") === "1",
+    () => !isMobile && localStorage.getItem("glow.holdToRecord") === "1",
   );
   const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -131,11 +132,6 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
 
   const pushLevel = (n: number) => {
     setLevel(n);
-    setLevels((prev) => {
-      const next = prev.slice(1);
-      next.push(n);
-      return next;
-    });
   };
 
   const levelBarRef = useRef<HTMLDivElement>(null);
@@ -187,7 +183,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
       /* ignore */
     }
     recorderRef.current = null;
-    setLevels(Array(DOT_COUNT).fill(0));
+    setLevel(0);
     setLiveHint("");
   };
 
@@ -265,15 +261,6 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const startFakeMeter = () => {
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const tick = () => {
-      pushLevel(0.15 + Math.random() * 0.55);
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    tick();
-  };
-
   /** Mic → speech-to-text into the input field. */
   const startDictation = async () => {
     if (recording || busy || disabled) return;
@@ -281,18 +268,38 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
     pendingStopRef.current = false;
     setLiveHint("");
 
+    const apple = isAppleMobile();
+    const micId = apple ? undefined : deviceId || undefined;
+
     try {
       teardownAudio();
+
+      // Permission warm-up. On Apple release the mic before Web Speech —
+      // holding getUserMedia kills speech recognition.
       try {
         const warm = await navigator.mediaDevices.getUserMedia({
-          audio: micTrackConstraints(deviceId || undefined),
+          audio: apple ? true : micTrackConstraints(micId),
         });
         warm.getTracks().forEach((t) => t.stop());
       } catch {
         throw new Error("mic");
       }
 
-      let started = false;
+      const startWhisperFallback = async (hint?: string) => {
+        setEngine("whisper");
+        prefetchSpeechModel();
+        if (hint) setLiveHint(hint);
+        if (recorderRef.current) return;
+        const rec = await startBestVoiceRecorder(micId, (n) => pushLevel(n));
+        if (holdToRecord && pendingStopRef.current) {
+          rec.abort();
+          pendingStopRef.current = false;
+          holdActiveRef.current = false;
+          return;
+        }
+        recorderRef.current = rec;
+      };
+
       const live = startLiveSpeech(
         lang,
         (final, interim) => {
@@ -301,46 +308,49 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
         },
         (code) => {
           console.warn("Web Speech fatal", code);
-          if (recordingRef.current && !recorderRef.current) {
-            liveRef.current?.abort();
-            liveRef.current = null;
-            void startVoiceRecorder(deviceId || undefined, (n) => pushLevel(n))
-              .then((rec) => {
-                recorderRef.current = rec;
-                setEngine("whisper");
-                prefetchSpeechModel();
-                setLiveHint(
-                  locale === "ru"
-                    ? "Web Speech недоступен → Whisper…"
-                    : "Web Speech unavailable → Whisper…",
-                );
-              })
-              .catch(console.error);
-          }
+          if (!recordingRef.current) return;
+          liveRef.current?.abort();
+          liveRef.current = null;
+          void startWhisperFallback(
+            locale === "ru"
+              ? "Web Speech недоступен → запись…"
+              : "Web Speech unavailable → recording…",
+          ).catch(console.error);
         },
       );
+
       if (live) {
         liveRef.current = live;
         setEngine("live");
-        startFakeMeter();
-        started = true;
         setLiveHint(locale === "ru" ? "Слушаю… говорите" : "Listening… speak");
-      }
-      if (!started) {
-        const rec = await startVoiceRecorder(deviceId || undefined, (n) => pushLevel(n));
-        if (holdToRecord && pendingStopRef.current) {
-          rec.abort();
-          pendingStopRef.current = false;
-          holdActiveRef.current = false;
-          return;
+        // Desktop: also record for Whisper if live returns empty.
+        // Apple: NEVER open a second mic stream alongside Web Speech.
+        if (!apple) {
+          try {
+            const rec = await startVoiceRecorder(micId, (n) => pushLevel(n));
+            recorderRef.current = rec;
+            prefetchSpeechModel();
+          } catch (e) {
+            console.warn("Backup recorder failed", e);
+          }
+        } else {
+          // Soft level animation so UI isn't frozen while Apple STT runs
+          const tick = () => {
+            if (!recordingRef.current || recorderRef.current) return;
+            setLevel(0.12 + Math.random() * 0.35);
+            rafRef.current = requestAnimationFrame(tick);
+          };
+          tick();
         }
-        recorderRef.current = rec;
-        setEngine("whisper");
-        prefetchSpeechModel();
-        setLiveHint(
+      } else {
+        await startWhisperFallback(
           locale === "ru"
-            ? "Запись… потом ✓ — текст попадёт в поле"
-            : "Recording… then ✓ — text goes into the input",
+            ? isMobile
+              ? "Запись… потом нажмите ✓"
+              : "Запись… потом ✓ — текст попадёт в поле"
+            : isMobile
+              ? "Recording… then tap ✓"
+              : "Recording… then ✓ — text goes into the input",
         );
       }
 
@@ -359,10 +369,17 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
         finalizeRef.current();
       }
     } catch {
+      const insecure = typeof window !== "undefined" && !window.isSecureContext;
       alert(
         locale === "ru"
-          ? "Нет доступа к микрофону. Windows → Параметры → Конфиденциальность → Микрофон."
-          : "Microphone access denied.",
+          ? insecure
+            ? "Микрофон на телефоне работает только по HTTPS.\nОткрой ссылку cloudflared/ngrok (https://…), не http://192.168…"
+            : apple || isMobile
+              ? "Нет доступа к микрофону.\nВ Chrome: нажми 🔒 / «i» у адреса → Разрешения → Микрофон → Разрешить.\nВ настройках телефона разрешение для Chrome тоже должно быть включено."
+              : "Нет доступа к микрофону. Windows → Параметры → Конфиденциальность → Микрофон."
+          : insecure
+            ? "Microphone needs HTTPS on phones. Open the cloudflared/ngrok https:// link, not http://192.168…"
+            : "Microphone access denied. Check the site permission (lock icon) and Chrome mic settings.",
       );
       teardownAudio();
       recordingRef.current = false;
@@ -426,7 +443,6 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
       setLevel(0);
-      setLevels(Array(DOT_COUNT).fill(0));
       setBusy(false);
       setBusyLabel("");
       setLiveHint("");
@@ -486,20 +502,22 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
     await startDictation();
   };
 
-  const showMicChrome = micHover || micOpen;
+  const showMicChrome = !isMobile && (micHover || micOpen);
   const canSend = !disabled && !busy && (draft.trim().length > 0 || files.length > 0);
   const showCaptureUi = recording || busy;
 
   return (
     <div
-      className={cn("px-4 pb-5", centered ? "pt-0" : "pt-2")}
+      className={cn(
+        centered ? "px-0 pb-0 pt-0" : "px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pb-5",
+      )}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
         setFiles((f) => [...f, ...Array.from(e.dataTransfer.files)]);
       }}
     >
-      <div className={cn("mx-auto", centered ? "max-w-[720px]" : "max-w-3xl")}>
+      <div className={cn("mx-auto w-full", centered ? "max-w-[720px]" : "max-w-3xl")}>
         {files.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {files.map((f) => (
@@ -512,63 +530,66 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
             ))}
           </div>
         )}
-        <div className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-input)] px-3 pb-2.5 pt-3 shadow-[0_8px_30px_var(--shadow)]">
+        <div className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-input)] px-3 py-3 shadow-[0_8px_30px_var(--shadow)]">
           {showCaptureUi ? (
-            <div className="flex flex-col gap-2 px-1 py-1">
-              {busy ? (
-                <div className="flex items-center gap-2 py-2 text-[13px] text-[var(--fg-muted)]">
-                  <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
-                  {busyLabel}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-[3px] overflow-hidden">
-                    {levels.map((v, i) => (
-                      <span
-                        key={i}
-                        className="inline-block h-1.5 w-1.5 shrink-0 rounded-full transition-colors duration-75"
-                        style={{
-                          backgroundColor:
-                            v > 0.08
-                              ? `rgba(60, 60, 60, ${0.35 + v * 0.65})`
-                              : "rgba(160, 160, 160, 0.45)",
-                          transform: v > 0.12 ? `scaleY(${1 + v * 1.8})` : undefined,
-                        }}
-                      />
-                    ))}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[13px] font-medium text-[var(--fg)]">
+                    {busy
+                      ? busyLabel
+                      : locale === "ru"
+                        ? "Голос → текст"
+                        : "Speech to text"}
                   </div>
+                  {!busy && (
+                    <div className="mt-0.5 text-[11px] text-[var(--fg-faint)]">
+                      {locale === "ru"
+                        ? "Говорите, затем нажмите ✓"
+                        : "Speak, then tap ✓"}
+                    </div>
+                  )}
+                </div>
+                {!busy && (
                   <button
                     type="button"
                     onClick={cancelRecording}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] hover:bg-[var(--bg-hover)]"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
                     title="Cancel"
+                    aria-label={locale === "ru" ? "Отмена" : "Cancel"}
                   >
-                    <X size={16} strokeWidth={1.8} />
+                    <X size={18} strokeWidth={1.8} />
                   </button>
+                )}
+                {busy && (
+                  <span className="mt-1 inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-[var(--accent)] border-t-transparent" />
+                )}
+              </div>
+
+              {!busy && (
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--bg-hover)]">
+                  <div
+                    className="h-full rounded-full bg-[var(--accent)] transition-[width] duration-100"
+                    style={{ width: `${Math.max(6, Math.round(level * 100))}%` }}
+                  />
+                </div>
+              )}
+
+              {!busy && (
+                <div className="flex items-end gap-2.5">
+                  <div className="min-h-[3.25rem] min-w-0 flex-1 rounded-2xl bg-[var(--bg)] px-3.5 py-3 text-[15px] leading-snug text-[var(--fg)]">
+                    {liveHint ||
+                      (locale === "ru" ? "Слушаю… говорите" : "Listening… speak")}
+                  </div>
                   <button
                     type="button"
                     onClick={() => void finalizeDictation()}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white hover:opacity-90"
-                    title={locale === "ru" ? "Готово — вставить текст" : "Done — insert text"}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)] text-white shadow-md transition-transform active:scale-95 hover:opacity-90"
+                    title={locale === "ru" ? "Вставить текст" : "Insert text"}
+                    aria-label={locale === "ru" ? "Готово" : "Done"}
                   >
-                    <Check size={16} strokeWidth={2.2} />
+                    <Check size={22} strokeWidth={2.4} />
                   </button>
-                </div>
-              )}
-              {liveHint && !busy && (
-                <div className="rounded-lg bg-[var(--bg)] px-2.5 py-1.5 text-[13px] leading-snug text-[var(--fg)]">
-                  {liveHint}
-                </div>
-              )}
-              {!busy && recording && (
-                <div className="text-[11px] text-[var(--fg-faint)]">
-                  {engine === "live"
-                    ? locale === "ru"
-                      ? "Говорите — текст появится здесь. Потом ✓"
-                      : "Speak — text appears here. Then ✓"
-                    : locale === "ru"
-                      ? "Говорите 2–3 сек, затем ✓"
-                      : "Speak 2–3s, then ✓"}
                 </div>
               )}
             </div>
@@ -579,7 +600,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
               disabled={disabled}
               rows={1}
               placeholder={centered ? t(locale, "placeholderSkills") : t(locale, "placeholder")}
-              className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
+              className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-0.5 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
               onChange={(e) => {
                 setDraft(e.target.value);
                 resize();
@@ -594,12 +615,12 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
           )}
 
           {!showCaptureUi && (
-            <div className="mt-1 flex items-center gap-1">
-              {(designMode || chromeAgentActive || webSearch) && (
-                <div className="mr-1 flex items-center gap-1">
+            <div className="mt-2.5 flex h-9 items-center gap-2">
+              {!isMobile && (designMode || chromeAgentActive || webSearch) && (
+                <div className="mr-0.5 flex max-w-[40%] items-center gap-1 overflow-hidden">
                   {designMode && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#dbeafe] py-1 pl-2.5 pr-1 text-[11px] font-medium text-[#1d4ed8]">
-                      Design mode
+                      Design
                       <button
                         type="button"
                         onClick={() => setDesignMode(false)}
@@ -613,7 +634,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   )}
                   {chromeAgentActive && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] py-1 pl-2.5 pr-1 text-[11px] font-medium text-[var(--accent)]">
-                      Chrome agent
+                      Chrome
                       <button
                         type="button"
                         onClick={() => {
@@ -631,7 +652,6 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   {webSearch && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-hover)] py-1 pl-2.5 pr-1 text-[11px] font-medium text-[var(--fg-muted)]">
                       <Globe size={11} />
-                      Web search
                       <button
                         type="button"
                         onClick={() => setWebSearch(false)}
@@ -645,11 +665,24 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   )}
                 </div>
               )}
-              <div className="relative">
+              {isMobile && webSearch && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-hover)] py-1 pl-2 pr-1 text-[11px] font-medium text-[var(--fg-muted)]">
+                  <Globe size={11} />
+                  <button
+                    type="button"
+                    onClick={() => setWebSearch(false)}
+                    className="rounded-full p-0.5"
+                    aria-label="Disable web search"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              )}
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] shadow-sm transition-colors",
+                    "flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] shadow-sm transition-colors",
                     "hover:bg-[var(--bg-hover)]",
                     menuOpen && "bg-[var(--bg-hover)]",
                   )}
@@ -672,37 +705,44 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                 />
               </div>
 
-              <div className="ml-auto flex items-center gap-0.5">
+              <div className="min-w-0 flex-1" aria-hidden />
+
+              <div className="flex h-9 shrink-0 items-center gap-1">
                 <ModelSelector />
 
                 <div
-                  className="relative"
+                  className="relative flex h-9 items-center"
                   ref={micMenuRef}
                   onMouseEnter={() => setMicHover(true)}
                   onMouseLeave={() => setMicHover(false)}
                 >
                   <div
                     className={cn(
-                      "flex items-center rounded-xl transition-colors",
+                      "flex h-9 items-center rounded-xl transition-colors",
                       showMicChrome && "bg-[var(--bg-hover)]",
                     )}
                   >
+                    {!isMobile && (
+                      <button
+                        type="button"
+                        className={cn(
+                          "flex h-9 w-7 items-center justify-center rounded-lg text-[var(--fg-muted)] transition-opacity",
+                          showMicChrome
+                            ? "opacity-100"
+                            : "pointer-events-none w-0 overflow-hidden opacity-0",
+                        )}
+                        title="Devices"
+                        onClick={() => void openDeviceMenu()}
+                      >
+                        <ChevronDown size={14} />
+                      </button>
+                    )}
                     <button
                       type="button"
                       className={cn(
-                        "rounded-lg p-1.5 text-[var(--fg-muted)] transition-opacity",
-                        showMicChrome ? "opacity-100" : "pointer-events-none w-0 p-0 opacity-0",
-                      )}
-                      title="Devices"
-                      onClick={() => void openDeviceMenu()}
-                    >
-                      <ChevronDown size={14} />
-                    </button>
-                    <button
-                      type="button"
-                      className={cn(
-                        "rounded-lg p-1.5 text-[var(--fg-muted)] hover:text-[var(--fg)]",
-                        micOpen && "text-[var(--fg)]",
+                        "flex h-9 w-9 items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
+                        micOpen && "bg-[var(--bg-hover)] text-[var(--fg)]",
+                        recording && "text-[var(--accent)]",
                       )}
                       title={
                         locale === "ru" ? "Речь в текст" : "Speech to text"
@@ -717,12 +757,12 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                         }
                       }}
                     >
-                      <Mic size={16} strokeWidth={1.7} />
+                      <Mic size={18} strokeWidth={1.7} />
                     </button>
                   </div>
 
-                  {micOpen && (
-                    <div className="absolute bottom-full right-0 z-50 mb-2 w-[300px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+                  {!isMobile && micOpen && (
+                    <div className="absolute bottom-full right-0 z-50 mb-2 w-[min(300px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
                       <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2.5">
                         <Mic size={14} className="text-[var(--fg-muted)]" />
                         <div className="relative h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--bg-hover)]">
@@ -759,6 +799,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                           );
                         })}
                       </div>
+                      {!isMobile && (
                       <div className="flex items-center justify-between border-t border-[var(--border)] px-3 py-2.5">
                         <span className="flex items-center gap-2 text-[12.5px]">
                           <Hand size={14} /> Hold to record
@@ -785,6 +826,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                           />
                         </button>
                       </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -793,7 +835,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   <button
                     type="button"
                     onClick={() => submit()}
-                    className="ml-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-opacity hover:opacity-90"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-opacity hover:opacity-90"
                     title={locale === "ru" ? "Отправить" : "Send"}
                     aria-label="Send"
                   >

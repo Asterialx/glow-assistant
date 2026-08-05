@@ -20,6 +20,7 @@ import {
   Sun,
   ExternalLink,
   ChevronDown,
+  ChevronLeft,
   Bot,
   BookOpen,
 } from "lucide-react";
@@ -39,6 +40,7 @@ import {
 } from "../../lib/accountSync";
 import { listMcp } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
+import { useIsMobile } from "../../lib/useMediaQuery";
 import { BillingDashboard } from "../panels/BillingDashboard";
 import { ExtensionsPanel } from "./ExtensionsPanel";
 
@@ -104,14 +106,16 @@ function SettingRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-6 border-b border-[var(--border)] py-4 last:border-0">
-      <div className="min-w-0 flex-1 pr-4">
+    <div className="flex flex-col gap-3 border-b border-[var(--border)] py-4 last:border-0 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+      <div className="min-w-0 flex-1 sm:pr-4">
         <div className="text-[14px] text-[var(--fg)]">{title}</div>
         {description && (
           <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--fg-muted)]">{description}</p>
         )}
       </div>
-      <div className="shrink-0 pt-0.5">{children}</div>
+      <div className="w-full shrink-0 sm:w-auto sm:pt-0.5 [&_input]:w-full sm:[&_input]:w-56 [&_select]:w-full sm:[&_select]:w-auto">
+        {children}
+      </div>
     </div>
   );
 }
@@ -183,6 +187,8 @@ export function SettingsModal() {
   const tab = useUiStore((s) => s.settingsTab) as TabId;
   const setTab = useUiStore((s) => s.setSettingsTab);
   const locale = useUiStore((s) => s.locale);
+  const isMobile = useIsMobile();
+  const [mobileShowContent, setMobileShowContent] = useState(false);
   const setLocale = useUiStore((s) => s.setLocale);
   const themeId = useUiStore((s) => s.themeId);
   const setThemeId = useUiStore((s) => s.setThemeId);
@@ -256,19 +262,41 @@ export function SettingsModal() {
         ? "dark"
         : "system";
 
-  const nav: NavGroup[] = useMemo(
-    () => [
+  const nav: NavGroup[] = useMemo(() => {
+    const core: NavGroup = {
+      title: "Settings",
+      items: [
+        { id: "general", label: "General", icon: Gear },
+        { id: "account", label: "Account", icon: User },
+        { id: "privacy", label: "Privacy", icon: Shield },
+        { id: "billing", label: "Billing", icon: CreditCard },
+        { id: "memory", label: "Memory", icon: History },
+      ],
+    };
+
+    if (isMobile) {
+      return [
+        core,
+        {
+          title: "Tools",
+          items: [
+            { id: "study", label: "Study & Focus", icon: BookOpen },
+            { id: "med-tools", label: "Med tools", icon: Shield },
+          ],
+        },
+      ];
+    }
+
+    return [
       {
         title: "Settings",
         items: [
-          { id: "general", label: "General", icon: Gear },
-          { id: "account", label: "Account", icon: User },
-          { id: "privacy", label: "Privacy", icon: Shield },
-          { id: "billing", label: "Billing", icon: CreditCard },
+          ...core.items.slice(0, 4),
           { id: "capabilities", label: "Capabilities", icon: Briefcase },
           { id: "reflect", label: "Reflect", icon: Lightbulb },
           { id: "focus", label: "Time and focus", icon: Moon },
           { id: "glow-code", label: "Glow Code", icon: Code2 },
+          { id: "memory", label: "Memory", icon: History },
         ],
       },
       {
@@ -288,20 +316,36 @@ export function SettingsModal() {
           { id: "skills", label: "Skills", icon: FileText },
           { id: "connectors", label: "Connectors", icon: LayoutGrid },
           { id: "plugins", label: "Plugins", icon: Puzzle },
-          { id: "memory", label: "Memory", icon: History },
         ],
       },
-    ],
-    [],
-  );
+    ];
+  }, [isMobile]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setMobileShowContent(false);
+      return;
+    }
     const acc = getOrCreateAccount(userName);
     setPreferredName(acc.preferredName || userName);
     setWork(acc.work || "Other");
     listMcp().then((list) => setMcpServers(list));
   }, [open, userName]);
+
+  // Leave desktop-only tabs if we land on a phone shell
+  useEffect(() => {
+    if (!isMobile || !open) return;
+    const allowed = new Set([
+      "general",
+      "account",
+      "privacy",
+      "billing",
+      "memory",
+      "study",
+      "med-tools",
+    ]);
+    if (!allowed.has(tab)) setTab("general");
+  }, [isMobile, open, tab, setTab]);
 
   if (!open) return null;
 
@@ -342,65 +386,127 @@ export function SettingsModal() {
   const devices = listDevices();
   const thisDevice = devices.find((d) => d.isThis);
 
+  const showNav = !isMobile || !mobileShowContent;
+  const showContent = !isMobile || mobileShowContent;
+  const selectTab = (id: TabId) => {
+    setTab(id);
+    if (isMobile) setMobileShowContent(true);
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-5 backdrop-blur-[1px]">
-      <div className="flex h-[min(780px,92vh)] w-[min(980px,96vw)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
-        {/* Sidebar */}
-        <aside className="flex w-[248px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-sidebar)] p-3">
-          <div className="relative mb-3">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-faint)]"
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search"
-              className="w-full rounded-xl bg-[var(--bg)] py-2 pl-8 pr-2 text-[13px] outline-none placeholder:text-[var(--fg-faint)]"
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {filteredNav.map((group) => (
-              <div key={group.title} className="mb-3">
-                <p className="mb-1 px-2 text-[11px] font-medium text-[var(--fg-faint)]">
-                  {group.title}
-                </p>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = tab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setTab(item.id)}
-                      className={cn(
-                        "mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13.5px]",
-                        active
-                          ? "bg-[var(--bg-active)] font-medium text-[var(--fg)]"
-                          : "text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
-                      )}
-                    >
-                      <Icon size={15} strokeWidth={1.7} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        {/* Content */}
-        <div className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg-elevated)]">
-          <button
-            type="button"
-            className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
-            onClick={() => setOpen(false)}
+    <div
+      className={cn(
+        "fixed inset-0 z-[100] flex bg-black/45 backdrop-blur-[1px]",
+        isMobile ? "items-stretch justify-stretch p-0" : "items-center justify-center p-5",
+      )}
+    >
+      <div
+        className={cn(
+          "flex overflow-hidden border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl",
+          isMobile
+            ? "h-full w-full rounded-none border-0"
+            : "h-[min(780px,92vh)] w-[min(980px,96vw)] rounded-2xl",
+        )}
+      >
+        {showNav && (
+          <aside
+            className={cn(
+              "flex shrink-0 flex-col bg-[var(--bg-sidebar)] p-3",
+              isMobile ? "w-full border-0" : "w-[248px] border-r border-[var(--border)]",
+            )}
           >
-            <X size={16} />
-          </button>
+            <div className="mb-3 flex items-center gap-2">
+              {isMobile && (
+                <button
+                  type="button"
+                  className="touch-target rounded-xl p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close"
+                >
+                  <X size={20} />
+                </button>
+              )}
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  size={14}
+                  className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-faint)]"
+                />
+                <input
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search"
+                  className="w-full rounded-xl bg-[var(--bg)] py-2.5 pl-8 pr-2 text-[13px] outline-none placeholder:text-[var(--fg-faint)]"
+                />
+              </div>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {filteredNav.map((group) => (
+                <div key={group.title} className="mb-3">
+                  <p className="mb-1 px-2 text-[11px] font-medium text-[var(--fg-faint)]">
+                    {group.title}
+                  </p>
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const active = tab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => selectTab(item.id)}
+                        className={cn(
+                          "mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-3 text-left text-[13.5px] sm:py-2",
+                          active
+                            ? "bg-[var(--bg-active)] font-medium text-[var(--fg)]"
+                            : "text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
+                        )}
+                      >
+                        <Icon size={isMobile ? 18 : 15} strokeWidth={1.7} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </aside>
+        )}
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8 pr-14">
+        {showContent && (
+        <div className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg-elevated)]">
+          {isMobile ? (
+            <div className="flex shrink-0 items-center gap-1 border-b border-[var(--border)] px-2 py-2">
+              <button
+                type="button"
+                className="touch-target flex items-center gap-1 rounded-xl px-2 py-2 text-[var(--fg)] hover:bg-[var(--bg-hover)]"
+                onClick={() => setMobileShowContent(false)}
+              >
+                <ChevronLeft size={20} />
+                <span className="text-[14px] font-medium">Settings</span>
+              </button>
+              <button
+                type="button"
+                className="touch-target ml-auto rounded-xl p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+                onClick={() => setOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+              onClick={() => setOpen(false)}
+            >
+              <X size={16} />
+            </button>
+          )}
+
+          <div
+            className={cn(
+              "min-h-0 flex-1 overflow-y-auto",
+              isMobile ? "px-4 py-5" : "px-10 py-8 pr-14",
+            )}
+          >
             {/* GENERAL */}
             {tab === "general" && (
               <div className="space-y-10">
@@ -1448,6 +1554,7 @@ export function SettingsModal() {
             />
           </div>
         </div>
+        )}
       </div>
     </div>
   );

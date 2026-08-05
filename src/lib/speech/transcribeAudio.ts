@@ -3,6 +3,11 @@
  *
  * Voice notes: MediaRecorder file + transcript via Web Speech (when available)
  * and/or local Whisper (transformers.js, single-thread WASM for Cursor/Vite).
+ *
+ * iOS / WKWebView notes:
+ * - `continuous: true` is ignored / broken — use false + restart.
+ * - Never hold getUserMedia + Web Speech at once (mic exclusive).
+ * - MediaRecorder prefers audio/mp4; PCM→WAV is the reliable Whisper path.
  */
 
 import {
@@ -37,6 +42,15 @@ type SpeechRecognitionEventLike = {
 
 let asrPromise: Promise<AsrPipeline> | null = null;
 
+/** iPhone / iPad / iPod (incl. Tauri WKWebView). */
+export function isAppleMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  // iPadOS 13+ desktop UA
+  return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+}
+
 export function resolveSttLang(localeHint?: string): "ru" | "en" {
   const ui = (localeHint || localStorage.getItem("glow.locale") || "ru").toLowerCase();
   return ui.startsWith("ru") ? "ru" : "en";
@@ -65,16 +79,14 @@ function createSpeechRecognition(): SpeechRec | null {
 }
 
 function pickRecorderMime(): string {
-  const candidates = [
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/mp4",
-    "audio/ogg;codecs=opus",
-  ];
+  const apple = isAppleMobile();
+  const candidates = apple
+    ? ["audio/mp4", "audio/aac", "audio/wav", "audio/webm"]
+    : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
   for (const c of candidates) {
     if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported(c)) return c;
   }
-  return "audio/webm";
+  return apple ? "audio/mp4" : "audio/webm";
 }
 
 export type VoiceRecorder = {
@@ -82,15 +94,22 @@ export type VoiceRecorder = {
   abort: () => void;
 };
 
+function audioContextCtor(): typeof AudioContext {
+  return (
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
+  );
+}
+
 /** Mic + MediaRecorder. Levels via analyser (never routed to speakers). */
 export async function startVoiceRecorder(
   deviceId?: string,
   onLevel?: (n: number) => void,
 ): Promise<VoiceRecorder> {
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: micTrackConstraints(deviceId),
+    audio: isAppleMobile() ? true : micTrackConstraints(deviceId),
   });
-  await forceNoAssociatedSink(stream);
+  if (!isAppleMobile()) await forceNoAssociatedSink(stream);
 
   let meter: Awaited<ReturnType<typeof openMicAnalyser>> | null = null;
   let raf = 0;
@@ -108,11 +127,28 @@ export async function startVoiceRecorder(
 
   const mime = pickRecorderMime();
   const chunks: Blob[] = [];
-  const mr = new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 128000 });
+  let mr: MediaRecorder;
+  try {
+    mr = isAppleMobile()
+      ? new MediaRecorder(stream, { mimeType: mime })
+      : new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 128000 });
+  } catch {
+    try {
+      mr = new MediaRecorder(stream, { mimeType: mime });
+    } catch {
+      mr = new MediaRecorder(stream);
+    }
+  }
+  const usedMime = mr.mimeType || mime;
   mr.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data);
   };
-  mr.start(250);
+  // iOS: timeslice can yield empty blobs — collect on stop too
+  try {
+    mr.start(isAppleMobile() ? 1000 : 250);
+  } catch {
+    mr.start();
+  }
 
   let stopped = false;
   const cleanup = () => {
@@ -127,7 +163,7 @@ export async function startVoiceRecorder(
     stop: () =>
       new Promise((resolve) => {
         if (stopped) {
-          resolve(new Blob(chunks, { type: mime }));
+          resolve(new Blob(chunks, { type: usedMime }));
           return;
         }
         stopped = true;
@@ -136,7 +172,7 @@ export async function startVoiceRecorder(
           if (done) return;
           done = true;
           cleanup();
-          resolve(new Blob(chunks, { type: mime }));
+          resolve(new Blob(chunks, { type: usedMime }));
         };
         if (mr.state === "inactive") {
           finish();
@@ -166,6 +202,104 @@ export async function startVoiceRecorder(
       cleanup();
     },
   };
+}
+
+/**
+ * PCM capture → WAV. Most reliable Whisper path on iOS when MediaRecorder
+ * is flaky or Web Speech is unavailable.
+ */
+export async function startPcmVoiceCapture(
+  deviceId?: string,
+  onLevel?: (n: number) => void,
+): Promise<VoiceRecorder> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: isAppleMobile() ? true : micTrackConstraints(deviceId),
+  });
+  if (!isAppleMobile()) await forceNoAssociatedSink(stream);
+
+  const Ctx = audioContextCtor();
+  const ctx = new Ctx();
+  if (ctx.state === "suspended") await ctx.resume();
+
+  const source = ctx.createMediaStreamSource(stream);
+  const chunks: Float32Array[] = [];
+  const sampleRate = ctx.sampleRate;
+  let stopped = false;
+
+  // ScriptProcessor is deprecated but widely available on iOS WKWebView.
+  const bufferSize = 4096;
+  const processor = ctx.createScriptProcessor(bufferSize, 1, 1);
+  const silent = ctx.createGain();
+  silent.gain.value = 0;
+
+  processor.onaudioprocess = (ev) => {
+    if (stopped) return;
+    const input = ev.inputBuffer.getChannelData(0);
+    chunks.push(new Float32Array(input));
+    if (onLevel) {
+      let s = 0;
+      for (let i = 0; i < input.length; i++) s += input[i]! * input[i]!;
+      onLevel(Math.min(1, Math.sqrt(s / input.length) * 6));
+    }
+  };
+
+  source.connect(processor);
+  processor.connect(silent);
+  silent.connect(ctx.destination);
+
+  const cleanup = () => {
+    stopped = true;
+    try {
+      processor.disconnect();
+      source.disconnect();
+      silent.disconnect();
+    } catch {
+      /* ignore */
+    }
+    stream.getTracks().forEach((t) => t.stop());
+    void ctx.close().catch(() => undefined);
+  };
+
+  return {
+    stop: async () => {
+      if (stopped && chunks.length === 0) return encodeWavMono16(new Float32Array(0), sampleRate);
+      let total = 0;
+      for (const c of chunks) total += c.length;
+      const merged = new Float32Array(total);
+      let off = 0;
+      for (const c of chunks) {
+        merged.set(c, off);
+        off += c.length;
+      }
+      cleanup();
+      return encodeWavMono16(merged, sampleRate);
+    },
+    abort: () => {
+      chunks.length = 0;
+      cleanup();
+    },
+  };
+}
+
+/** Prefer PCM on Apple; MediaRecorder elsewhere (with PCM fallback). */
+export async function startBestVoiceRecorder(
+  deviceId?: string,
+  onLevel?: (n: number) => void,
+): Promise<VoiceRecorder> {
+  if (isAppleMobile()) {
+    try {
+      return await startPcmVoiceCapture(deviceId, onLevel);
+    } catch (e) {
+      console.warn("PCM capture failed, trying MediaRecorder", e);
+      return startVoiceRecorder(deviceId, onLevel);
+    }
+  }
+  try {
+    return await startVoiceRecorder(deviceId, onLevel);
+  } catch (e) {
+    console.warn("MediaRecorder failed, trying PCM", e);
+    return startPcmVoiceCapture(deviceId, onLevel);
+  }
 }
 
 export function encodeWavMono16(pcm: Float32Array, sampleRate: number): Blob {
@@ -206,17 +340,29 @@ export function resampleTo16k(pcm: Float32Array, sampleRate: number): Float32Arr
 }
 
 export async function blobToPcm16k(blob: Blob): Promise<Float32Array> {
+  // WAV we produced ourselves — decode without AudioContext when possible
+  if ((blob.type || "").includes("wav") || blob.size > 44) {
+    try {
+      const pcm = tryDecodeWavPcm(await blob.arrayBuffer());
+      if (pcm) return pcm;
+    } catch {
+      /* fall through */
+    }
+  }
+
   const raw = await blob.arrayBuffer();
-  // Try as-is, then with normalized MIME (helps some Chromium builds).
+  const typeHint = (blob.type || "").split(";")[0] || "";
+  // Try as-is, then with normalized MIME (helps Chromium + iOS mp4/aac).
   const attempts: Blob[] = [
-    new Blob([raw], { type: (blob.type || "audio/webm").split(";")[0] || "audio/webm" }),
-    new Blob([raw], { type: "audio/webm" }),
+    new Blob([raw], { type: typeHint || "audio/webm" }),
+    new Blob([raw], { type: "audio/mp4" }),
+    new Blob([raw], { type: "audio/aac" }),
     new Blob([raw], { type: "audio/wav" }),
+    new Blob([raw], { type: "audio/webm" }),
+    new Blob([raw], { type: "audio/mpeg" }),
   ];
 
-  const Ctx =
-    window.AudioContext ||
-    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  const Ctx = audioContextCtor();
 
   let lastErr: unknown;
   for (const candidate of attempts) {
@@ -242,11 +388,60 @@ export async function blobToPcm16k(blob: Blob): Promise<Float32Array> {
   throw lastErr instanceof Error ? lastErr : new Error("decodeAudioData failed");
 }
 
+/** Fast path for our encodeWavMono16 output (skips AudioContext on iOS). */
+function tryDecodeWavPcm(ab: ArrayBuffer): Float32Array | null {
+  if (ab.byteLength < 44) return null;
+  const view = new DataView(ab);
+  const riff = String.fromCharCode(view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3));
+  if (riff !== "RIFF") return null;
+  const channels = view.getUint16(22, true);
+  const sampleRate = view.getUint32(24, true);
+  const bits = view.getUint16(34, true);
+  if (bits !== 16 || channels < 1) return null;
+  // Find data chunk (skip extra chunks)
+  let offset = 12;
+  let dataOffset = -1;
+  let dataSize = 0;
+  while (offset + 8 <= view.byteLength) {
+    const id = String.fromCharCode(
+      view.getUint8(offset),
+      view.getUint8(offset + 1),
+      view.getUint8(offset + 2),
+      view.getUint8(offset + 3),
+    );
+    const size = view.getUint32(offset + 4, true);
+    if (id === "data") {
+      dataOffset = offset + 8;
+      dataSize = size;
+      break;
+    }
+    offset += 8 + size;
+  }
+  if (dataOffset < 0) return null;
+  const samples = Math.floor(dataSize / 2 / channels);
+  const mono = new Float32Array(samples);
+  for (let i = 0; i < samples; i++) {
+    let s = 0;
+    for (let c = 0; c < channels; c++) {
+      s += view.getInt16(dataOffset + (i * channels + c) * 2, true) / 0x8000;
+    }
+    mono[i] = s / channels;
+  }
+  return resampleTo16k(mono, sampleRate);
+}
+
 function rms(pcm: Float32Array): number {
   if (!pcm.length) return 0;
   let s = 0;
   for (let i = 0; i < pcm.length; i++) s += pcm[i]! * pcm[i]!;
   return Math.sqrt(s / pcm.length);
+}
+
+function prefersFp32Whisper(): boolean {
+  // q8 Whisper breaks on ORT 1.25+ (MatMulNBits / missing scale) — common on phones.
+  if (typeof navigator === "undefined") return false;
+  if (isAppleMobile()) return true;
+  return /Android|Mobile/i.test(navigator.userAgent || "");
 }
 
 async function loadAsr(): Promise<AsrPipeline> {
@@ -267,10 +462,29 @@ async function loadAsr(): Promise<AsrPipeline> {
         /* ignore */
       }
 
-      const pipe = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", {
-        dtype: "q8",
-      });
-      return pipe as unknown as AsrPipeline;
+      const modelId = "Xenova/whisper-tiny";
+      // q8 is broken in transformers@4.2 + ORT 1.25 (Missing required scale / MatMulNBits).
+      // Prefer fp32 on mobile; try q8 first on desktop then fall back.
+      const dtypes = prefersFp32Whisper()
+        ? (["fp32", "fp16", "q8"] as const)
+        : (["q8", "fp32"] as const);
+
+      let lastErr: unknown;
+      for (const dtype of dtypes) {
+        try {
+          const pipe = await pipeline("automatic-speech-recognition", modelId, {
+            dtype,
+            device: "wasm",
+          });
+          return pipe as unknown as AsrPipeline;
+        } catch (e) {
+          lastErr = e;
+          console.warn(`Whisper load failed (dtype=${dtype})`, e);
+        }
+      }
+      throw lastErr instanceof Error
+        ? lastErr
+        : new Error("Whisper model failed to load");
     })().catch((err) => {
       asrPromise = null;
       throw err;
@@ -362,6 +576,13 @@ export async function transcribeAudioBlob(
     if (/коротк|тишина|silence|short|пустой|Empty|чётче|громче/i.test(detail)) {
       throw e instanceof Error ? e : new Error(detail);
     }
+    if (/MatMulNBits|Missing required scale|Can't create a session|qdq_actions/i.test(detail)) {
+      throw new Error(
+        lang === "ru"
+          ? "Модель распознавания не загрузилась. Обнови страницу и попробуй ещё раз (первый раз качается ~40 МБ)."
+          : "Speech model failed to load. Refresh and try again (first run downloads ~40 MB).",
+      );
+    }
     throw new Error(
       lang === "ru"
         ? `Не удалось распознать речь.\n${detail}`
@@ -389,8 +610,8 @@ export type LiveSpeechHandle = {
 };
 
 /**
- * Live Web Speech. Safe to run alongside MediaRecorder on Chromium
- * (best-effort transcript while the file is recorded).
+ * Live Web Speech.
+ * On Apple: continuous=false + auto-restart (required). Do not open mic streams alongside.
  */
 export function startLiveSpeech(
   lang: "ru" | "en",
@@ -400,13 +621,16 @@ export function startLiveSpeech(
   const rec = createSpeechRecognition();
   if (!rec) return null;
 
+  const apple = isAppleMobile();
   let finalText = "";
   let interim = "";
   let stopped = false;
   let fatal: string | null = null;
   let endResolve: ((t: string) => void) | null = null;
+  let restartTimer = 0;
 
-  rec.continuous = true;
+  // iOS ignores / breaks continuous:true — must be false and restart on end.
+  rec.continuous = !apple;
   rec.interimResults = true;
   rec.maxAlternatives = 1;
   rec.lang = lang === "ru" ? "ru-RU" : "en-US";
@@ -417,9 +641,10 @@ export function startLiveSpeech(
     for (let idx = ev.resultIndex; idx < ev.results.length; idx++) {
       const row = ev.results[idx];
       if (!row) continue;
-      const piece = row[0]?.transcript || "";
-      if (row.isFinal) f += piece;
-      else i += piece;
+      const piece = (row[0]?.transcript || "").trim();
+      if (!piece) continue;
+      if (row.isFinal) f = f ? `${f} ${piece}` : piece;
+      else i = i ? `${i} ${piece}` : piece;
     }
     finalText = f;
     interim = i;
@@ -428,18 +653,23 @@ export function startLiveSpeech(
 
   rec.onerror = (ev) => {
     const code = ev.error || "error";
+    // iOS fires no-speech often between restarts — ignore
     if (code === "no-speech" || code === "aborted") return;
     fatal = code;
     onFatal?.(code);
   };
 
   rec.onend = () => {
-    if (!stopped) {
-      try {
-        rec.start();
-      } catch {
-        /* already started / stopped */
-      }
+    if (!stopped && !fatal) {
+      // Small delay helps iOS recover the session
+      restartTimer = window.setTimeout(() => {
+        if (stopped || fatal) return;
+        try {
+          rec.start();
+        } catch {
+          /* already started / stopped */
+        }
+      }, apple ? 120 : 0);
       return;
     }
     endResolve?.(finalText.trim() || interim.trim());
@@ -457,6 +687,10 @@ export function startLiveSpeech(
     getText: () => finalText.trim() || interim.trim(),
     stop: () =>
       new Promise((resolve) => {
+        if (restartTimer) {
+          window.clearTimeout(restartTimer);
+          restartTimer = 0;
+        }
         if (fatal) {
           resolve(finalText.trim() || interim.trim());
           return;
@@ -470,9 +704,13 @@ export function startLiveSpeech(
         }
         window.setTimeout(() => {
           resolve(finalText.trim() || interim.trim());
-        }, 1200);
+        }, apple ? 800 : 1200);
       }),
     abort: () => {
+      if (restartTimer) {
+        window.clearTimeout(restartTimer);
+        restartTimer = 0;
+      }
       stopped = true;
       try {
         rec.abort();

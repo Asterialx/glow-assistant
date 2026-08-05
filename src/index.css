@@ -46,6 +46,14 @@ body,
   margin: 0;
 }
 
+#root {
+  /* iOS notch / home indicator */
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg);
@@ -53,10 +61,31 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   letter-spacing: -0.011em;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 * {
   box-sizing: border-box;
+}
+
+/* Minimum comfortable tap target on phones */
+.touch-target {
+  min-height: 44px;
+  min-width: 44px;
+}
+@media (min-width: 768px) {
+  .touch-target {
+    min-height: 0;
+    min-width: 0;
+  }
+}
+
+/* Horizontal scroll for wide tables on narrow screens */
+.table-scroll {
+  -webkit-overflow-scrolling: touch;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 ::-webkit-scrollbar {

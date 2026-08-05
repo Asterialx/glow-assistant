@@ -15,6 +15,8 @@ interface Props {
   artifacts: Artifact[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  /** When true (phone), panel fills the chat area and hides the resize handle. */
+  fullScreen?: boolean;
 }
 
 function parseMeta(art: Artifact | undefined): { preview?: DesignFrame; design?: boolean } {
@@ -338,7 +340,7 @@ async function getPyodide(): Promise<{
   }>;
 }
 
-export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
+export function ArtifactsPanel({ artifacts, activeId, onSelect, fullScreen }: Props) {
   const active = artifacts.find((a) => a.id === activeId) || artifacts[0];
   const [jupyterCode, setJupyterCode] = useState(
     active?.kind === "jupyter" && active.content_text
@@ -408,9 +410,13 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
 
   return (
     <aside
-      className="relative flex h-full shrink-0 flex-col border-l border-[var(--border)] bg-[var(--bg-elevated)]"
-      style={{ width }}
+      className={cn(
+        "relative flex h-full shrink-0 flex-col border-l border-[var(--border)] bg-[var(--bg-elevated)]",
+        fullScreen && "w-full border-l-0",
+      )}
+      style={fullScreen ? undefined : { width }}
     >
+      {!fullScreen && (
       <div
         role="separator"
         aria-orientation="vertical"
@@ -436,16 +442,17 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
           }
         />
       </div>
-      <div className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+      )}
+      <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-3 sm:px-4">
         <Box size={14} className="text-[var(--accent)]" strokeWidth={1.75} />
         <span className="flex-1 text-[13px] font-medium">{t(locale, "artifacts")}</span>
         <button
           type="button"
           onClick={closeArtifacts}
-          className="rounded-lg p-1 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          className="touch-target rounded-xl p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:rounded-lg sm:p-1"
           aria-label={t(locale, "close")}
         >
-          <X size={15} />
+          <X size={fullScreen ? 20 : 15} />
         </button>
       </div>
       <div className="flex gap-1 overflow-x-auto border-b border-[var(--border)] px-2 py-1.5">
@@ -459,7 +466,7 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
             onClick={() => onSelect(a.id)}
             className={
               (active?.id === a.id ? "bg-[var(--bg-active)] text-[var(--fg)] " : "") +
-              "rounded-full px-2.5 py-1 text-xs text-[var(--fg-muted)] hover:text-[var(--fg)]"
+              "rounded-full px-3 py-2 text-xs text-[var(--fg-muted)] hover:text-[var(--fg)] sm:px-2.5 sm:py-1"
             }
           >
             {a.title || a.kind}

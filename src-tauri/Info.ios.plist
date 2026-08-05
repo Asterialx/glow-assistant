@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Glow needs the microphone for speech-to-text dictation.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Glow uses speech recognition to turn your voice into text.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Glow needs photo library access to attach images and documents to chats.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Glow can use the camera to capture photos for chat attachments.</string>
+	<key>UIBackgroundModes</key>
+	<array/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+</dict>
+</plist>

@@ -69,7 +69,7 @@ export function MedPanel() {
   };
 
   return (
-    <div className="flex-1 space-y-6 overflow-y-auto p-6">
+    <div className="flex-1 space-y-6 overflow-y-auto p-4 sm:p-6">
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">Med Module</h2>
         <p className="mt-1 text-sm text-[var(--color-danger)]">
@@ -171,7 +171,8 @@ export function MedPanel() {
         </button>
         {rows.length > 0 && (
           <>
-            <table className="mt-3 w-full text-left text-sm">
+            <div className="table-scroll mt-3">
+            <table className="w-full min-w-[28rem] text-left text-sm">
               <thead className="text-xs text-[var(--color-muted)]">
                 <tr>
                   <th className="py-1">Marker</th>
@@ -191,6 +192,7 @@ export function MedPanel() {
                 ))}
               </tbody>
             </table>
+            </div>
             <div className="mt-4 h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={history}>

@@ -61,7 +61,7 @@ function UserMessageBody({ content }: { content: string }) {
 
   if (blocks.length > 0) {
     return (
-      <div className="flex min-w-[220px] flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2 sm:min-w-[220px]">
         {blocks.map((b, i) => (
           <VoiceNotePlayer
             key={`${b.name}-${i}`}
@@ -175,16 +175,16 @@ export function ChatPane({
 
   if (empty) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-4">
-        <div className="mb-8 flex items-center gap-3">
+      <div className="flex flex-1 flex-col items-center justify-center px-4 sm:px-6">
+        <div className="mb-8 flex items-center justify-center gap-3">
           <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
             ✻
           </span>
-          <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
+          <h1 className="font-[family-name:var(--font-display)] text-[1.75rem] font-medium tracking-[-0.02em] text-[var(--fg)] sm:text-[2rem]">
             {t(locale, "greeting")}
           </h1>
         </div>
-        <div className="w-full">
+        <div className="w-full max-w-[720px]">
           <SmartInputBar onSend={onSend} disabled={streaming} centered />
         </div>
       </div>
@@ -193,8 +193,8 @@ export function ChatPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
-        <div className="mx-auto flex max-w-[720px] flex-col gap-7">
+      <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-4 md:px-8 md:py-6">
+        <div className="mx-auto flex max-w-[720px] flex-col gap-6 sm:gap-7">
           {messages.map((m, idx) => {
             const isUser = m.role === "user";
             const isStreaming = m.status === "streaming";
@@ -205,11 +205,11 @@ export function ChatPane({
             if (isUser) {
               return (
                 <div key={m.id} className="group flex justify-end">
-                  <div className="relative max-w-[min(85%,34rem)]">
+                  <div className="relative max-w-[min(92%,34rem)] sm:max-w-[min(85%,34rem)]">
                     {onEditMessage && !isEditing && (
                       <button
                         type="button"
-                        className="absolute -left-8 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[var(--fg-faint)] opacity-0 transition-opacity hover:bg-[var(--bg-hover)] hover:text-[var(--fg-muted)] group-hover:opacity-100 disabled:opacity-30"
+                        className="absolute -top-3 right-1 z-10 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-[var(--fg-muted)] shadow-sm sm:-left-8 sm:top-1/2 sm:right-auto sm:-translate-y-1/2 sm:border-0 sm:bg-transparent sm:p-1.5 sm:opacity-0 sm:shadow-none sm:group-hover:opacity-100 disabled:opacity-30"
                         title={locale === "ru" ? "Редактировать" : "Edit"}
                         disabled={streaming}
                         onClick={() => startEdit(m)}
@@ -218,7 +218,7 @@ export function ChatPane({
                       </button>
                     )}
                     {isEditing ? (
-                      <div className="min-w-[240px] rounded-[22px] border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg">
+                      <div className="min-w-0 w-[min(100%,20rem)] rounded-[22px] border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg sm:min-w-[240px]">
                         <textarea
                           ref={editRef}
                           value={editDraft}

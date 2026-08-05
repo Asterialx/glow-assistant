@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "identifier": "com.glowassistant.app",
+  "bundle": {
+    "iOS": {
+      "minimumSystemVersion": "15.0",
+      "developmentTeam": "YOUR_APPLE_TEAM_ID",
+      "bundleVersion": "1"
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Glow Assistant",
+        "width": 390,
+        "height": 844,
+        "resizable": true
+      }
+    ]
+  }
+}
