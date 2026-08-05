@@ -413,7 +413,7 @@ export function SettingsModal() {
             className={cn(
               "flex shrink-0 flex-col bg-[var(--bg-sidebar)]",
               isMobile
-                ? "w-full border-0 px-3 pb-3 pt-[max(0.75rem,env(safe-area-inset-top,0px))]"
+                ? "w-full border-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] pt-[max(0.75rem,env(safe-area-inset-top,0px))]"
                 : "w-[248px] border-r border-[var(--border)] p-3",
             )}
           >
@@ -1548,7 +1548,7 @@ export function SettingsModal() {
           <div
             className={cn(
               "flex items-center justify-end border-t border-[var(--border)] px-4 py-2.5",
-              isMobile && "pb-2",
+              isMobile && "pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]",
             )}
           >
             <Segmented

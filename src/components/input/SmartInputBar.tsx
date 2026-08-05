@@ -510,10 +510,10 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
     <div
       className={cn(
         "px-3 pt-2 sm:px-4",
-        /* Mobile: WKWebView already clears the home indicator — extra
-           safe-area padding left a ~2–3cm dead zone. Keep a small gap only. */
+        /* After iOS webview insets plugin, paint edge-to-edge and pad only
+           for the home indicator (not double-inset dead space). */
         isMobile
-          ? "pb-2"
+          ? "pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]"
           : centered
             ? "pb-0"
             : "pb-5",
