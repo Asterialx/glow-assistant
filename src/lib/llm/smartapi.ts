@@ -19,13 +19,24 @@ function isTauri(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 }
 
-function getBaseUrl(): string {
+function getBaseUrl(modelId?: string): string {
+  const model = modelId ? getModel(modelId) : null;
+  if (model?.provider === "mcsix") {
+    if (import.meta.env.DEV) return "/mcsix";
+    return import.meta.env.VITE_MCSIX_BASE_URL || "https://api.mcsix.space/v1";
+  }
   // Dev (browser or tauri:dev on localhost:1420): Vite proxy → no CORS
   if (import.meta.env.DEV) return "/smartapi";
   return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.smartapi.shop/v1";
 }
 
-function getApiKey(): string {
+function getApiKey(modelId?: string): string {
+  const model = modelId ? getModel(modelId) : null;
+  if (model?.provider === "mcsix") {
+    const stored =
+      localStorage.getItem("glow.mcsixApiKey") || localStorage.getItem("claude2.mcsixApiKey");
+    return stored || import.meta.env.VITE_MCSIX_API_KEY || "";
+  }
   const stored = localStorage.getItem("claude2.apiKey") || localStorage.getItem("glow.apiKey");
   return stored || import.meta.env.VITE_SMARTAPI_KEY || "";
 }
@@ -33,6 +44,11 @@ function getApiKey(): string {
 export function setApiKey(key: string) {
   localStorage.setItem("glow.apiKey", key);
   localStorage.setItem("claude2.apiKey", key);
+}
+
+export function setMcsixApiKey(key: string) {
+  localStorage.setItem("glow.mcsixApiKey", key);
+  localStorage.setItem("claude2.mcsixApiKey", key);
 }
 
 /** fetch that bypasses CORS inside Tauri WebView via plugin-http */
@@ -190,11 +206,15 @@ export async function streamChatCompletion(
   opts?: { temperature?: number; maxTokens?: number },
 ): Promise<void> {
   const model = getModel(modelId);
-  const url = `${getBaseUrl()}/chat/completions`;
-  const key = getApiKey();
+  const url = `${getBaseUrl(modelId)}/chat/completions`;
+  const key = getApiKey(modelId);
   if (!key) {
     callbacks.onError(
-      new Error("API key missing. Set VITE_SMARTAPI_KEY or paste a key in Settings."),
+      new Error(
+        model?.provider === "mcsix"
+          ? "McSix API key missing. Set VITE_MCSIX_API_KEY or paste the key in Settings."
+          : "API key missing. Set VITE_SMARTAPI_KEY or paste a key in Settings.",
+      ),
     );
     return;
   }

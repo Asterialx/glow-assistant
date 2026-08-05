@@ -27,7 +27,7 @@ import {
 import { useUiStore } from "../../stores/uiStore";
 import { THEMES, type ThemeId } from "../../lib/themes";
 import { t, type Locale } from "../../lib/i18n";
-import { setApiKey } from "../../lib/llm/smartapi";
+import { setApiKey, setMcsixApiKey } from "../../lib/llm/smartapi";
 import { DevicesSection } from "./DevicesSection";
 import { AgentsPanel } from "../panels/AgentsPanel";
 import { StudyPanel } from "../panels/StudyPanel";
@@ -215,6 +215,12 @@ export function SettingsModal() {
   const [notifyDone, setNotifyDone] = useState(() => loadFlag("glow.notifyDone", false));
   const [apiKey, setApiKeyState] = useState(
     localStorage.getItem("claude2.apiKey") || import.meta.env.VITE_SMARTAPI_KEY || "",
+  );
+  const [mcsixApiKey, setMcsixApiKeyState] = useState(
+    localStorage.getItem("glow.mcsixApiKey") ||
+      localStorage.getItem("claude2.mcsixApiKey") ||
+      import.meta.env.VITE_MCSIX_API_KEY ||
+      "",
   );
 
   // Capabilities
@@ -761,6 +767,39 @@ export function SettingsModal() {
                         type="button"
                         className="rounded-xl bg-[var(--fg)] px-3 py-2 text-[12.5px] text-[var(--bg)]"
                         onClick={() => setApiKey(apiKey)}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  </SettingRow>
+                  <SettingRow
+                    title="McSix Base URL"
+                    description={hint("Gemini models endpoint.", "Эндпоинт моделей Gemini.")}
+                  >
+                    <input
+                      readOnly
+                      value={import.meta.env.VITE_MCSIX_BASE_URL || "https://api.mcsix.space/v1"}
+                      className="w-64 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-[family-name:var(--font-mono)] text-[11.5px]"
+                    />
+                  </SettingRow>
+                  <SettingRow
+                    title="McSix API key"
+                    description={hint(
+                      "Key for Gemini models (mcsix).",
+                      "Ключ для моделей Gemini (mcsix).",
+                    )}
+                  >
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        value={mcsixApiKey}
+                        onChange={(e) => setMcsixApiKeyState(e.target.value)}
+                        className="w-48 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-[family-name:var(--font-mono)] text-[12px]"
+                      />
+                      <button
+                        type="button"
+                        className="rounded-xl bg-[var(--fg)] px-3 py-2 text-[12.5px] text-[var(--bg)]"
+                        onClick={() => setMcsixApiKey(mcsixApiKey)}
                       >
                         Save
                       </button>

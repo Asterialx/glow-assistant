@@ -42,6 +42,12 @@ export default defineConfig({
         secure: true,
         rewrite: (path) => path.replace(/^\/smartapi/, "/v1"),
       },
+      "/mcsix": {
+        target: "https://api.mcsix.space",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/mcsix/, "/v1"),
+      },
     },
   },
   envPrefix: ["VITE_", "TAURI_"],

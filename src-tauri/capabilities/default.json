@@ -29,6 +29,7 @@
       "identifier": "http:default",
       "allow": [
         { "url": "https://api.smartapi.shop/**" },
+        { "url": "https://api.mcsix.space/**" },
         { "url": "https://huggingface.co/**" },
         { "url": "https://*.huggingface.co/**" },
         { "url": "https://hf.co/**" },
