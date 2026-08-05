@@ -634,7 +634,7 @@ export function AppShell() {
       {sidebarOpen && (
         <div
           className={cn(
-            isMobile && "fixed inset-y-0 left-0 z-50 shadow-2xl",
+            isMobile && "fixed inset-y-0 left-0 z-50 h-full max-h-dvh shadow-2xl",
           )}
         >
           <ClaudeSidebar
@@ -663,7 +663,14 @@ export function AppShell() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-0.5 px-1.5 sm:h-11 sm:gap-1 sm:px-2">
+        <header
+          className={cn(
+            "flex shrink-0 items-center gap-0.5 px-1.5 sm:h-11 sm:gap-1 sm:px-2",
+            isMobile
+              ? "min-h-12 pt-[env(safe-area-inset-top,0px)]"
+              : "h-12",
+          )}
+        >
           <button
             type="button"
             className="touch-target rounded-xl p-2.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] sm:rounded-lg sm:p-2"

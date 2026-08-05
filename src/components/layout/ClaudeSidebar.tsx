@@ -175,8 +175,13 @@ export function ClaudeSidebar({
   };
 
   return (
-    <aside className="flex h-full w-[min(288px,86vw)] shrink-0 flex-col bg-[var(--bg-sidebar)] sm:w-[260px]">
-      <div className="px-3 pt-3">
+    <aside className="flex h-full max-h-dvh w-[min(288px,86vw)] shrink-0 flex-col bg-[var(--bg-sidebar)] sm:w-[260px]">
+      <div
+        className={cn(
+          "px-3",
+          isMobile ? "pt-[max(0.75rem,env(safe-area-inset-top,0px))]" : "pt-3",
+        )}
+      >
         <div className="inline-flex rounded-full bg-[var(--bg)] p-0.5">
           {modes.map(({ id, label, icon: Icon }) => {
             const active = mode === id;
@@ -439,7 +444,12 @@ export function ClaudeSidebar({
         })}
       </div>
 
-      <div className="relative border-t border-[var(--border)] p-2">
+      <div
+        className={cn(
+          "relative shrink-0 border-t border-[var(--border)] p-2",
+          isMobile && "pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]",
+        )}
+      >
         {menuOpen && (
           <div className="absolute bottom-full left-2 mb-2 w-[min(220px,calc(100%-1rem))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl">
             {(isMobile
@@ -477,7 +487,7 @@ export function ClaudeSidebar({
           <button
             type="button"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2.5 hover:bg-[var(--bg-hover)] sm:py-2"
+            className="touch-target flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2.5 hover:bg-[var(--bg-hover)] sm:min-h-0 sm:py-2"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[12px] font-semibold text-[var(--accent)]">
               {(userName || "G").slice(0, 1).toUpperCase()}

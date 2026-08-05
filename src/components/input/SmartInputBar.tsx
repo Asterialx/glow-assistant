@@ -509,7 +509,13 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
   return (
     <div
       className={cn(
-        centered ? "px-0 pb-0 pt-0" : "px-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pb-5",
+        "px-3 pt-2 sm:px-4",
+        /* Keep above home indicator; desktop keeps the larger bottom gap. */
+        isMobile
+          ? "pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
+          : centered
+            ? "pb-0"
+            : "pb-5",
       )}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
@@ -615,7 +621,12 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
           )}
 
           {!showCaptureUi && (
-            <div className="mt-2.5 flex h-9 items-center gap-2">
+            <div
+              className={cn(
+                "mt-2.5 flex items-center gap-2",
+                isMobile ? "min-h-11" : "h-9",
+              )}
+            >
               {!isMobile && (designMode || chromeAgentActive || webSearch) && (
                 <div className="mr-0.5 flex max-w-[40%] items-center gap-1 overflow-hidden">
                   {designMode && (
@@ -682,8 +693,9 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                 <button
                   type="button"
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] shadow-sm transition-colors",
+                    "flex items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] shadow-sm transition-colors",
                     "hover:bg-[var(--bg-hover)]",
+                    isMobile ? "h-11 w-11" : "h-9 w-9",
                     menuOpen && "bg-[var(--bg-hover)]",
                   )}
                   onClick={() => setMenuOpen((v) => !v)}
@@ -707,18 +719,27 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
 
               <div className="min-w-0 flex-1" aria-hidden />
 
-              <div className="flex h-9 shrink-0 items-center gap-1">
+              <div
+                className={cn(
+                  "flex shrink-0 items-center gap-1",
+                  isMobile ? "min-h-11" : "h-9",
+                )}
+              >
                 <ModelSelector />
 
                 <div
-                  className="relative flex h-9 items-center"
+                  className={cn(
+                    "relative flex items-center",
+                    isMobile ? "min-h-11" : "h-9",
+                  )}
                   ref={micMenuRef}
                   onMouseEnter={() => setMicHover(true)}
                   onMouseLeave={() => setMicHover(false)}
                 >
                   <div
                     className={cn(
-                      "flex h-9 items-center rounded-xl transition-colors",
+                      "flex items-center rounded-xl transition-colors",
+                      isMobile ? "min-h-11" : "h-9",
                       showMicChrome && "bg-[var(--bg-hover)]",
                     )}
                   >
@@ -740,7 +761,8 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                     <button
                       type="button"
                       className={cn(
-                        "flex h-9 w-9 items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
+                        "flex items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
+                        isMobile ? "h-11 w-11" : "h-9 w-9",
                         micOpen && "bg-[var(--bg-hover)] text-[var(--fg)]",
                         recording && "text-[var(--accent)]",
                       )}
@@ -835,7 +857,10 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   <button
                     type="button"
                     onClick={() => submit()}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-opacity hover:opacity-90"
+                    className={cn(
+                      "flex shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-opacity hover:opacity-90",
+                      isMobile ? "h-11 w-11" : "h-9 w-9",
+                    )}
                     title={locale === "ru" ? "Отправить" : "Send"}
                     aria-label="Send"
                   >

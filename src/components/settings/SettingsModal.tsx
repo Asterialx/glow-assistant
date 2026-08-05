@@ -411,15 +411,17 @@ export function SettingsModal() {
         {showNav && (
           <aside
             className={cn(
-              "flex shrink-0 flex-col bg-[var(--bg-sidebar)] p-3",
-              isMobile ? "w-full border-0" : "w-[248px] border-r border-[var(--border)]",
+              "flex shrink-0 flex-col bg-[var(--bg-sidebar)]",
+              isMobile
+                ? "w-full border-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] pt-[max(0.75rem,env(safe-area-inset-top,0px))]"
+                : "w-[248px] border-r border-[var(--border)] p-3",
             )}
           >
             <div className="mb-3 flex items-center gap-2">
               {isMobile && (
                 <button
                   type="button"
-                  className="touch-target rounded-xl p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+                  className="touch-target flex h-11 w-11 items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
                   onClick={() => setOpen(false)}
                   aria-label="Close"
                 >
@@ -474,10 +476,10 @@ export function SettingsModal() {
         {showContent && (
         <div className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg-elevated)]">
           {isMobile ? (
-            <div className="flex shrink-0 items-center gap-1 border-b border-[var(--border)] px-2 py-2">
+            <div className="flex shrink-0 items-center gap-1 border-b border-[var(--border)] px-2 pb-2 pt-[max(0.5rem,env(safe-area-inset-top,0px))]">
               <button
                 type="button"
-                className="touch-target flex items-center gap-1 rounded-xl px-2 py-2 text-[var(--fg)] hover:bg-[var(--bg-hover)]"
+                className="touch-target flex min-h-[44px] items-center gap-1 rounded-xl px-2 py-2 text-[var(--fg)] hover:bg-[var(--bg-hover)]"
                 onClick={() => setMobileShowContent(false)}
               >
                 <ChevronLeft size={20} />
@@ -485,8 +487,9 @@ export function SettingsModal() {
               </button>
               <button
                 type="button"
-                className="touch-target ml-auto rounded-xl p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+                className="touch-target ml-auto flex h-11 w-11 items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
                 onClick={() => setOpen(false)}
+                aria-label="Close"
               >
                 <X size={20} />
               </button>
@@ -1542,7 +1545,12 @@ export function SettingsModal() {
           </div>
 
           {/* footer theme quick switch like Claude */}
-          <div className="flex items-center justify-end border-t border-[var(--border)] px-4 py-2.5">
+          <div
+            className={cn(
+              "flex items-center justify-end border-t border-[var(--border)] px-4 py-2.5",
+              isMobile && "pb-[max(0.625rem,env(safe-area-inset-bottom,0px))]",
+            )}
+          >
             <Segmented
               value={kind === "light" ? "light" : "dark"}
               onChange={(id) => setThemeId(id === "light" ? "claude-light" : "claude-dark")}

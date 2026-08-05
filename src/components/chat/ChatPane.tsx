@@ -31,6 +31,7 @@ import {
 } from "../../lib/feedbackProfile";
 
 import { VoiceNotePlayer } from "../audio/VoiceNotePlayer";
+import { useIsMobile } from "../../lib/useMediaQuery";
 
 interface Props {
   messages: Message[];
@@ -99,6 +100,7 @@ export function ChatPane({
 }: Props) {
   const locale = useUiStore((s) => s.locale);
   const designMode = useModeStore((s) => s.designMode);
+  const isMobile = useIsMobile();
   const empty = messages.length === 0;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -175,18 +177,32 @@ export function ChatPane({
 
   if (empty) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-4 sm:px-6">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
-            ✻
-          </span>
-          <h1 className="font-[family-name:var(--font-display)] text-[1.75rem] font-medium tracking-[-0.02em] text-[var(--fg)] sm:text-[2rem]">
-            {t(locale, "greeting")}
-          </h1>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div
+          className={cn(
+            "flex flex-1 flex-col items-center px-4 sm:px-6",
+            isMobile ? "justify-center pb-4" : "justify-center",
+          )}
+        >
+          <div className="mb-8 flex items-center justify-center gap-3">
+            <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
+              ✻
+            </span>
+            <h1 className="font-[family-name:var(--font-display)] text-[1.75rem] font-medium tracking-[-0.02em] text-[var(--fg)] sm:text-[2rem]">
+              {t(locale, "greeting")}
+            </h1>
+          </div>
+          {!isMobile && (
+            <div className="w-full max-w-[720px]">
+              <SmartInputBar onSend={onSend} disabled={streaming} centered />
+            </div>
+          )}
         </div>
-        <div className="w-full max-w-[720px]">
-          <SmartInputBar onSend={onSend} disabled={streaming} centered />
-        </div>
+        {isMobile && (
+          <div className="w-full shrink-0">
+            <SmartInputBar onSend={onSend} disabled={streaming} centered />
+          </div>
+        )}
       </div>
     );
   }

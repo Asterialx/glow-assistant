@@ -449,7 +449,7 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect, fullScreen }: Pr
         <button
           type="button"
           onClick={closeArtifacts}
-          className="touch-target rounded-xl p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:rounded-lg sm:p-1"
+          className="touch-target flex h-11 w-11 items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] sm:h-auto sm:w-auto sm:rounded-lg sm:p-1"
           aria-label={t(locale, "close")}
         >
           <X size={fullScreen ? 20 : 15} />
