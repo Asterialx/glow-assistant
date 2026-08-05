@@ -13,7 +13,7 @@
     "ios:init": "tauri ios init",
     "ios:dev": "tauri ios dev",
     "ios:build": "tauri ios build",
-    "ios:build:release": "tauri ios build -- --release",
+    "ios:build:release": "tauri ios build",
     "ios:open": "open src-tauri/gen/apple/glow-assistant.xcodeproj"
   },
   "dependencies": {
