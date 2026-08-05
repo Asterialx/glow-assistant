@@ -510,9 +510,10 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
     <div
       className={cn(
         "px-3 pt-2 sm:px-4",
-        /* Keep above home indicator; desktop keeps the larger bottom gap. */
+        /* Mobile: WKWebView already clears the home indicator — extra
+           safe-area padding left a ~2–3cm dead zone. Keep a small gap only. */
         isMobile
-          ? "pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]"
+          ? "pb-2"
           : centered
             ? "pb-0"
             : "pb-5",

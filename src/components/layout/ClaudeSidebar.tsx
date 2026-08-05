@@ -447,7 +447,7 @@ export function ClaudeSidebar({
       <div
         className={cn(
           "relative shrink-0 border-t border-[var(--border)] p-2",
-          isMobile && "pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]",
+          isMobile && "pb-2",
         )}
       >
         {menuOpen && (

@@ -67,7 +67,7 @@ export function ModelSelector() {
           className={cn(
             "z-[80] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1 shadow-2xl",
             isMobile
-              ? "fixed inset-x-3 bottom-[max(5.5rem,env(safe-area-inset-bottom))] max-h-[min(70vh,520px)]"
+              ? "fixed inset-x-3 bottom-20 max-h-[min(70vh,520px)]"
               : "absolute bottom-full right-0 mb-2 max-h-[min(480px,55vh)] w-[340px]",
           )}
         >
