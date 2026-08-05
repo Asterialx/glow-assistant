@@ -1,0 +1,438 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import type { Artifact, Message, UiWidget } from "../../lib/types";
+import { InlineWidgets } from "../widgets/InlineWidgets";
+import {
+  Pencil,
+  Copy,
+  Volume2,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCcw,
+  Check,
+  X,
+  PanelRight,
+} from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useUiStore } from "../../stores/uiStore";
+import { useModeStore } from "../../stores/modeStore";
+import { t } from "../../lib/i18n";
+import { SmartInputBar } from "../input/SmartInputBar";
+import { cn } from "../../lib/utils";
+import { getAssistantDisplay } from "../../lib/artifactDisplay";
+import { speakText, stopSpeaking, isSpeakingMessage } from "../../lib/tts";
+import {
+  getFeedbackProfile,
+  recordFeedback,
+  type FeedbackVote,
+} from "../../lib/feedbackProfile";
+
+import { VoiceNotePlayer } from "../audio/VoiceNotePlayer";
+
+interface Props {
+  messages: Message[];
+  widgetsByMessage?: Record<string, UiWidget[]>;
+  artifacts?: Artifact[];
+  onOpenArtifact?: (artifactId: string) => void;
+  onEditMessage?: (message: Message, editedText: string) => void;
+  onRegenerate?: (message: Message) => void;
+  onWidgetChange?: (widget: UiWidget) => void;
+  onSend: (text: string, files?: File[]) => void;
+  streaming?: boolean;
+}
+
+/** Themed mini-player for voice notes; hide STT / metadata from the bubble. */
+function UserMessageBody({ content }: { content: string }) {
+  const blocks: { mime: string; name: string; b64: string }[] = [];
+  content.replace(
+    /```glow-audio\r?\n([^\n]+)\r?\n([^\n]+)\r?\n([\s\S]*?)```/g,
+    (_m, mime: string, name: string, b64: string) => {
+      blocks.push({
+        mime: mime.trim(),
+        name: name.trim(),
+        b64: b64.replace(/\s/g, ""),
+      });
+      return "";
+    },
+  );
+
+  if (blocks.length > 0) {
+    return (
+      <div className="flex min-w-[220px] flex-col gap-2">
+        {blocks.map((b, i) => (
+          <VoiceNotePlayer
+            key={`${b.name}-${i}`}
+            src={`data:${b.mime};base64,${b.b64}`}
+            compact
+          />
+        ))}
+      </div>
+    );
+  }
+
+  const cleaned = content
+    .replace(/```glow-stt\r?\n[\s\S]*?```/g, "")
+    .replace(/<!--glow-stt:[\s\S]*?-->/g, "")
+    .replace(/\[Attached:[^\]]*\]/g, "")
+    .replace(/\[Voice note:[^\]]*\]/g, "")
+    .replace(/\[Voice transcript[^\]]*\]:?\s*/gi, "")
+    .trim();
+
+  return cleaned ? (
+    <div className="whitespace-pre-wrap break-words">{cleaned}</div>
+  ) : null;
+}
+
+export function ChatPane({
+  messages,
+  widgetsByMessage = {},
+  artifacts = [],
+  onOpenArtifact,
+  onEditMessage,
+  onRegenerate,
+  onWidgetChange,
+  onSend,
+  streaming,
+}: Props) {
+  const locale = useUiStore((s) => s.locale);
+  const designMode = useModeStore((s) => s.designMode);
+  const empty = messages.length === 0;
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [votes, setVotes] = useState<Record<string, FeedbackVote>>(() => getFeedbackProfile().byMessage);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const editRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editingId && editRef.current) {
+      editRef.current.focus();
+      editRef.current.selectionStart = editRef.current.value.length;
+    }
+  }, [editingId]);
+
+  useEffect(() => {
+    const tick = window.setInterval(() => {
+      if (speakingId && !isSpeakingMessage(speakingId)) setSpeakingId(null);
+    }, 400);
+    return () => {
+      window.clearInterval(tick);
+      stopSpeaking();
+    };
+  }, [speakingId]);
+
+  const copyText = async (id: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      window.setTimeout(() => setCopiedId(null), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const startEdit = (m: Message) => {
+    if (streaming) return;
+    setEditingId(m.id);
+    setEditDraft(m.content);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditDraft("");
+  };
+
+  const saveEdit = (m: Message) => {
+    const next = editDraft.trim();
+    if (!next || next === m.content) {
+      cancelEdit();
+      return;
+    }
+    setEditingId(null);
+    setEditDraft("");
+    onEditMessage?.(m, next);
+  };
+
+  const toggleSpeak = (id: string, text: string) => {
+    const lang = localStorage.getItem("glow.voiceLang") || locale || "en";
+    const started = speakText(id, text, lang);
+    setSpeakingId(started ? id : null);
+  };
+
+  const vote = (m: Message, v: FeedbackVote, text: string) => {
+    const profile = recordFeedback({
+      messageId: m.id,
+      conversationId: m.conversation_id,
+      vote: v,
+      content: text,
+      modelId: m.model_id,
+    });
+    setVotes({ ...profile.byMessage });
+  };
+
+  if (empty) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center px-4">
+        <div className="mb-8 flex items-center gap-3">
+          <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
+            ✻
+          </span>
+          <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
+            {t(locale, "greeting")}
+          </h1>
+        </div>
+        <div className="w-full">
+          <SmartInputBar onSend={onSend} disabled={streaming} centered />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+        <div className="mx-auto flex max-w-[720px] flex-col gap-7">
+          {messages.map((m, idx) => {
+            const isUser = m.role === "user";
+            const isStreaming = m.status === "streaming";
+            const isLast = idx === messages.length - 1;
+            const showThinking = !isUser && isStreaming && !m.content;
+            const isEditing = editingId === m.id;
+
+            if (isUser) {
+              return (
+                <div key={m.id} className="group flex justify-end">
+                  <div className="relative max-w-[min(85%,34rem)]">
+                    {onEditMessage && !isEditing && (
+                      <button
+                        type="button"
+                        className="absolute -left-8 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-[var(--fg-faint)] opacity-0 transition-opacity hover:bg-[var(--bg-hover)] hover:text-[var(--fg-muted)] group-hover:opacity-100 disabled:opacity-30"
+                        title={locale === "ru" ? "Редактировать" : "Edit"}
+                        disabled={streaming}
+                        onClick={() => startEdit(m)}
+                      >
+                        <Pencil size={14} strokeWidth={1.6} />
+                      </button>
+                    )}
+                    {isEditing ? (
+                      <div className="min-w-[240px] rounded-[22px] border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg">
+                        <textarea
+                          ref={editRef}
+                          value={editDraft}
+                          onChange={(e) => setEditDraft(e.target.value)}
+                          rows={Math.min(8, Math.max(2, editDraft.split("\n").length))}
+                          className="w-full resize-none bg-transparent text-[15.5px] leading-[1.55] text-[var(--fg)] outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              e.preventDefault();
+                              cancelEdit();
+                            }
+                            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                              e.preventDefault();
+                              saveEdit(m);
+                            }
+                          }}
+                        />
+                        <div className="mt-2 flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+                            title="Cancel"
+                            onClick={cancelEdit}
+                          >
+                            <X size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            className="flex h-8 items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 text-[12.5px] font-medium text-white hover:opacity-90"
+                            onClick={() => saveEdit(m)}
+                          >
+                            <Check size={14} />
+                            {locale === "ru" ? "Сохранить" : "Save"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="rounded-[22px] bg-[var(--user-bubble)] px-[18px] py-[10px] text-[15.5px] leading-[1.55] text-[var(--fg)]">
+                        <UserMessageBody content={m.content} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }
+
+            const display = getAssistantDisplay(m.content, isStreaming);
+            const messageArts = artifacts.filter((a) => a.message_id === m.id);
+            // Only real Artifacts — never inline widgets
+            const panelArt = messageArts.find((a) =>
+              ["html", "jupyter", "code", "stl", "obj", "dcm", "pdf"].includes(a.kind),
+            );
+            const showBuilding = display.buildingHtml || display.buildingWidget;
+            const widgets = widgetsByMessage[m.id] || [];
+            const prose =
+              display.content ||
+              (showBuilding
+                ? ""
+                : display.hasHtmlArtifact && !isStreaming
+                  ? t(locale, "assembledArtifact")
+                  : isStreaming
+                    ? "…"
+                    : "");
+
+            return (
+              <div key={m.id} className="group flex flex-col gap-2">
+                <div className="flex items-center gap-2 text-[13px] text-[var(--fg-faint)]">
+                  <span className="text-[15px] leading-none text-[var(--accent)]">✻</span>
+                  <span>
+                    {showThinking
+                      ? t(locale, "thinking")
+                      : display.buildingHtml
+                        ? designMode
+                          ? t(locale, "buildingDesign")
+                          : t(locale, "buildingArtifact")
+                        : display.buildingWidget
+                          ? locale === "ru"
+                            ? "Собираю виджет…"
+                            : "Building widget…"
+                          : isStreaming
+                            ? t(locale, "writing")
+                            : `Glow${m.model_id ? ` · ${m.model_id}` : ""}`}
+                  </span>
+                </div>
+
+                <div
+                  className={cn(
+                    "prose-chat max-w-none font-[family-name:var(--font-display)] text-[16.5px] leading-[1.7] text-[var(--fg)]",
+                    "[&_h1]:mb-2 [&_h1]:mt-5 [&_h1]:text-[1.25em] [&_h1]:font-semibold",
+                    "[&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[1.1em] [&_h2]:font-semibold",
+                    "[&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-[1.05em] [&_h3]:font-semibold",
+                    "[&_ul]:my-2 [&_ol]:my-2 [&_li]:my-0.5",
+                    "[&_strong]:font-semibold",
+                  )}
+                >
+                  {showThinking ? null : prose ? (
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                    >
+                      {prose}
+                    </ReactMarkdown>
+                  ) : null}
+                  {display.buildingHtml && (
+                    <p className="mt-1 text-[15px] text-[var(--fg-muted)]">
+                      {designMode ? t(locale, "buildingDesign") : t(locale, "buildingArtifact")}
+                    </p>
+                  )}
+                  {display.buildingWidget && (
+                    <p className="mt-1 text-[15px] text-[var(--fg-muted)]">
+                      {locale === "ru" ? "Собираю виджет…" : "Building widget…"}
+                    </p>
+                  )}
+
+                  {/* Inline UI lives in the message flow — not Artifacts */}
+                  {!isStreaming && widgets.length > 0 && (
+                    <InlineWidgets widgets={widgets} onChange={onWidgetChange} />
+                  )}
+                </div>
+
+                {!isStreaming && panelArt && panelArt.kind === "html" && onOpenArtifact && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenArtifact(panelArt.id)}
+                    className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-[13px] font-medium text-[var(--fg)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
+                  >
+                    <PanelRight size={15} strokeWidth={1.7} className="text-[var(--accent)]" />
+                    <span>{t(locale, "openArtifact")}</span>
+                    {panelArt.title ? (
+                      <span className="max-w-[12rem] truncate text-[var(--fg-faint)]">
+                        · {panelArt.title}
+                      </span>
+                    ) : null}
+                  </button>
+                )}
+
+                {!isStreaming && m.content && !m.content.startsWith("Error:") && (
+                  <div
+                    className={cn(
+                      "mt-1 flex items-center gap-0.5 text-[var(--fg-faint)]",
+                      isLast ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    )}
+                  >
+                    <IconBtn
+                      title="Copy"
+                      onClick={() => void copyText(m.id, display.content || m.content)}
+                    >
+                      {copiedId === m.id ? <Check size={15} /> : <Copy size={15} />}
+                    </IconBtn>
+                    <IconBtn
+                      title={speakingId === m.id ? "Stop" : "Read aloud"}
+                      active={speakingId === m.id}
+                      onClick={() => toggleSpeak(m.id, display.content || m.content)}
+                    >
+                      <Volume2 size={15} />
+                    </IconBtn>
+                    <IconBtn
+                      title="Helpful"
+                      active={votes[m.id] === "up"}
+                      onClick={() => vote(m, "up", display.content || m.content)}
+                    >
+                      <ThumbsUp size={15} />
+                    </IconBtn>
+                    <IconBtn
+                      title="Not helpful"
+                      active={votes[m.id] === "down"}
+                      onClick={() => vote(m, "down", display.content || m.content)}
+                    >
+                      <ThumbsDown size={15} />
+                    </IconBtn>
+                    <IconBtn
+                      title="Regenerate"
+                      disabled={!!streaming}
+                      onClick={() => onRegenerate?.(m)}
+                    >
+                      <RotateCcw size={15} />
+                    </IconBtn>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <SmartInputBar onSend={onSend} disabled={streaming} />
+    </div>
+  );
+}
+
+function IconBtn({
+  children,
+  title,
+  onClick,
+  active,
+  disabled,
+}: {
+  children: ReactNode;
+  title: string;
+  onClick?: () => void;
+  active?: boolean;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "rounded-lg p-1.5 hover:bg-[var(--bg-hover)] hover:text-[var(--fg-muted)] disabled:opacity-40",
+        active && "bg-[var(--accent-soft)] text-[var(--accent)]",
+      )}
+    >
+      {children}
+    </button>
+  );
+}

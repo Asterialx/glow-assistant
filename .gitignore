@@ -1,0 +1,34 @@
+# deps
+node_modules/
+
+# build
+dist/
+dist-ssr/
+dist-installers/
+release/
+src-tauri/target/
+tsconfig.tsbuildinfo
+
+# env / secrets
+.env
+.env.local
+*.local
+
+# local QA fixtures
+tmp-qa/
+
+# editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# logs
+*.log
+npm-debug.log*
+
+# tauri
+src-tauri/WixTools/

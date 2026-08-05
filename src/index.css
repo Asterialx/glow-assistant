@@ -1,0 +1,213 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+
+@theme {
+  --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+:root {
+  --bg: #1f1e1d;
+  --bg-elevated: #2a2826;
+  --bg-sidebar: #262523;
+  --bg-input: #2f2d2b;
+  --bg-hover: #333130;
+  --bg-active: #3a3835;
+  --border: #3a3835;
+  --fg: #f5f2eb;
+  --fg-muted: #a39e95;
+  --fg-faint: #7a756c;
+  --accent: #d97757;
+  --accent-soft: rgba(217, 119, 87, 0.15);
+  --user-bubble: #2c2a28;
+  --shadow: rgba(0, 0, 0, 0.35);
+  --danger: #e07a6a;
+  color-scheme: dark;
+
+  /* compat aliases for older panels */
+  --color-surface: var(--bg);
+  --color-surface-2: var(--bg-elevated);
+  --color-surface-3: var(--bg-hover);
+  --color-border: var(--border);
+  --color-muted: var(--fg-muted);
+  --color-fg: var(--fg);
+  --color-accent-home: var(--accent);
+  --color-accent-code: var(--accent);
+  --color-accent-med: var(--accent);
+  --color-danger: var(--danger);
+  --color-warn: #c9a227;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--fg);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.011em;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--fg-faint) 55%, transparent);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.prose-chat {
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--fg);
+}
+.prose-chat p {
+  margin: 0.55em 0;
+}
+.prose-chat pre {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  overflow-x: auto;
+}
+.prose-chat code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+}
+.prose-chat :not(pre) > code {
+  background: var(--bg-hover);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+.prose-chat table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.75rem 0;
+}
+.prose-chat th,
+.prose-chat td {
+  border: 1px solid var(--border);
+  padding: 0.4rem 0.6rem;
+}
+
+.glow-asterisk {
+  color: var(--accent);
+  font-size: 1.35rem;
+  line-height: 1;
+  display: inline-block;
+  transform: translateY(1px);
+}
+
+/* Themed range sliders (Temperature / Max tokens) — follow --accent per theme */
+.glow-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--range-pct, 50%),
+    color-mix(in srgb, var(--border) 85%, var(--fg-faint)) var(--range-pct, 50%),
+    color-mix(in srgb, var(--border) 85%, var(--fg-faint)) 100%
+  );
+  outline: none;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.glow-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: grab;
+}
+
+.glow-range::-webkit-slider-thumb:active {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+
+.glow-range::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  cursor: grab;
+}
+
+.glow-range::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+/* Voice note seek bar — themed to --accent */
+.glow-audio-seek {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+  cursor: pointer;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--seek-pct, 0%),
+    color-mix(in srgb, var(--fg-faint) 35%, transparent) var(--seek-pct, 0%),
+    color-mix(in srgb, var(--fg-faint) 35%, transparent) 100%
+  );
+}
+.glow-audio-seek:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.glow-audio-seek::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.glow-audio-seek::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--bg-elevated);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.glow-audio-seek::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
