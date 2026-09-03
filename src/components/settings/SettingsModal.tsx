@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+﻿import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   X,
   Search,
@@ -29,6 +29,7 @@ import { THEMES, type ThemeId } from "../../lib/themes";
 import { t, type Locale } from "../../lib/i18n";
 import { setApiKey, setMcsixApiKey } from "../../lib/llm/smartapi";
 import { DevicesSection } from "./DevicesSection";
+import { AccountAuthSection } from "./AccountAuthSection";
 import { AgentsPanel } from "../panels/AgentsPanel";
 import { StudyPanel } from "../panels/StudyPanel";
 import { MedPanel } from "../panels/MedPanel";
@@ -812,47 +813,31 @@ export function SettingsModal() {
             {/* ACCOUNT */}
             {tab === "account" && (
               <div className="space-y-10">
+                <AccountAuthSection />
+
                 <div>
-                  <h2 className="mb-5 text-[18px] font-semibold tracking-tight">Account</h2>
-                  <SettingRow title="Log out of all devices">
+                  <h2 className="mb-5 text-[18px] font-semibold tracking-tight">
+                    {locale === "ru" ? "Сессии и устройства" : "Sessions & devices"}
+                  </h2>
+                  <SettingRow
+                    title={locale === "ru" ? "Сбросить локальные устройства" : "Clear local devices"}
+                  >
                     <button
                       type="button"
                       className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px] hover:bg-[var(--bg-hover)]"
                       onClick={() => {
                         localStorage.removeItem("glow.devices");
-                        alert(locale === "ru" ? "Сессии сброшены локально." : "Sessions cleared locally.");
+                        alert(
+                          locale === "ru"
+                            ? "Список устройств очищен локально."
+                            : "Device list cleared locally.",
+                        );
                       }}
                     >
-                      Log out
+                      {locale === "ru" ? "Очистить" : "Clear"}
                     </button>
                   </SettingRow>
-                  <SettingRow title="Delete your account">
-                    <button
-                      type="button"
-                      className="rounded-xl bg-[var(--fg)] px-3 py-1.5 text-[13px] text-[var(--bg)]"
-                      onClick={() => {
-                        if (
-                          !confirm(
-                            locale === "ru"
-                              ? "Удалить локальный аккаунт Glow на этом устройстве?"
-                              : "Delete local Glow account on this device?",
-                          )
-                        )
-                          return;
-                        [
-                          "glow.account",
-                          "glow.devices",
-                          "glow.sync",
-                          "glow.userName",
-                          "glow.instructions",
-                        ].forEach((k) => localStorage.removeItem(k));
-                        setUserName("Sergey");
-                      }}
-                    >
-                      Delete account
-                    </button>
-                  </SettingRow>
-                  <SettingRow title="Organization ID">
+                  <SettingRow title="Account ID">
                     <span className="rounded-full bg-[var(--bg)] px-3 py-1 font-[family-name:var(--font-mono)] text-[12px] text-[var(--fg-muted)]">
                       {getOrCreateAccount().accountId.slice(0, 8)}
                     </span>

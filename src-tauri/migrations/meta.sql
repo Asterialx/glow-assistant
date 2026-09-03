@@ -56,3 +56,22 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
   category TEXT NOT NULL DEFAULT 'general',
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  body TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  source_path TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS project_memory (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  mode TEXT NOT NULL,
+  fact TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);

@@ -7,6 +7,7 @@ import { AppsAndExtensions } from "../apps/AppsAndExtensions";
 import { useModeStore } from "../../stores/modeStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
+import { useAuthStore } from "../../stores/authStore";
 import {
   addMemory,
   bootstrapDatabases,
@@ -119,6 +120,11 @@ export function AppShell() {
     })();
     onGameMode((s) => setGameModeActive(s.active));
   }, [setGameModeActive]);
+
+  useEffect(() => {
+    useAuthStore.getState().hydrate();
+    void useAuthStore.getState().refreshIfNeeded();
+  }, []);
 
   // Phone: start with sidebar closed; turn off desktop-only modes
   useEffect(() => {
