@@ -58,9 +58,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
   content_path TEXT,
   content_text TEXT,
   meta_json TEXT NOT NULL DEFAULT '{}',
-  created_at INTEGER NOT NULL,
-  group_id TEXT,
-  version INTEGER NOT NULL DEFAULT 1
+  created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS domain_records (
