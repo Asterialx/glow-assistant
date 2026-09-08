@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ClipboardEvent } 
 import { Eye, EyeOff, Mail, X } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { useUiStore } from "../../stores/uiStore";
+import { AUTH_EMAIL_OTP_ENABLED } from "../../lib/authFlags";
 import { GUEST_MESSAGE_LIMIT } from "../../lib/supabase/trial";
 import { fullSync } from "../../lib/supabase/syncClient";
 import { cn } from "../../lib/utils";
@@ -214,8 +215,8 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
     setShowPassword2(false);
     autoSubmitRef.current = null;
     setResendIn(0);
-    setMode(pendingEmail ? "verify" : initialMode);
-    if (pendingEmail) {
+    setMode(pendingEmail && AUTH_EMAIL_OTP_ENABLED ? "verify" : initialMode);
+    if (pendingEmail && AUTH_EMAIL_OTP_ENABLED) {
       setEmail(pendingEmail);
       startResendCooldown(60);
     }
@@ -312,6 +313,14 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
         }
         const res = await signUp(email, password);
         if (res.needsVerification) {
+          if (!AUTH_EMAIL_OTP_ENABLED) {
+            setLocalError(
+              ru
+                ? "Почту подтверждать сейчас не нужно. В Supabase выключи Confirm email (Authentication → Providers → Email), затем зарегистрируйся снова."
+                : "Email codes are temporarily off. In Supabase turn Confirm email OFF (Authentication → Providers → Email), then sign up again.",
+            );
+            return;
+          }
           setCode("");
           autoSubmitRef.current = null;
           setMode("verify");

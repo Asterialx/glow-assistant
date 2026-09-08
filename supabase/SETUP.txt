@@ -2,6 +2,18 @@
 
 Desktop can't open Supabase confirm links reliably. Use a CODE in the email.
 
+## TEMP (closed beta) — OTP off
+
+Until a custom Resend domain is ready:
+
+1. In the app: `src/lib/authFlags.ts` → `AUTH_EMAIL_OTP_ENABLED = false` (current).
+2. In Supabase → Authentication → Providers → Email → **Confirm email: OFF**.
+
+Friends can register on any email → profile step → done.
+
+To restore OTP later: set the flag to `true`, turn Confirm email **ON**, paste the template below.
+Git checkpoint with full OTP UI: commit `8bcde62`.
+
 ## 1) Fix the email template (required)
 
 Supabase → Authentication → Emails → **Confirm sign up** → replace body with:
