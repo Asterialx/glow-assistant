@@ -56,7 +56,18 @@ export function AccountAuthSection() {
         {status === "authenticated" && user ? (
           <>
             <div className="text-[12px] text-[var(--fg-faint)]">{ru ? "Вы вошли как" : "Signed in as"}</div>
-            <div className="mt-1 truncate text-[14px] font-medium">{user.email}</div>
+            <div className="mt-1 truncate text-[14px] font-medium">
+              {[user.user_metadata?.first_name, user.user_metadata?.last_name]
+                .filter(Boolean)
+                .join(" ")
+                .trim() ||
+                user.user_metadata?.full_name ||
+                user.email}
+            </div>
+            {user.email &&
+            (user.user_metadata?.first_name || user.user_metadata?.full_name) ? (
+              <div className="mt-0.5 truncate text-[12px] text-[var(--fg-muted)]">{user.email}</div>
+            ) : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"

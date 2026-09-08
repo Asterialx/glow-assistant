@@ -74,7 +74,14 @@ export function ClaudeSidebar({
   const signOut = useAuthStore((s) => s.signOut);
   const signedIn = authStatus === "authenticated" && Boolean(authUser);
   const displayName =
-    (signedIn && (authUser?.email?.split("@")[0] || authUser?.email)) ||
+    (signedIn &&
+      ([authUser?.user_metadata?.first_name, authUser?.user_metadata?.last_name]
+        .filter(Boolean)
+        .join(" ")
+        .trim() ||
+        authUser?.user_metadata?.full_name ||
+        authUser?.email?.split("@")[0] ||
+        authUser?.email)) ||
     userName ||
     "Guest";
 
@@ -184,8 +191,15 @@ export function ClaudeSidebar({
           isMobile ? "pt-[max(0.75rem,env(safe-area-inset-top,0px))]" : "pt-3",
         )}
       >
-        <div className="px-1 text-[15px] font-semibold tracking-tight text-[var(--fg)]">
-          Glow
+        <div className="inline-flex items-center gap-[0.4em] text-[15px]">
+          <img
+            src="/glow-mark.png?v=6"
+            alt=""
+            className="block h-[0.92em] w-auto shrink-0 object-contain"
+          />
+          <span className="font-semibold leading-none tracking-tight text-[var(--fg)]">
+            Glow
+          </span>
         </div>
       </div>
 

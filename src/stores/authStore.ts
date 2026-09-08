@@ -5,6 +5,12 @@ import { getOrCreateDeviceId, getDeviceName } from "../lib/accountSync";
 
 export type AuthStatus = "loading" | "anon" | "needs_verification" | "authenticated" | "unavailable";
 
+export type ProfileInput = {
+  firstName: string;
+  lastName: string;
+  age: number;
+};
+
 type AuthState = {
   status: AuthStatus;
   user: User | null;
@@ -17,6 +23,7 @@ type AuthState = {
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   resendCode: (email: string) => Promise<void>;
+  completeProfile: (profile: ProfileInput) => Promise<void>;
   clearError: () => void;
 };
 
@@ -168,5 +175,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ error: error.message });
       throw error;
     }
+  },
+
+  completeProfile: async ({ firstName, lastName, age }) => {
+    const sb = getSupabase();
+    set({ error: null });
+    const first = firstName.trim();
+    const last = lastName.trim();
+    const { data, error } = await sb.auth.updateUser({
+      data: {
+        first_name: first,
+        last_name: last,
+        age,
+        full_name: `${first} ${last}`.trim(),
+        profile_complete: true,
+      },
+    });
+    if (error) {
+      set({ error: error.message });
+      throw error;
+    }
+    set({
+      user: data.user,
+      status: "authenticated",
+      pendingEmail: null,
+    });
   },
 }));

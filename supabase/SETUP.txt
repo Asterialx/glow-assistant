@@ -1,10 +1,45 @@
-# How to finish Supabase setup (one-time)
+# Glow — email OTP (6-digit code), not magic links
 
-1. Open Supabase → **SQL Editor** → New query
-2. Paste the full contents of `supabase/migrations/001_glow_accounts_sync.sql`
-3. Click **Run**
-4. Authentication → Providers → Email → enabled
-5. Authentication → (Email settings) → Confirm email **ON**
-6. Prefer OTP / 6-digit code in email templates if available
+Desktop can't open Supabase confirm links reliably. Use a CODE in the email.
 
-After that: Settings → Account in Glow → Create account.
+## 1) Fix the email template (required)
+
+Supabase → Authentication → Emails → **Confirm sign up** → replace body with:
+
+```html
+<h2>Glow Assistant</h2>
+<p>Ваш код подтверждения:</p>
+<p style="font-size:28px;letter-spacing:6px;font-weight:700;">{{ .Token }}</p>
+<p>Введите этот код в приложении. Ссылку открывать не нужно.</p>
+```
+
+Subject example: `Glow code: {{ .Token }}`
+
+Also edit **Magic Link** / other templates the same way if you use them — always show `{{ .Token }}`.
+
+## 2) Better delivery (recommended): Resend
+
+Free, no need for your own mailbox to start.
+
+1. Create account at https://resend.com
+2. API Keys → Create → copy key (`re_...`)
+3. Supabase → Project Settings → Authentication → **SMTP Settings** → Enable custom SMTP:
+
+   - Host: `smtp.resend.com`
+   - Port: `465`
+   - Username: `resend`
+   - Password: your Resend API key
+   - Sender email: `onboarding@resend.dev` (for tests)
+   - Sender name: `Glow Assistant`
+
+**Important:** with sender `onboarding@resend.dev`, Resend only delivers to the email of your Resend account.
+Register/test with that same address, or verify your own domain in Resend and send from `noreply@yourdomain.com`.
+
+Later you can verify your own domain in Resend and send from `noreply@yourdomain.com`.
+
+Check delivery: Resend → Logs (failed sends show why).
+Also check Spam.
+
+## 3) SQL migration (if not done)
+
+SQL Editor → run `supabase/migrations/001_glow_accounts_sync.sql`

@@ -217,13 +217,17 @@ export function ChatPane({
             isMobile ? "justify-center pb-4" : "justify-center",
           )}
         >
-          <div className="mb-8 flex items-center justify-center gap-3">
-            <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
-              ✻
-            </span>
-            <h1 className="font-[family-name:var(--font-display)] text-[1.75rem] font-medium tracking-[-0.02em] text-[var(--fg)] sm:text-[2rem]">
-              {t(locale, "greeting")}
-            </h1>
+          <div className="mb-8 flex justify-center">
+            <div className="inline-flex items-center gap-[0.28em] text-[1.75rem] sm:text-[2rem]">
+              <img
+                src="/glow-mark.png?v=6"
+                alt=""
+                className="relative top-[0.05em] block h-[0.78em] w-auto shrink-0 object-contain"
+              />
+              <h1 className="relative top-[0.04em] m-0 font-[family-name:var(--font-display)] text-[1em] font-medium leading-none tracking-[-0.02em] text-[var(--fg)]">
+                {t(locale, "greeting")}
+              </h1>
+            </div>
           </div>
           {!isMobile && (
             <div className="w-full max-w-[720px]">
