@@ -2,6 +2,10 @@
 
 Local-first AI family workspace (Tauri 2 + React + SQLite) with Home / Code / Med modes.
 
+First try: 
+
+https://glowai-ashy.vercel.app/
+
 ## Run (Windows / desktop)
 
 ```bash
