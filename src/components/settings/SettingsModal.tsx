@@ -7,42 +7,37 @@ import {
   Shield,
   CreditCard,
   Briefcase,
-  Lightbulb,
   Moon,
-  Code2,
   Monitor,
   Sparkles,
   Wrench,
   FileText,
-  LayoutGrid,
-  Puzzle,
   History,
   Sun,
-  ExternalLink,
-  ChevronDown,
   ChevronLeft,
   Bot,
   BookOpen,
+  Download,
+  Trash2,
 } from "lucide-react";
 import { useUiStore } from "../../stores/uiStore";
+import { useModeStore } from "../../stores/modeStore";
 import { THEMES, type ThemeId } from "../../lib/themes";
 import { t, type Locale } from "../../lib/i18n";
 import { setApiKey, setMcsixApiKey } from "../../lib/llm/smartapi";
-import { DevicesSection } from "./DevicesSection";
+import { AccountAuthSection } from "./AccountAuthSection";
 import { AgentsPanel } from "../panels/AgentsPanel";
 import { StudyPanel } from "../panels/StudyPanel";
-import { MedPanel } from "../panels/MedPanel";
-import {
-  getOrCreateAccount,
-  getDeviceName,
-  listDevices,
-  saveAccount,
-} from "../../lib/accountSync";
+import { getOrCreateAccount, saveAccount } from "../../lib/accountSync";
+import { useAuthStore } from "../../stores/authStore";
 import { listMcp } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
 import { useIsMobile } from "../../lib/useMediaQuery";
 import { BillingDashboard } from "../panels/BillingDashboard";
 import { ExtensionsPanel } from "./ExtensionsPanel";
+import { clearMemory, deleteMemory, listMemory } from "../../db";
+import type { GlobalMemory } from "../../lib/types";
+import { buildFullBackup, downloadBackupJson } from "../../lib/dataBackup";
 
 type TabId =
   | "general"
@@ -50,20 +45,13 @@ type TabId =
   | "privacy"
   | "billing"
   | "capabilities"
-  | "reflect"
-  | "focus"
-  | "glow-code"
   | "desktop-general"
   | "extensions"
   | "developer"
   | "skills"
-  | "connectors"
-  | "plugins"
   | "memory"
   | "agents"
-  | "study"
-  | "med"
-  | "med-tools";
+  | "study";
 
 type NavItem = { id: TabId; label: string; icon: typeof Gear };
 type NavGroup = { title: string; items: NavItem[] };
@@ -225,9 +213,8 @@ export function SettingsModal() {
 
   // Capabilities
   const [toolMode, setToolMode] = useState(
-    localStorage.getItem("glow.toolMode") || "Load tools when needed",
+    localStorage.getItem("glow.toolMode") || "Disable tools",
   );
-  const [connectorSearch, setConnectorSearch] = useState(() => loadFlag("glow.connectorSearch"));
   const [switchModels, setSwitchModels] = useState(() => loadFlag("glow.switchModels", true));
   const [artifactsOn, setArtifactsOn] = useState(() => loadFlag("glow.capArtifacts", true));
   const [aiArtifacts, setAiArtifacts] = useState(() => loadFlag("glow.aiArtifacts"));
@@ -237,28 +224,16 @@ export function SettingsModal() {
 
   // Memory / desktop
   const [memoryOn, setMemoryOn] = useState(() => loadFlag("glow.memoryFromChats"));
+  const [memoryFacts, setMemoryFacts] = useState<GlobalMemory[]>([]);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [runStartup, setRunStartup] = useState(() => loadFlag("glow.runStartup"));
   const [sysTray, setSysTray] = useState(() => loadFlag("glow.sysTray", true));
   const [keepAwake, setKeepAwake] = useState(() => loadFlag("glow.keepAwake"));
   const [shortcut] = useState("Control+Alt+Space");
-  const [quietDays, setQuietDays] = useState<boolean[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("glow.quietDays") || "[false,false,false,false,false,false,false]");
-    } catch {
-      return [false, false, false, false, false, false, false];
-    }
-  });
   const [mcpServers, setMcpServers] = useState<
     Array<{ id: string; name: string; enabled: boolean; category: string }>
   >([]);
-  const [connectorFilter, setConnectorFilter] = useState<"all" | "connected" | "not">("all");
-  const [connectedIds, setConnectedIds] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("glow.connectors") || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const mode = useModeStore((s) => s.mode);
 
   const kind = THEMES.find((th) => th.id === themeId)?.kind || "dark";
   const appearanceMode =
@@ -285,10 +260,7 @@ export function SettingsModal() {
         core,
         {
           title: "Tools",
-          items: [
-            { id: "study", label: "Study & Focus", icon: BookOpen },
-            { id: "med-tools", label: "Med tools", icon: Shield },
-          ],
+          items: [{ id: "study", label: "Study & Focus", icon: BookOpen }],
         },
       ];
     }
@@ -299,9 +271,6 @@ export function SettingsModal() {
         items: [
           ...core.items.slice(0, 4),
           { id: "capabilities", label: "Capabilities", icon: Briefcase },
-          { id: "reflect", label: "Reflect", icon: Lightbulb },
-          { id: "focus", label: "Time and focus", icon: Moon },
-          { id: "glow-code", label: "Glow Code", icon: Code2 },
           { id: "memory", label: "Memory", icon: History },
         ],
       },
@@ -313,16 +282,11 @@ export function SettingsModal() {
           { id: "agents", label: "Agents & MCP", icon: Bot },
           { id: "developer", label: "Developer", icon: Wrench },
           { id: "study", label: "Study & Focus", icon: BookOpen },
-          { id: "med-tools", label: "Med tools", icon: Shield },
         ],
       },
       {
         title: "Customize",
-        items: [
-          { id: "skills", label: "Skills", icon: FileText },
-          { id: "connectors", label: "Connectors", icon: LayoutGrid },
-          { id: "plugins", label: "Plugins", icon: Puzzle },
-        ],
+        items: [{ id: "skills", label: "Skills", icon: FileText }],
       },
     ];
   }, [isMobile]);
@@ -336,11 +300,22 @@ export function SettingsModal() {
     setPreferredName(acc.preferredName || userName);
     setWork(acc.work || "Other");
     listMcp().then((list) => setMcpServers(list));
-  }, [open, userName]);
+    if (tab === "memory") listMemory().then(setMemoryFacts);
+  }, [open, userName, tab]);
 
-  // Leave desktop-only tabs if we land on a phone shell
+  // Leave desktop-only / removed tabs
   useEffect(() => {
-    if (!isMobile || !open) return;
+    if (!open) return;
+    const removed = new Set([
+      "reflect",
+      "focus",
+      "glow-code",
+      "connectors",
+      "plugins",
+      "med",
+    ]);
+    if (removed.has(tab)) setTab("general");
+    if (!isMobile) return;
     const allowed = new Set([
       "general",
       "account",
@@ -348,7 +323,6 @@ export function SettingsModal() {
       "billing",
       "memory",
       "study",
-      "med-tools",
     ]);
     if (!allowed.has(tab)) setTab("general");
   }, [isMobile, open, tab, setTab]);
@@ -376,21 +350,27 @@ export function SettingsModal() {
     setUserName(name);
   };
 
-  const popularConnectors = [
-    { id: "gmail", name: "Gmail" },
-    { id: "gdrive", name: "Google Drive" },
-    { id: "slack", name: "Slack" },
-    { id: "github", name: "GitHub Integration", type: "Web" },
-  ];
-
   const skills = [
     { name: "morning", updated: "7/24/26", author: "Glow" },
     { name: "skill-creator", updated: "7/24/26", author: "Glow" },
     { name: "design-reflect", updated: "8/2/26", author: "Glow" },
   ];
 
-  const devices = listDevices();
-  const thisDevice = devices.find((d) => d.isThis);
+  const exportBackup = async () => {
+    if (backupBusy) return;
+    setBackupBusy(true);
+    try {
+      const backup = await buildFullBackup(mode);
+      downloadBackupJson(backup);
+    } catch (e) {
+      console.warn("Backup failed", e);
+      window.alert(locale === "ru" ? "Не удалось создать backup" : "Could not create backup");
+    } finally {
+      setBackupBusy(false);
+    }
+  };
+
+  const refreshMemory = async () => setMemoryFacts(await listMemory());
 
   const showNav = !isMobile || !mobileShowContent;
   const showContent = !isMobile || mobileShowContent;
@@ -814,19 +794,22 @@ export function SettingsModal() {
               <div className="space-y-10">
                 <div>
                   <h2 className="mb-5 text-[18px] font-semibold tracking-tight">Account</h2>
-                  <SettingRow title="Log out of all devices">
+                  <AccountAuthSection />
+                </div>
+
+                <div>
+                  <SettingRow title={hint("Sign out", "Выйти")}>
                     <button
                       type="button"
                       className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px] hover:bg-[var(--bg-hover)]"
                       onClick={() => {
-                        localStorage.removeItem("glow.devices");
-                        alert(locale === "ru" ? "Сессии сброшены локально." : "Sessions cleared locally.");
+                        void useAuthStore.getState().signOut();
                       }}
                     >
-                      Log out
+                      {hint("Sign out", "Выйти")}
                     </button>
                   </SettingRow>
-                  <SettingRow title="Delete your account">
+                  <SettingRow title={hint("Clear local profile cache", "Очистить локальный кэш профиля")}>
                     <button
                       type="button"
                       className="rounded-xl bg-[var(--fg)] px-3 py-1.5 text-[13px] text-[var(--bg)]"
@@ -834,94 +817,20 @@ export function SettingsModal() {
                         if (
                           !confirm(
                             locale === "ru"
-                              ? "Удалить локальный аккаунт Glow на этом устройстве?"
-                              : "Delete local Glow account on this device?",
+                              ? "Очистить локальные данные профиля на этом устройстве? Чаты не удалятся."
+                              : "Clear local profile cache on this device? Chats stay.",
                           )
                         )
                           return;
-                        [
-                          "glow.account",
-                          "glow.devices",
-                          "glow.sync",
-                          "glow.userName",
-                          "glow.instructions",
-                        ].forEach((k) => localStorage.removeItem(k));
-                        setUserName("Sergey");
+                        ["glow.account", "glow.devices", "glow.sync", "glow.instructions"].forEach((k) =>
+                          localStorage.removeItem(k),
+                        );
                       }}
                     >
-                      Delete account
+                      {hint("Clear cache", "Очистить")}
                     </button>
                   </SettingRow>
-                  <SettingRow title="Organization ID">
-                    <span className="rounded-full bg-[var(--bg)] px-3 py-1 font-[family-name:var(--font-mono)] text-[12px] text-[var(--fg-muted)]">
-                      {getOrCreateAccount().accountId.slice(0, 8)}
-                    </span>
-                  </SettingRow>
                 </div>
-
-                <section>
-                  <h3 className="text-[15px] font-semibold">Trusted devices</h3>
-                  <p className="mt-1 text-[12.5px] text-[var(--fg-muted)]">
-                    {hint(
-                      "Devices that can control your local machine through remote sessions.",
-                      "Устройства, которым можно доверить удалённый доступ к этому ПК.",
-                    )}
-                  </p>
-                  <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)]">
-                    <div className="grid grid-cols-2 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                      <span>Device</span>
-                      <span>Added</span>
-                    </div>
-                    {devices.filter((d) => !d.isThis).length === 0 ? (
-                      <div className="px-3 py-6 text-[13px] text-[var(--fg-faint)]">
-                        {hint("No trusted devices.", "Пока нет доверенных устройств.")}
-                      </div>
-                    ) : (
-                      devices
-                        .filter((d) => !d.isThis)
-                        .map((d) => (
-                          <div
-                            key={d.id}
-                            className="grid grid-cols-2 border-b border-[var(--border)] px-3 py-2.5 text-[13px] last:border-0"
-                          >
-                            <span>{d.name}</span>
-                            <span className="text-[var(--fg-muted)]">
-                              {new Date(d.linkedAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                        ))
-                    )}
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className="text-[15px] font-semibold">Active sessions</h3>
-                  <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)]">
-                    <div className="grid grid-cols-4 gap-2 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                      <span>Device</span>
-                      <span>Location</span>
-                      <span>Created</span>
-                      <span>Updated</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 px-3 py-3 text-[13px]">
-                      <span className="flex items-center gap-2">
-                        {(thisDevice?.name || getDeviceName()).slice(0, 12)}
-                        <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[10px] font-medium text-[#1d4ed8]">
-                          Current
-                        </span>
-                      </span>
-                      <span className="text-[var(--fg-muted)]">Local</span>
-                      <span className="text-[var(--fg-muted)]">
-                        {new Date(thisDevice?.linkedAt || Date.now()).toLocaleString()}
-                      </span>
-                      <span className="text-[var(--fg-muted)]">
-                        {new Date(thisDevice?.lastSeenAt || Date.now()).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
-                <DevicesSection />
               </div>
             )}
 
@@ -932,11 +841,30 @@ export function SettingsModal() {
                 <SettingRow
                   title="Local-first data"
                   description={hint(
-                    "Chats stay in mode-isolated SQLite on this device. Med mode redacts PII before cloud calls.",
-                    "Чаты хранятся локально в SQLite (отдельно по режимам). В Med перед облаком маскируются персональные данные.",
+                    "Chats stay in SQLite on this device.",
+                    "Чаты хранятся локально в SQLite на этом устройстве.",
                   )}
                 >
                   <span className="text-[12px] text-[var(--fg-faint)]">On</span>
+                </SettingRow>
+                <SettingRow
+                  title={hint("Export chats & memory", "Экспорт чатов и Memory")}
+                  description={hint(
+                    "Download a JSON backup of conversations, projects, artifacts, widgets, memory, and non-secret prefs. API keys are excluded.",
+                    "Скачать JSON: чаты, проекты, артефакты, виджеты, Memory и настройки (без API-ключей).",
+                  )}
+                >
+                  <button
+                    type="button"
+                    disabled={backupBusy}
+                    onClick={() => void exportBackup()}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-2 text-[12.5px] hover:bg-[var(--bg-hover)] disabled:opacity-50"
+                  >
+                    <Download size={14} />
+                    {backupBusy
+                      ? hint("Exporting…", "Экспорт…")
+                      : hint("Download backup", "Скачать backup")}
+                  </button>
                 </SettingRow>
                 <SettingRow
                   title="Telemetry"
@@ -947,7 +875,6 @@ export function SettingsModal() {
                 >
                   <Toggle on={false} onChange={() => {}} />
                 </SettingRow>
-                <p className="mt-4 text-[13px] text-[var(--fg-muted)]">{t(locale, "medDisclaimer")}</p>
               </div>
             )}
 
@@ -967,8 +894,8 @@ export function SettingsModal() {
                   <SettingRow
                     title="Tool access mode"
                     description={hint(
-                      "Controls how connector tools are loaded in new conversations.",
-                      "Когда подключать tools / connectors в новых чатах.",
+                      "Reserved for future connector tools. Currently tools are not wired — leave Disable tools.",
+                      "Зарезервировано под connectors. Пока tools не подключены — оставь Disable tools.",
                     )}
                   >
                     <select
@@ -979,25 +906,10 @@ export function SettingsModal() {
                       }}
                       className="max-w-[200px] rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12.5px]"
                     >
+                      <option>Disable tools</option>
                       <option>Load tools when needed</option>
                       <option>Always load tools</option>
-                      <option>Disable tools</option>
                     </select>
-                  </SettingRow>
-                  <SettingRow
-                    title="Connector search"
-                    description={hint(
-                      "Let Glow search the connector directory and surface ones relevant to your conversation.",
-                      "Glow может подсказывать релевантные connectors по ходу разговора.",
-                    )}
-                  >
-                    <Toggle
-                      on={connectorSearch}
-                      onChange={(v) => {
-                        setConnectorSearch(v);
-                        saveFlag("glow.connectorSearch", v);
-                      }}
-                    />
                   </SettingRow>
                   <SettingRow
                     title="Switch models when a message is flagged"
@@ -1121,122 +1033,6 @@ export function SettingsModal() {
                     .
                   </p>
                 </section>
-              </div>
-            )}
-
-            {/* REFLECT */}
-            {tab === "reflect" && (
-              <div>
-                <h2 className="text-[18px] font-semibold">Reflect</h2>
-                <p className="mt-1 text-[13px] text-[var(--fg-muted)]">
-                  {hint(
-                    "Based on your conversations in Glow chat.",
-                    "На основе ваших разговоров в чате Glow.",
-                  )}
-                </p>
-                <EmptyArt
-                  title={hint(
-                    "For this reflection to work, you'll need to enable memory in memory settings.",
-                    "Чтобы Reflect работал, включите Memory в настройках Memory.",
-                  )}
-                  action={
-                    <button
-                      type="button"
-                      className="text-[13.5px] text-[#5b8def] hover:underline"
-                      onClick={() => setTab("memory")}
-                    >
-                      memory settings
-                    </button>
-                  }
-                />
-              </div>
-            )}
-
-            {/* TIME AND FOCUS */}
-            {tab === "focus" && (
-              <div>
-                <h2 className="mb-6 text-[18px] font-semibold">Time and focus</h2>
-                <SettingRow
-                  title="Break reminders"
-                  description={hint(
-                    "Get a nudge to take a break from Glow. You can snooze or adjust anytime.",
-                    "Напоминание сделать перерыв. Можно отложить или поменять.",
-                  )}
-                >
-                  <div className="flex gap-2">
-                    <select className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[12.5px]">
-                      <option>—</option>
-                      <option>25 min</option>
-                      <option>50 min</option>
-                    </select>
-                    <select className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[12.5px]">
-                      <option>—</option>
-                      <option>5 min break</option>
-                      <option>10 min break</option>
-                    </select>
-                  </div>
-                </SettingRow>
-                <div className="py-4">
-                  <div className="text-[14px]">Quiet hours</div>
-                  <p className="mt-1 text-[12.5px] text-[var(--fg-muted)]">
-                    {hint(
-                      "Set time limits for Glow. You can dismiss or adjust anytime.",
-                      "Ограничение времени работы с Glow. Можно отключить в любой момент.",
-                    )}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                      <button
-                        key={`${d}-${i}`}
-                        type="button"
-                        onClick={() => {
-                          const next = [...quietDays];
-                          next[i] = !next[i];
-                          setQuietDays(next);
-                          localStorage.setItem("glow.quietDays", JSON.stringify(next));
-                        }}
-                        className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full text-[12px]",
-                          quietDays[i]
-                            ? "bg-[var(--fg)] text-[var(--bg)]"
-                            : "bg-[var(--bg)] text-[var(--fg-muted)]",
-                        )}
-                      >
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === "glow-code" && (
-              <div>
-                <h2 className="mb-2 text-[18px] font-semibold">Glow Code</h2>
-                <p className="mb-6 text-[13px] text-[var(--fg-muted)]">
-                  {hint(
-                    "Coding workspace preferences for the Code mode.",
-                    "Настройки рабочего пространства для режима Code.",
-                  )}
-                </p>
-                <SettingRow
-                  title="Default mode on launch"
-                  description={hint("Open Glow in Code mode.", "Открывать Glow сразу в режиме Code.")}
-                >
-                  <Toggle
-                    on={localStorage.getItem("glow.defaultCode") === "1"}
-                    onChange={(v) => saveFlag("glow.defaultCode", v)}
-                  />
-                </SettingRow>
-                <SettingRow
-                  title="Inline diffs"
-                  description={hint(
-                    "Show proposed edits as diffs in chat.",
-                    "Показывать правки кода как diff прямо в чате.",
-                  )}
-                >
-                  <Toggle on={true} onChange={() => {}} />
-                </SettingRow>
               </div>
             )}
 
@@ -1365,35 +1161,18 @@ export function SettingsModal() {
               </div>
             )}
 
-            {tab === "med-tools" && (
-              <div className="-mx-4 max-h-[min(70vh,720px)] overflow-y-auto px-2">
-                <MedPanel />
-              </div>
-            )}
-
             {/* SKILLS */}
             {tab === "skills" && (
               <div>
                 <div className="mb-5 flex items-center justify-between">
                   <h2 className="text-[18px] font-semibold">Skills</h2>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]">
-                      <Search size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Browse
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Add <ChevronDown size={13} />
-                    </button>
-                  </div>
                 </div>
+                <p className="mb-4 text-[13px] text-[var(--fg-muted)]">
+                  {hint(
+                    "Built-in prompts you can insert from the + menu. Browse marketplace is not available yet.",
+                    "Встроенные промпты из меню +. Маркетплейс Skills пока недоступен.",
+                  )}
+                </p>
                 <div className="overflow-hidden rounded-xl border border-[var(--border)]">
                   <div className="grid grid-cols-3 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
                     <span>Skill</span>
@@ -1414,152 +1193,6 @@ export function SettingsModal() {
               </div>
             )}
 
-            {/* CONNECTORS */}
-            {tab === "connectors" && (
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-[18px] font-semibold">Connectors</h2>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]">
-                      <Search size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Add <ChevronDown size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div className="mb-4 inline-flex rounded-xl bg-[var(--bg)] p-0.5">
-                  {(
-                    [
-                      ["all", "All"],
-                      ["connected", "Connected"],
-                      ["not", "Not connected"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setConnectorFilter(id)}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-[12.5px]",
-                        connectorFilter === id
-                          ? "bg-[var(--bg-elevated)] font-medium shadow-sm"
-                          : "text-[var(--fg-muted)]",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mb-2 text-[11px] font-medium tracking-wide text-[var(--fg-faint)]">
-                  POPULAR
-                </p>
-                <div className="mb-6 space-y-2">
-                  {popularConnectors.slice(0, 3).map((c) => {
-                    const on = connectedIds.includes(c.id);
-                    if (connectorFilter === "connected" && !on) return null;
-                    if (connectorFilter === "not" && on) return null;
-                    return (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between rounded-xl border border-[var(--border)] px-3 py-3"
-                      >
-                        <span className="text-[13.5px] font-medium">{c.name}</span>
-                        <button
-                          type="button"
-                          className="rounded-xl border border-[var(--border)] px-3 py-1 text-[12.5px]"
-                          onClick={() => {
-                            const next = on
-                              ? connectedIds.filter((x) => x !== c.id)
-                              : [...connectedIds, c.id];
-                            setConnectedIds(next);
-                            localStorage.setItem("glow.connectors", JSON.stringify(next));
-                          }}
-                        >
-                          {on ? "Connected" : "Connect"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-                  <div className="grid grid-cols-3 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                    <span>Connector</span>
-                    <span>Type</span>
-                    <span>Status</span>
-                  </div>
-                  {popularConnectors.slice(3).map((c) => {
-                    const on = connectedIds.includes(c.id);
-                    return (
-                      <div
-                        key={c.id}
-                        className="grid grid-cols-3 items-center px-3 py-3 text-[13.5px]"
-                      >
-                        <span>{c.name}</span>
-                        <span className="text-[var(--fg-muted)]">{c.type || "Web"}</span>
-                        <button
-                          type="button"
-                          className="w-fit rounded-xl border border-[var(--border)] px-3 py-1 text-[12.5px]"
-                          onClick={() => {
-                            const next = on
-                              ? connectedIds.filter((x) => x !== c.id)
-                              : [...connectedIds, c.id];
-                            setConnectedIds(next);
-                            localStorage.setItem("glow.connectors", JSON.stringify(next));
-                          }}
-                        >
-                          {on ? "Connected" : "Connect"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* PLUGINS */}
-            {tab === "plugins" && (
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-[18px] font-semibold">Plugins</h2>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]">
-                      <Search size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Browse
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Add <ChevronDown size={13} />
-                    </button>
-                  </div>
-                </div>
-                <EmptyArt
-                  title={hint(
-                    "Give Glow role-level expertise with plugins",
-                    "Plugins дают Glow экспертизу под роль (как набор Skills + connectors).",
-                  )}
-                  action={
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px]"
-                    >
-                      Browse plugins
-                    </button>
-                  }
-                />
-              </div>
-            )}
-
             {/* MEMORY */}
             {tab === "memory" && (
               <div>
@@ -1567,8 +1200,8 @@ export function SettingsModal() {
                 <SettingRow
                   title="Generate memory from chats"
                   description={hint(
-                    "Allow Glow to generate memory from your chats.",
-                    "Glow может запоминать важное из чатов (Memory).",
+                    "When on, lines like Fact: … / Remember: … in assistant replies are saved.",
+                    "Если включено, строки Fact: … / Remember: … из ответов сохраняются в Memory.",
                   )}
                 >
                   <Toggle
@@ -1579,6 +1212,57 @@ export function SettingsModal() {
                     }}
                   />
                 </SettingRow>
+                <div className="mt-6 flex items-center justify-between">
+                  <h3 className="text-[14px] font-semibold">
+                    {hint("Saved facts", "Сохранённые факты")}
+                  </h3>
+                  {memoryFacts.length > 0 && (
+                    <button
+                      type="button"
+                      className="text-[12.5px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                      onClick={async () => {
+                        if (!window.confirm(locale === "ru" ? "Очистить всю Memory?" : "Clear all memory?")) return;
+                        await clearMemory();
+                        await refreshMemory();
+                      }}
+                    >
+                      {hint("Clear all", "Очистить всё")}
+                    </button>
+                  )}
+                </div>
+                {memoryFacts.length === 0 ? (
+                  <p className="mt-3 text-[13px] text-[var(--fg-muted)]">
+                    {hint(
+                      "No facts yet. Enable the toggle above and ask the model to note facts with Fact: …",
+                      "Пока пусто. Включи тоггл выше и попроси модель писать Fact: …",
+                    )}
+                  </p>
+                ) : (
+                  <ul className="mt-3 space-y-2">
+                    {memoryFacts.map((m) => (
+                      <li
+                        key={m.id}
+                        className="flex items-start gap-2 rounded-xl border border-[var(--border)] px-3 py-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-[13.5px] text-[var(--fg)]">{m.fact}</div>
+                          <div className="mt-0.5 text-[11px] text-[var(--fg-faint)]">{m.source_mode}</div>
+                        </div>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-lg p-1.5 text-[var(--fg-faint)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
+                          title={hint("Delete", "Удалить")}
+                          onClick={async () => {
+                            await deleteMemory(m.id);
+                            await refreshMemory();
+                          }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </div>

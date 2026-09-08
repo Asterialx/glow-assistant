@@ -21,7 +21,7 @@ export default defineConfig({
     port: 1420,
     strictPort: true,
     // Listen on all local interfaces so both localhost and 127.0.0.1 work.
-    // Binding only 127.0.0.1 breaks Cursor/browser when they hit ::1 → ERR_CONNECTION_REFUSED.
+    // Binding only 127.0.0.1 breaks Cursor/browser when they hit ::1 тЖТ ERR_CONNECTION_REFUSED.
     host: host || true,
     // Phone testing via cloudflared / ngrok / LAN IP
     allowedHosts: true,

@@ -47,7 +47,7 @@ export function ModelSelector() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 max-w-[8.5rem] items-center gap-0.5 rounded-full bg-[var(--bg-hover)] pl-2.5 pr-2 text-[12.5px] hover:bg-[var(--bg-active)] sm:max-w-[14rem]"
+        className="flex h-9 max-w-[8.5rem] items-center gap-1 rounded-full bg-[var(--bg-hover)] pl-2.5 pr-2 text-[12.5px] hover:bg-[var(--bg-active)] sm:max-w-[14rem]"
       >
         <span className="truncate font-semibold text-[var(--fg)]">{selected.displayName}</span>
         <ChevronDown size={13} className="shrink-0 opacity-60" />

@@ -1,0 +1,10 @@
+# How to finish Supabase setup (one-time)
+
+1. Open Supabase → **SQL Editor** → New query
+2. Paste the full contents of `supabase/migrations/001_glow_accounts_sync.sql`
+3. Click **Run**
+4. Authentication → Providers → Email → enabled
+5. Authentication → (Email settings) → Confirm email **ON**
+6. Prefer OTP / 6-digit code in email templates if available
+
+After that: Settings → Account in Glow → Create account.

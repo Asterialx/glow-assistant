@@ -11,9 +11,12 @@ import {
   ThumbsUp,
   ThumbsDown,
   RotateCcw,
+  RefreshCw,
   Check,
   X,
   PanelRight,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
@@ -35,14 +38,26 @@ import { useIsMobile } from "../../lib/useMediaQuery";
 
 interface Props {
   messages: Message[];
+  /** Full message tree for sibling branch navigation */
+  treeMessages?: Message[];
   widgetsByMessage?: Record<string, UiWidget[]>;
   artifacts?: Artifact[];
   onOpenArtifact?: (artifactId: string) => void;
   onEditMessage?: (message: Message, editedText: string) => void;
+  onResend?: (message: Message) => void;
   onRegenerate?: (message: Message) => void;
+  onSelectLeaf?: (leafId: string) => void;
   onWidgetChange?: (widget: UiWidget) => void;
   onSend: (text: string, files?: File[]) => void;
+  onStop?: () => void;
   streaming?: boolean;
+}
+
+function assistantSiblings(tree: Message[], m: Message): Message[] {
+  if (m.role !== "assistant" || !m.parent_id) return [];
+  return tree
+    .filter((x) => x.parent_id === m.parent_id && x.role === "assistant")
+    .sort((a, b) => a.created_at - b.created_at);
 }
 
 /** Themed mini-player for voice notes; hide STT / metadata from the bubble. */
@@ -89,13 +104,17 @@ function UserMessageBody({ content }: { content: string }) {
 
 export function ChatPane({
   messages,
+  treeMessages = [],
   widgetsByMessage = {},
   artifacts = [],
   onOpenArtifact,
   onEditMessage,
+  onResend,
   onRegenerate,
+  onSelectLeaf,
   onWidgetChange,
   onSend,
+  onStop,
   streaming,
 }: Props) {
   const locale = useUiStore((s) => s.locale);
@@ -106,8 +125,10 @@ export function ChatPane({
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [votes, setVotes] = useState<Record<string, FeedbackVote>>(() => getFeedbackProfile().byMessage);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const userActionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -115,6 +136,17 @@ export function ChatPane({
       editRef.current.selectionStart = editRef.current.value.length;
     }
   }, [editingId]);
+
+  useEffect(() => {
+    if (!selectedUserId) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!userActionRef.current?.contains(e.target as Node)) {
+        setSelectedUserId(null);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [selectedUserId]);
 
   useEffect(() => {
     const tick = window.setInterval(() => {
@@ -138,6 +170,7 @@ export function ChatPane({
 
   const startEdit = (m: Message) => {
     if (streaming) return;
+    setSelectedUserId(null);
     setEditingId(m.id);
     setEditDraft(m.content);
   };
@@ -194,13 +227,25 @@ export function ChatPane({
           </div>
           {!isMobile && (
             <div className="w-full max-w-[720px]">
-              <SmartInputBar onSend={onSend} disabled={streaming} centered />
+              <SmartInputBar
+                onSend={onSend}
+                onStop={onStop}
+                disabled={streaming}
+                streaming={streaming}
+                centered
+              />
             </div>
           )}
         </div>
         {isMobile && (
           <div className="w-full shrink-0">
-            <SmartInputBar onSend={onSend} disabled={streaming} centered />
+            <SmartInputBar
+              onSend={onSend}
+              onStop={onStop}
+              disabled={streaming}
+              streaming={streaming}
+              centered
+            />
           </div>
         )}
       </div>
@@ -219,19 +264,37 @@ export function ChatPane({
             const isEditing = editingId === m.id;
 
             if (isUser) {
+              const selected = selectedUserId === m.id;
               return (
-                <div key={m.id} className="group flex justify-end">
-                  <div className="relative max-w-[min(92%,34rem)] sm:max-w-[min(85%,34rem)]">
-                    {onEditMessage && !isEditing && (
-                      <button
-                        type="button"
-                        className="absolute -top-3 right-1 z-10 rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)] p-1.5 text-[var(--fg-muted)] shadow-sm sm:-left-8 sm:top-1/2 sm:right-auto sm:-translate-y-1/2 sm:border-0 sm:bg-transparent sm:p-1.5 sm:opacity-0 sm:shadow-none sm:group-hover:opacity-100 disabled:opacity-30"
-                        title={locale === "ru" ? "Редактировать" : "Edit"}
-                        disabled={streaming}
-                        onClick={() => startEdit(m)}
-                      >
-                        <Pencil size={14} strokeWidth={1.6} />
-                      </button>
+                <div key={m.id} className="flex justify-end">
+                  <div
+                    ref={selected ? userActionRef : undefined}
+                    className="relative flex max-w-[min(92%,34rem)] items-center gap-2.5 sm:max-w-[min(85%,34rem)]"
+                  >
+                    {!isEditing && selected && (
+                      <div className="flex shrink-0 items-center gap-0.5 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-0.5 shadow-sm">
+                        {onEditMessage && (
+                          <IconBtn
+                            title={locale === "ru" ? "Редактировать" : "Edit"}
+                            disabled={!!streaming}
+                            onClick={() => startEdit(m)}
+                          >
+                            <Pencil size={14} strokeWidth={1.6} />
+                          </IconBtn>
+                        )}
+                        {onResend && (
+                          <IconBtn
+                            title={locale === "ru" ? "Переотправить" : "Resend"}
+                            disabled={!!streaming}
+                            onClick={() => {
+                              setSelectedUserId(null);
+                              onResend(m);
+                            }}
+                          >
+                            <RefreshCw size={14} strokeWidth={1.6} />
+                          </IconBtn>
+                        )}
+                      </div>
                     )}
                     {isEditing ? (
                       <div className="min-w-0 w-[min(100%,20rem)] rounded-[22px] border border-[var(--border)] bg-[var(--bg-elevated)] p-3 shadow-lg sm:min-w-[240px]">
@@ -272,7 +335,26 @@ export function ChatPane({
                         </div>
                       </div>
                     ) : (
-                      <div className="rounded-[22px] bg-[var(--user-bubble)] px-[18px] py-[10px] text-[15.5px] leading-[1.55] text-[var(--fg)]">
+                      <div
+                        role="button"
+                        tabIndex={streaming ? -1 : 0}
+                        onClick={() => {
+                          if (streaming) return;
+                          setSelectedUserId((id) => (id === m.id ? null : m.id));
+                        }}
+                        onKeyDown={(e) => {
+                          if (streaming) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setSelectedUserId((id) => (id === m.id ? null : m.id));
+                          }
+                        }}
+                        className={cn(
+                          "rounded-[22px] bg-[var(--user-bubble)] px-[18px] py-[10px] text-left text-[15.5px] leading-[1.55] text-[var(--fg)] transition-shadow outline-none",
+                          selected && "ring-1 ring-[var(--border)]",
+                          !streaming && "cursor-pointer",
+                        )}
+                      >
                         <UserMessageBody content={m.content} />
                       </div>
                     )}
@@ -283,7 +365,6 @@ export function ChatPane({
 
             const display = getAssistantDisplay(m.content, isStreaming);
             const messageArts = artifacts.filter((a) => a.message_id === m.id);
-            // Only real Artifacts — never inline widgets
             const panelArt = messageArts.find((a) =>
               ["html", "jupyter", "code", "stl", "obj", "dcm", "pdf"].includes(a.kind),
             );
@@ -298,6 +379,8 @@ export function ChatPane({
                   : isStreaming
                     ? "…"
                     : "");
+            const sibs = assistantSiblings(treeMessages, m);
+            const sibIdx = sibs.findIndex((s) => s.id === m.id);
 
             return (
               <div key={m.id} className="group flex flex-col gap-2">
@@ -349,7 +432,6 @@ export function ChatPane({
                     </p>
                   )}
 
-                  {/* Inline UI lives in the message flow — not Artifacts */}
                   {!isStreaming && widgets.length > 0 && (
                     <InlineWidgets widgets={widgets} onChange={onWidgetChange} />
                   )}
@@ -378,6 +460,27 @@ export function ChatPane({
                       isLast ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                     )}
                   >
+                    {sibs.length > 1 && onSelectLeaf && (
+                      <div className="mr-1 flex items-center gap-0.5">
+                        <IconBtn
+                          title={locale === "ru" ? "Предыдущий ответ" : "Previous reply"}
+                          disabled={!!streaming || sibIdx <= 0}
+                          onClick={() => onSelectLeaf(sibs[sibIdx - 1].id)}
+                        >
+                          <ChevronLeft size={15} />
+                        </IconBtn>
+                        <span className="min-w-[2.4rem] text-center text-[11px] tabular-nums text-[var(--fg-muted)]">
+                          {sibIdx + 1}/{sibs.length}
+                        </span>
+                        <IconBtn
+                          title={locale === "ru" ? "Следующий ответ" : "Next reply"}
+                          disabled={!!streaming || sibIdx >= sibs.length - 1}
+                          onClick={() => onSelectLeaf(sibs[sibIdx + 1].id)}
+                        >
+                          <ChevronRight size={15} />
+                        </IconBtn>
+                      </div>
+                    )}
                     <IconBtn
                       title="Copy"
                       onClick={() => void copyText(m.id, display.content || m.content)}
@@ -419,7 +522,12 @@ export function ChatPane({
           })}
         </div>
       </div>
-      <SmartInputBar onSend={onSend} disabled={streaming} />
+      <SmartInputBar
+        onSend={onSend}
+        onStop={onStop}
+        disabled={streaming}
+        streaming={streaming}
+      />
     </div>
   );
 }

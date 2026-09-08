@@ -78,7 +78,7 @@ export function buildChatPayload(
   history: Message[],
   projectPrompt?: string,
   memoryFacts?: string[],
-  redactMed = false,
+  _redactMed = false,
   modelId?: string,
   designMode = false,
   webSearch = false,
@@ -98,11 +98,6 @@ export function buildChatPayload(
   if (projectPrompt) systemParts.push(`Project instructions:\n${projectPrompt}`);
   if (memoryFacts?.length) {
     systemParts.push(`Known user facts:\n${memoryFacts.map((f) => `- ${f}`).join("\n")}`);
-  }
-  if (mode === "med") {
-    systemParts.push(
-      "Medical disclaimer: This is not a medical device and does not replace clinical judgment.",
-    );
   }
   if (designMode) {
     // Designer persona overrides chatty assistant habits for this turn
@@ -138,22 +133,13 @@ export function buildChatPayload(
   systemParts.push(
     "If the user sends a [Voice note] with a transcript, treat that transcript as their spoken request and reply normally. Never ask them to type it again unless the transcript is missing.",
   );
-  if (mode === "med" && !designMode) {
-    systemParts.push(
-      "Med mode: when presenting lab/biomarker results, ALWAYS emit ```widget with type biomarker_table (rows with name, value, unit, ref_low, ref_high). Do not build HTML dashboards or markdown lab tables for this — they belong inline in chat, not Artifacts.",
-    );
-  }
-
   const messages: ChatMessage[] = [
     { role: "system", content: systemParts.join("\n\n") },
   ];
 
   for (const m of history) {
     if (m.role === "system" || m.role === "tool") continue;
-    let content = sanitizeContentForApi(m.content, m.role);
-    if (redactMed && mode === "med" && m.role === "user") {
-      content = content;
-    }
+    const content = sanitizeContentForApi(m.content, m.role);
     if (!content) continue;
     messages.push({
       role: m.role as "user" | "assistant",
@@ -226,6 +212,8 @@ export async function streamChatCompletion(
   if (maxTokens > 16384) maxTokens = 16384;
 
   const apiModel = model?.id || modelId;
+  let output = "";
+  let inputTokens = estimateTokens(messages.map((m) => m.content).join("\n"));
 
   try {
     const body = {
@@ -264,8 +252,6 @@ export async function streamChatCompletion(
 
     const decoder = new TextDecoder();
     let buffer = "";
-    let output = "";
-    let inputTokens = estimateTokens(messages.map((m) => m.content).join("\n"));
 
     while (true) {
       const { done, value } = await reader.read();
@@ -307,6 +293,21 @@ export async function streamChatCompletion(
     });
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
+    // User hit Stop — keep whatever tokens we already streamed
+    if (
+      err.name === "AbortError" ||
+      signal?.aborted ||
+      /abort/i.test(err.message)
+    ) {
+      const outputTokens = estimateTokens(output);
+      const mult = model?.costMultiplier ?? 1;
+      callbacks.onDone({
+        inputTokens,
+        outputTokens,
+        costUnits: ((inputTokens + outputTokens) / 1000) * mult,
+      });
+      return;
+    }
     if (/failed to fetch/i.test(err.message)) {
       callbacks.onError(
         new Error(

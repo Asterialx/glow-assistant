@@ -1,4 +1,4 @@
-export type AppMode = "home" | "code" | "med";
+export type AppMode = "home";
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";
 export type MessageStatus = "pending" | "streaming" | "done" | "error";
@@ -107,7 +107,5 @@ export interface DomainRecord {
 }
 
 export const MODE_SYSTEM_PROMPTS: Record<AppMode, string> = {
-  home: "Workspace mode: Home. Prefer clear, warm, practical answers for everyday life, planning, and general questions.",
-  code: "Workspace mode: Code. Prefer precise code, algorithms, LaTeX math, and actionable diffs for Applied Math/CS work.",
-  med: "Workspace mode: Med. Preventative-medicine assistant. Never invent patient data. Emphasize privacy. Always include a clinical disclaimer. Patient PII may already be redacted.",
+  home: "Prefer clear, warm, practical answers. Adapt depth to the topic — everyday questions, planning, coding, or health info as needed — without inventing patient data or overclaiming medical certainty.",
 };

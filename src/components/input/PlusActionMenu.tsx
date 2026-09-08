@@ -1,10 +1,7 @@
 import {
   Archive,
-  BookOpen,
   Briefcase,
   ChevronRight,
-  Globe,
-  MoreHorizontal,
   Paperclip,
   Plus,
   ScrollText,
@@ -16,9 +13,9 @@ import { useUiStore } from "../../stores/uiStore";
 import { createProject, listConversations, setConversationProject } from "../../db";
 import { cn } from "../../lib/utils";
 import { useIsMobile } from "../../lib/useMediaQuery";
-import { enableChromeAgent, enableGlowDesign } from "../../lib/glowExtensions";
+import { enableGlowDesign } from "../../lib/glowExtensions";
 
-type SubKey = "project" | "skills" | "connector" | null;
+type SubKey = "project" | "skills" | null;
 
 const SKILLS = [
   {
@@ -43,8 +40,6 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const ru = locale === "ru";
   const isMobile = useIsMobile();
   const mode = useModeStore((s) => s.mode);
-  const webSearch = useModeStore((s) => s.webSearch);
-  const setWebSearch = useModeStore((s) => s.setWebSearch);
   const projects = useChatStore((s) => s.projects);
   const setProjects = useChatStore((s) => s.setProjects);
   const setActiveProjectId = useChatStore((s) => s.setActiveProjectId);
@@ -52,11 +47,9 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const setConversations = useChatStore((s) => s.setConversations);
   const setDraft = useChatStore((s) => s.setDraft);
   const draft = useChatStore((s) => s.draft);
-  const setAppsOpen = useUiStore((s) => s.setAppsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const setSettingsTab = useUiStore((s) => s.setSettingsTab);
   const [sub, setSub] = useState<SubKey>(null);
-  const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -102,7 +95,7 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
         />
         <MenuRow
           icon={<Archive size={16} strokeWidth={1.7} />}
-          label={ru ? "В проект" : "Add to project"}
+          label={ru ? "Добавить в проект" : "Add to project"}
           trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
           active={sub === "project"}
           onClick={() => toggleSub("project")}
@@ -119,40 +112,15 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
         />
 
         {!isMobile && (
-          <>
-            <MenuRow
-              icon={<Briefcase size={16} strokeWidth={1.7} />}
-              label="Add connector"
-              trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
-              active={sub === "connector"}
-              onClick={() => toggleSub("connector")}
-            />
-            <MenuRow
-              icon={<MoreHorizontal size={16} strokeWidth={1.7} />}
-              label="Add plugins…"
-              onClick={() => {
-                setAppsOpen(true);
-                onClose();
-              }}
-            />
-          </>
+          <MenuRow
+            icon={<Briefcase size={16} strokeWidth={1.7} />}
+            label="Glow Design"
+            onClick={() => {
+              enableGlowDesign();
+              onClose();
+            }}
+          />
         )}
-
-        <div className="my-1.5 border-t border-[var(--border)]" />
-
-        <MenuRow
-          icon={<Globe size={16} strokeWidth={1.7} />}
-          label={ru ? "Веб-поиск" : "Web search"}
-          trailing={
-            webSearch ? (
-              <span className="text-[11px] font-medium text-[var(--accent)]">ON</span>
-            ) : undefined
-          }
-          onClick={() => {
-            setWebSearch(!webSearch);
-            onClose();
-          }}
-        />
       </div>
 
       {sub === "project" && (
@@ -221,42 +189,6 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
               />
             </>
           )}
-        </SubPanel>
-      )}
-
-      {sub === "connector" && !isMobile && (
-        <SubPanel>
-          <MenuRow
-            icon={<Globe size={15} strokeWidth={1.7} />}
-            label="Chrome agent"
-            onClick={async () => {
-              if (busy) return;
-              setBusy(true);
-              try {
-                await enableChromeAgent();
-              } finally {
-                setBusy(false);
-                onClose();
-              }
-            }}
-          />
-          <MenuRow
-            icon={<ScrollText size={15} strokeWidth={1.7} />}
-            label="Glow Design"
-            onClick={() => {
-              enableGlowDesign();
-              onClose();
-            }}
-          />
-          <div className="my-1 border-t border-[var(--border)]" />
-          <MenuRow
-            icon={<BookOpen size={15} strokeWidth={1.7} />}
-            label="Browse connectors"
-            onClick={() => {
-              setAppsOpen(true);
-              onClose();
-            }}
-          />
         </SubPanel>
       )}
     </div>

@@ -6,7 +6,7 @@ import {
   Hand,
   X,
   ArrowUp,
-  Globe,
+  Square,
 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { ModelSelector } from "./ModelSelector";
@@ -39,14 +39,16 @@ import { useExtensionsStore } from "../../lib/extensions/registry";
 
 interface Props {
   onSend: (text: string, files?: File[]) => void;
+  onStop?: () => void;
   disabled?: boolean;
+  streaming?: boolean;
   centered?: boolean;
 }
 
 const BASE_ACCEPT =
   "image/*,.pdf,.txt,.md,.csv,.json,.stl,.obj,.dcm,.dicom,.ipynb,.py,.ts,.tsx,.js,.jsx,.html,.css";
 
-export function SmartInputBar({ onSend, disabled, centered }: Props) {
+export function SmartInputBar({ onSend, onStop, disabled, streaming, centered }: Props) {
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const locale = useUiStore((s) => s.locale);
@@ -54,8 +56,6 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
   const setDesignMode = useModeStore((s) => s.setDesignMode);
   const chromeAgentActive = useModeStore((s) => s.chromeAgentActive);
   const setChromeAgentActive = useModeStore((s) => s.setChromeAgentActive);
-  const webSearch = useModeStore((s) => s.webSearch);
-  const setWebSearch = useModeStore((s) => s.setWebSearch);
   const isMobile = useIsMobile();
   const extAccept = useExtensionsStore((s) => s.enabledAcceptAttr());
   const fileAccept = extAccept ? `${BASE_ACCEPT},${extAccept}` : BASE_ACCEPT;
@@ -537,7 +537,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
             ))}
           </div>
         )}
-        <div className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-input)] px-3 py-3 shadow-[0_8px_30px_var(--shadow)]">
+        <div className="rounded-[22px] border border-[var(--border)] bg-[var(--bg-input)] px-3 pb-2.5 pt-3 shadow-[0_8px_30px_var(--shadow)]">
           {showCaptureUi ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-start gap-2">
@@ -607,7 +607,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
               disabled={disabled}
               rows={1}
               placeholder={centered ? t(locale, "placeholderSkills") : t(locale, "placeholder")}
-              className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-0.5 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
+              className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-2.5 pt-1.5 pb-0.5 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
               onChange={(e) => {
                 setDraft(e.target.value);
                 resize();
@@ -624,11 +624,11 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
           {!showCaptureUi && (
             <div
               className={cn(
-                "mt-2.5 flex items-center gap-2",
+                "mt-2.5 flex items-center gap-2 px-1.5",
                 isMobile ? "min-h-11" : "h-9",
               )}
             >
-              {!isMobile && (designMode || chromeAgentActive || webSearch) && (
+              {!isMobile && (designMode || chromeAgentActive) && (
                 <div className="mr-0.5 flex max-w-[40%] items-center gap-1 overflow-hidden">
                   {designMode && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[#dbeafe] py-1 pl-2.5 pr-1 text-[11px] font-medium text-[#1d4ed8]">
@@ -661,34 +661,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                       </button>
                     </span>
                   )}
-                  {webSearch && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-hover)] py-1 pl-2.5 pr-1 text-[11px] font-medium text-[var(--fg-muted)]">
-                      <Globe size={11} />
-                      <button
-                        type="button"
-                        onClick={() => setWebSearch(false)}
-                        className="rounded-full p-0.5 hover:bg-black/10"
-                        title={locale === "ru" ? "Выключить веб-поиск" : "Turn off web search"}
-                        aria-label="Disable web search"
-                      >
-                        <X size={12} strokeWidth={2.2} />
-                      </button>
-                    </span>
-                  )}
                 </div>
-              )}
-              {isMobile && webSearch && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-hover)] py-1 pl-2 pr-1 text-[11px] font-medium text-[var(--fg-muted)]">
-                  <Globe size={11} />
-                  <button
-                    type="button"
-                    onClick={() => setWebSearch(false)}
-                    className="rounded-full p-0.5"
-                    aria-label="Disable web search"
-                  >
-                    <X size={12} />
-                  </button>
-                </span>
               )}
               <div className="relative shrink-0">
                 <button
@@ -722,8 +695,8 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
 
               <div
                 className={cn(
-                  "flex shrink-0 items-center gap-1",
-                  isMobile ? "min-h-11" : "h-9",
+                  "flex shrink-0 items-center",
+                  isMobile ? "min-h-11 gap-2" : "h-9 gap-2.5",
                 )}
               >
                 <ModelSelector />
@@ -739,24 +712,26 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                 >
                   <div
                     className={cn(
-                      "flex items-center rounded-xl transition-colors",
+                      "flex items-center gap-0.5 rounded-xl transition-colors",
                       isMobile ? "min-h-11" : "h-9",
-                      showMicChrome && "bg-[var(--bg-hover)]",
+                      showMicChrome && "bg-[var(--bg-hover)] pl-0.5",
                     )}
                   >
                     {!isMobile && (
                       <button
                         type="button"
                         className={cn(
-                          "flex h-9 w-7 items-center justify-center rounded-lg text-[var(--fg-muted)] transition-opacity",
+                          "flex h-9 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[var(--fg-muted)] transition-[width,opacity,margin] duration-150 ease-out",
                           showMicChrome
-                            ? "opacity-100"
-                            : "pointer-events-none w-0 overflow-hidden opacity-0",
+                            ? "w-8 opacity-100"
+                            : "pointer-events-none m-0 w-0 opacity-0",
                         )}
                         title="Devices"
+                        tabIndex={showMicChrome ? 0 : -1}
+                        aria-hidden={!showMicChrome}
                         onClick={() => void openDeviceMenu()}
                       >
-                        <ChevronDown size={14} />
+                        <ChevronDown size={14} className="shrink-0" />
                       </button>
                     )}
                     <button
@@ -854,19 +829,34 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   )}
                 </div>
 
-                {canSend && (
+                {streaming && onStop ? (
                   <button
                     type="button"
-                    onClick={() => submit()}
+                    onClick={() => onStop()}
                     className={cn(
-                      "flex shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-opacity hover:opacity-90",
+                      "flex shrink-0 items-center justify-center rounded-xl bg-[var(--fg)] text-[var(--bg)] transition-opacity hover:opacity-90",
                       isMobile ? "h-11 w-11" : "h-9 w-9",
                     )}
-                    title={locale === "ru" ? "Отправить" : "Send"}
-                    aria-label="Send"
+                    title={locale === "ru" ? "Остановить" : "Stop"}
+                    aria-label="Stop"
                   >
-                    <ArrowUp size={16} strokeWidth={2.2} />
+                    <Square size={14} strokeWidth={2.4} fill="currentColor" />
                   </button>
+                ) : (
+                  canSend && (
+                    <button
+                      type="button"
+                      onClick={() => submit()}
+                      className={cn(
+                        "flex shrink-0 items-center justify-center rounded-xl bg-[var(--accent)] text-white transition-opacity hover:opacity-90",
+                        isMobile ? "h-11 w-11" : "h-9 w-9",
+                      )}
+                      title={locale === "ru" ? "Отправить" : "Send"}
+                      aria-label="Send"
+                    >
+                      <ArrowUp size={16} strokeWidth={2.2} />
+                    </button>
+                  )
                 )}
               </div>
             </div>

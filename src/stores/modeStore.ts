@@ -16,11 +16,17 @@ interface ModeState {
   setWebSearch: (v: boolean) => void;
 }
 
+function resolveMode(): AppMode {
+  // Code / Med workspaces removed — always home.
+  localStorage.setItem("glow.mode", "home");
+  return "home";
+}
+
 export const useModeStore = create<ModeState>((set) => ({
-  mode: (localStorage.getItem("glow.mode") as AppMode) || "home",
-  setMode: (mode) => {
-    localStorage.setItem("glow.mode", mode);
-    set({ mode });
+  mode: resolveMode(),
+  setMode: (_mode) => {
+    localStorage.setItem("glow.mode", "home");
+    set({ mode: "home" });
   },
   gameModeActive: false,
   setGameModeActive: (gameModeActive) =>

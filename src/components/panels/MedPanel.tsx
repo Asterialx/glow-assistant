@@ -6,7 +6,6 @@ import {
   redactPii,
 } from "../../lib/tauri";
 import { saveDomainRecord } from "../../db";
-import { useModeStore } from "../../stores/modeStore";
 import { useChatStore } from "../../stores/chatStore";
 import { nowMs, uid } from "../../lib/utils";
 import type { Artifact } from "../../lib/types";
@@ -22,7 +21,6 @@ import {
 } from "recharts";
 
 export function MedPanel() {
-  const mode = useModeStore((s) => s.mode);
   const [raw, setRaw] = useState(
     "Glucose\t6.2\tmmol/L\t3.9\t5.5\nLDL\t3.8\tmmol/L\t0\t3.0\nHDL\t1.1\tmmol/L\t1.0\t99",
   );
@@ -42,14 +40,6 @@ export function MedPanel() {
   const setActiveArtifactId = useChatStore((s) => s.setActiveArtifactId);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const setPanel = useChatStore((s) => s.setPanel);
-
-  if (mode !== "med") {
-    return (
-      <div className="flex flex-1 items-center justify-center p-8 text-sm text-[var(--color-muted)]">
-        Switch to Med mode to access the privacy-isolated medical module.
-      </div>
-    );
-  }
 
   const history = rows.map((r, i) => ({ name: r.name, value: r.value, i }));
 
@@ -164,7 +154,7 @@ export function MedPanel() {
           onClick={async () => {
             const parsed = await parseBiomarkers(raw);
             setRows(parsed);
-            await saveDomainRecord("med", "biomarker", { rows: parsed, at: nowMs() });
+            await saveDomainRecord("home", "biomarker", { rows: parsed, at: nowMs() });
           }}
         >
           Parse panel

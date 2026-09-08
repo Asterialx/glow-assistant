@@ -1,12 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatPane } from "../chat/ChatPane";
 import { ArtifactsPanel } from "../artifacts/ArtifactsPanel";
 import { ClaudeSidebar } from "./ClaudeSidebar";
 import { SettingsModal } from "../settings/SettingsModal";
 import { AppsAndExtensions } from "../apps/AppsAndExtensions";
+import { AuthModal } from "../auth/AuthModal";
 import { useModeStore } from "../../stores/modeStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
+import { useAuthStore } from "../../stores/authStore";
+import { checkGuestMessageAllowed } from "../../lib/supabase/trial";
+import { fullSync } from "../../lib/supabase/syncClient";
+import { isSupabaseConfigured } from "../../lib/supabase/client";
 import {
   addMemory,
   bootstrapDatabases,
@@ -28,7 +33,7 @@ import {
   renameConversation,
 } from "../../db";
 import { buildChatPayload, streamChatCompletion } from "../../lib/llm/smartapi";
-import { onGameMode, redactPii, setMcpEnabled } from "../../lib/tauri";
+import { onGameMode, setMcpEnabled } from "../../lib/tauri";
 import { extractPdfText, fileToBase64 } from "../../lib/pdfExtract";
 import { isDefaultChatTitle, nowMs, titleFromFirstMessage, uid } from "../../lib/utils";
 import type { Artifact, Message, UiWidget } from "../../lib/types";
@@ -67,6 +72,7 @@ export function AppShell() {
   const {
     activeConversationId,
     branchPath,
+    messages: treeMessages,
     projects,
     activeProjectId,
     selectedModelId,
@@ -88,6 +94,8 @@ export function AppShell() {
 
   const [widgetsByMessage, setWidgetsByMessage] = useState<Record<string, UiWidget[]>>({});
   const [ready, setReady] = useState(false);
+  const [authGateOpen, setAuthGateOpen] = useState(false);
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const reloadConversations = async () => {
     const list = await listConversations(mode);
@@ -115,10 +123,24 @@ export function AppShell() {
     (async () => {
       await bootstrapDatabases();
       await hydrateExtensionMcp();
+      await useAuthStore.getState().init();
+      if (isSupabaseConfigured() && useAuthStore.getState().status === "authenticated") {
+        void fullSync(mode).catch(() => null);
+      }
       setReady(true);
     })();
     onGameMode((s) => setGameModeActive(s.active));
-  }, [setGameModeActive]);
+  }, [setGameModeActive, mode]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) return;
+    const id = window.setInterval(() => {
+      if (useAuthStore.getState().status === "authenticated") {
+        void fullSync(mode).catch(() => null);
+      }
+    }, 120_000);
+    return () => window.clearInterval(id);
+  }, [mode]);
 
   // Phone: start with sidebar closed; turn off desktop-only modes
   useEffect(() => {
@@ -156,6 +178,7 @@ export function AppShell() {
 
   const extractMemory = async (assistantText: string) => {
     if (memoryPaused || gameModeActive) return;
+    if (localStorage.getItem("glow.memoryFromChats") !== "1") return;
     const facts = assistantText
       .split("\n")
       .map((l) => l.trim())
@@ -163,6 +186,16 @@ export function AppShell() {
       .map((l) => l.replace(/^(remember|fact)\s*:/i, "").trim())
       .filter(Boolean);
     for (const f of facts.slice(0, 3)) await addMemory(f, mode, 0.8);
+  };
+
+  const handleStop = () => {
+    streamAbortRef.current?.abort();
+  };
+
+  const handleSelectLeaf = async (leafId: string) => {
+    if (!activeConversationId || streaming) return;
+    await updateConversationLeaf(mode, activeConversationId, leafId);
+    await loadConversation(activeConversationId);
   };
 
   const pushArtifact = (art: Artifact) => {
@@ -271,6 +304,13 @@ export function AppShell() {
     parentOverride?: string | null,
   ) => {
     if (streaming) return;
+
+    const gate = await checkGuestMessageAllowed();
+    if (!gate.allowed) {
+      setAuthGateOpen(true);
+      return;
+    }
+
     const convId = await ensureConversation();
     const parentId =
       parentOverride !== undefined ? parentOverride : (branchPath.at(-1)?.id ?? null);
@@ -425,10 +465,6 @@ export function AppShell() {
       }
     }
 
-    if (mode === "med") {
-      content = (await redactPii(content)).text;
-    }
-
     // Name chat from the first user question (skip if already renamed / branch edit)
     const existing = useChatStore.getState().conversations.find((c) => c.id === convId);
     if ((!existing || isDefaultChatTitle(existing.title)) && parentOverride === undefined) {
@@ -489,12 +525,16 @@ export function AppShell() {
       webSearch,
     );
 
+    streamAbortRef.current?.abort();
+    const ac = new AbortController();
+    streamAbortRef.current = ac;
     await streamChatCompletion(
       selectedModelId,
       payload,
       {
       onToken: (token) => appendStreamingToken(assistantId, token),
       onDone: async (usage) => {
+        if (streamAbortRef.current === ac) streamAbortRef.current = null;
         const finalContent =
           useChatStore.getState().branchPath.find((m) => m.id === assistantId)?.content || "";
         await updateMessageContent(mode, assistantId, finalContent, "done");
@@ -512,14 +552,18 @@ export function AppShell() {
         setStreaming(false);
         await loadConversation(convId);
         await reloadConversations();
+        if (useAuthStore.getState().status === "authenticated") {
+          void fullSync(mode).catch(() => null);
+        }
       },
       onError: async (err) => {
+        if (streamAbortRef.current === ac) streamAbortRef.current = null;
         await updateMessageContent(mode, assistantId, `Error: ${err.message}`, "error");
         setStreaming(false);
         await loadConversation(convId);
       },
       },
-      undefined,
+      ac.signal,
       { temperature, maxTokens },
     );
   };
@@ -574,12 +618,17 @@ export function AppShell() {
       webSearch,
     );
 
+    streamAbortRef.current?.abort();
+    const ac = new AbortController();
+    streamAbortRef.current = ac;
+
     await streamChatCompletion(
       selectedModelId,
       payload,
       {
         onToken: (token) => appendStreamingToken(assistantId, token),
         onDone: async (usage) => {
+          if (streamAbortRef.current === ac) streamAbortRef.current = null;
           const finalContent =
             useChatStore.getState().branchPath.find((m) => m.id === assistantId)?.content || "";
           await updateMessageContent(mode, assistantId, finalContent, "done");
@@ -597,14 +646,18 @@ export function AppShell() {
           setStreaming(false);
           await loadConversation(convId);
           await reloadConversations();
+          if (useAuthStore.getState().status === "authenticated") {
+            void fullSync(mode).catch(() => null);
+          }
         },
         onError: async (err) => {
+          if (streamAbortRef.current === ac) streamAbortRef.current = null;
           await updateMessageContent(mode, assistantId, `Error: ${err.message}`, "error");
           setStreaming(false);
           await loadConversation(convId);
         },
       },
-      undefined,
+      ac.signal,
       { temperature, maxTokens },
     );
   };
@@ -619,6 +672,19 @@ export function AppShell() {
     setBranchPath(pathToLeaf(msgs, message.parent_id));
     setActiveConversationId(message.conversation_id);
     await handleSend(edited, undefined, message.parent_id);
+  };
+
+  /** Re-send the same user text as a new branch (for training / alternate replies). */
+  const handleResendUser = async (message: Message) => {
+    if (streaming || message.role !== "user") return;
+    const text = message.content.trim();
+    if (!text) return;
+    await updateConversationLeaf(mode, message.conversation_id, message.parent_id);
+    const msgs = await listMessages(mode, message.conversation_id);
+    setMessages(msgs);
+    setBranchPath(pathToLeaf(msgs, message.parent_id));
+    setActiveConversationId(message.conversation_id);
+    await handleSend(text, undefined, message.parent_id);
   };
 
   return (
@@ -729,6 +795,7 @@ export function AppShell() {
         <div className="relative flex min-h-0 flex-1">
           <ChatPane
             messages={branchPath}
+            treeMessages={treeMessages}
             widgetsByMessage={widgetsByMessage}
             artifacts={artifacts}
             onOpenArtifact={(id) => {
@@ -736,7 +803,9 @@ export function AppShell() {
               openArtifacts();
             }}
             onEditMessage={handleEditBranch}
+            onResend={handleResendUser}
             onRegenerate={handleRegenerate}
+            onSelectLeaf={handleSelectLeaf}
             onWidgetChange={async (w) => {
               let nextList = (widgetsByMessage[w.message_id] || []).map((x) =>
                 x.id === w.id ? w : x,
@@ -753,6 +822,7 @@ export function AppShell() {
               }));
             }}
             onSend={handleSend}
+            onStop={handleStop}
             streaming={streaming}
           />
           {artifactsOpen && (
@@ -774,6 +844,12 @@ export function AppShell() {
 
       <SettingsModal />
       {!isMobile && <AppsAndExtensions />}
+      <AuthModal
+        open={authGateOpen}
+        onClose={() => setAuthGateOpen(false)}
+        reason="guest_limit"
+        initialMode="register"
+      />
     </div>
   );
 }

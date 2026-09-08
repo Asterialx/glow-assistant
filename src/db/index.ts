@@ -588,6 +588,16 @@ export async function listMemory(): Promise<GlobalMemory[]> {
   return db.select<GlobalMemory>(`SELECT * FROM global_memory ORDER BY created_at DESC LIMIT 100`);
 }
 
+export async function deleteMemory(id: string) {
+  const db = await initMetaDb();
+  await db.execute(`DELETE FROM global_memory WHERE id = $1`, [id]);
+}
+
+export async function clearMemory() {
+  const rows = await listMemory();
+  for (const row of rows) await deleteMemory(row.id);
+}
+
 export async function saveDomainRecord(
   mode: AppMode,
   recordType: string,
@@ -614,6 +624,4 @@ export async function listDomainRecords(mode: AppMode, recordType: string) {
 export async function bootstrapDatabases() {
   await initMetaDb();
   await getModeDb("home");
-  await getModeDb("code");
-  await getModeDb("med");
 }

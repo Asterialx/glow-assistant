@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Home,
-  Code2,
-  Stethoscope,
   Plus,
   Folder,
   SlidersHorizontal,
@@ -20,10 +17,12 @@ import {
 import { useModeStore } from "../../stores/modeStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
+import { useAuthStore } from "../../stores/authStore";
+import { AuthModal } from "../auth/AuthModal";
 import { t } from "../../lib/i18n";
 import { useIsMobile } from "../../lib/useMediaQuery";
 import { cn } from "../../lib/utils";
-import type { AppMode, Conversation } from "../../lib/types";
+import type { Conversation } from "../../lib/types";
 import {
   createProject,
   deleteConversation,
@@ -50,7 +49,6 @@ export function ClaudeSidebar({
   onNavigate,
 }: Props) {
   const mode = useModeStore((s) => s.mode);
-  const setMode = useModeStore((s) => s.setMode);
   const locale = useUiStore((s) => s.locale);
   const userName = useUiStore((s) => s.userName);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -68,13 +66,17 @@ export function ClaudeSidebar({
   const [q, setQ] = useState("");
   const [ctxId, setCtxId] = useState<string | null>(null);
   const [projectSubOpen, setProjectSubOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const ctxRef = useRef<HTMLDivElement>(null);
-
-  const modes: { id: AppMode; label: string; icon: typeof Home }[] = [
-    { id: "home", label: t(locale, "home"), icon: Home },
-    { id: "code", label: t(locale, "code"), icon: Code2 },
-    { id: "med", label: t(locale, "med"), icon: Stethoscope },
-  ];
+  const authStatus = useAuthStore((s) => s.status);
+  const authUser = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
+  const signedIn = authStatus === "authenticated" && Boolean(authUser);
+  const displayName =
+    (signedIn && (authUser?.email?.split("@")[0] || authUser?.email)) ||
+    userName ||
+    "Guest";
 
   const filtered = useMemo(
     () =>
@@ -182,29 +184,8 @@ export function ClaudeSidebar({
           isMobile ? "pt-[max(0.75rem,env(safe-area-inset-top,0px))]" : "pt-3",
         )}
       >
-        <div className="inline-flex rounded-full bg-[var(--bg)] p-0.5">
-          {modes.map(({ id, label, icon: Icon }) => {
-            const active = mode === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => {
-                  setMode(id);
-                  onNavigate?.();
-                }}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-2 text-[12.5px] font-medium transition-colors sm:py-1.5",
-                  active
-                    ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm"
-                    : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
-                )}
-              >
-                <Icon size={15} strokeWidth={1.7} />
-                {label}
-              </button>
-            );
-          })}
+        <div className="px-1 text-[15px] font-semibold tracking-tight text-[var(--fg)]">
+          Glow
         </div>
       </div>
 
@@ -394,7 +375,7 @@ export function ClaudeSidebar({
                   <div className="relative">
                     <CtxItem
                       icon={<Archive size={15} />}
-                      label={locale === "ru" ? "В проект" : "Add to project"}
+                      label={locale === "ru" ? "Добавить в проект" : "Add to project"}
                       shortcut="›"
                       trailing={<ChevronRight size={14} className="text-[var(--fg-faint)]" />}
                       onClick={() => setProjectSubOpen((v) => !v)}
@@ -478,6 +459,47 @@ export function ClaudeSidebar({
                 {item.label}
               </button>
             ))}
+            <div className="border-t border-[var(--border)]" />
+            {signedIn ? (
+              <button
+                type="button"
+                className="flex w-full px-3.5 py-3 text-left text-[13.5px] hover:bg-[var(--bg-hover)] sm:py-2.5"
+                onClick={() => {
+                  void signOut();
+                  setMenuOpen(false);
+                  onNavigate?.();
+                }}
+              >
+                {locale === "ru" ? "Выйти" : "Sign out"}
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="flex w-full px-3.5 py-3 text-left text-[13.5px] font-medium hover:bg-[var(--bg-hover)] sm:py-2.5"
+                  onClick={() => {
+                    setAuthMode("register");
+                    setAuthOpen(true);
+                    setMenuOpen(false);
+                    onNavigate?.();
+                  }}
+                >
+                  {locale === "ru" ? "Регистрация" : "Sign up"}
+                </button>
+                <button
+                  type="button"
+                  className="flex w-full px-3.5 py-3 text-left text-[13.5px] hover:bg-[var(--bg-hover)] sm:py-2.5"
+                  onClick={() => {
+                    setAuthMode("login");
+                    setAuthOpen(true);
+                    setMenuOpen(false);
+                    onNavigate?.();
+                  }}
+                >
+                  {locale === "ru" ? "Войти" : "Sign in"}
+                </button>
+              </>
+            )}
             <div className="border-t border-[var(--border)] px-3.5 py-2.5 text-[13px] text-[var(--fg-faint)]">
               Glow · {t(locale, "free")}
             </div>
@@ -490,11 +512,11 @@ export function ClaudeSidebar({
             className="touch-target flex min-h-[44px] min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 py-2.5 hover:bg-[var(--bg-hover)] sm:min-h-0 sm:py-2"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[12px] font-semibold text-[var(--accent)]">
-              {(userName || "G").slice(0, 1).toUpperCase()}
+              {displayName.slice(0, 1).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1 text-left">
               <div className="truncate text-[13px] font-medium">
-                {userName || "Guest"} ·{" "}
+                {displayName} ·{" "}
                 <span className="text-[var(--fg-muted)]">{t(locale, "free")}</span>
               </div>
             </div>
@@ -518,6 +540,13 @@ export function ClaudeSidebar({
           )}
         </div>
       </div>
+
+      <AuthModal
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        initialMode={authMode}
+        reason="manual"
+      />
     </aside>
   );
 }
