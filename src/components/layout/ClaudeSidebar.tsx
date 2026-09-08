@@ -31,6 +31,8 @@ import {
   setConversationProject,
   setConversationUnread,
 } from "../../db";
+import { pushConversationDeleted } from "../../lib/supabase/syncClient";
+import { isSupabaseConfigured } from "../../lib/supabase/client";
 
 interface Props {
   onNewChat: () => void;
@@ -73,17 +75,31 @@ export function ClaudeSidebar({
   const authUser = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
   const signedIn = authStatus === "authenticated" && Boolean(authUser);
-  const displayName =
-    (signedIn &&
-      ([authUser?.user_metadata?.first_name, authUser?.user_metadata?.last_name]
-        .filter(Boolean)
-        .join(" ")
-        .trim() ||
-        authUser?.user_metadata?.full_name ||
-        authUser?.email?.split("@")[0] ||
-        authUser?.email)) ||
-    userName ||
-    "Guest";
+
+  const shortName = (first?: unknown, last?: unknown, full?: unknown, fallback?: string) => {
+    const f = typeof first === "string" ? first.trim() : "";
+    const l = typeof last === "string" ? last.trim() : "";
+    if (f && l) return `${f} ${l[0]!.toUpperCase()}.`;
+    if (f) return f;
+    const fullStr = typeof full === "string" ? full.trim() : fallback?.trim() || "";
+    if (!fullStr) return null;
+    const parts = fullStr.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0]} ${parts[1]![0]!.toUpperCase()}.`;
+    return parts[0] || null;
+  };
+
+  const displayName = signedIn
+    ? shortName(
+        authUser?.user_metadata?.first_name,
+        authUser?.user_metadata?.last_name,
+        authUser?.user_metadata?.full_name,
+      ) ||
+      authUser?.email?.split("@")[0] ||
+      authUser?.email ||
+      "Guest"
+    : userName && userName !== "Guest"
+      ? shortName(undefined, undefined, userName) || userName
+      : "Guest";
 
   const filtered = useMemo(
     () =>
@@ -169,6 +185,11 @@ export function ClaudeSidebar({
     );
     if (!ok) return;
     await deleteConversation(mode, c.id);
+    if (isSupabaseConfigured() && useAuthStore.getState().status === "authenticated") {
+      void pushConversationDeleted(c.id).catch((e) =>
+        console.warn("[glow] delete sync failed", e),
+      );
+    }
     if (activeConversationId === c.id) {
       setActiveConversationId(null);
       onNewChat();
@@ -344,8 +365,7 @@ export function ClaudeSidebar({
                   type="button"
                   className={cn(
                     "shrink-0 rounded-md p-1 text-[var(--fg-faint)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
-                    menuOpenFor ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                    active && "opacity-100",
+                    menuOpenFor || active || isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                   )}
                   onClick={(e) => {
                     e.stopPropagation();

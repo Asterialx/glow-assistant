@@ -10,7 +10,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { checkGuestMessageAllowed } from "../../lib/supabase/trial";
-import { fullSync } from "../../lib/supabase/syncClient";
+import { requestLiveSync, startLiveChatSync, syncAndHydrateWorkspace } from "../../lib/supabase/syncClient";
 import { isSupabaseConfigured } from "../../lib/supabase/client";
 import {
   addMemory,
@@ -119,13 +119,25 @@ export function AppShell() {
     setWidgetsByMessage(map);
   };
 
+  const authStatus = useAuthStore((s) => s.status);
+  const authUserId = useAuthStore((s) => s.user?.id ?? null);
+  const hydratedUserRef = useRef<string | null>(null);
+
   useEffect(() => {
     (async () => {
       await bootstrapDatabases();
       await hydrateExtensionMcp();
       await useAuthStore.getState().init();
-      if (isSupabaseConfigured() && useAuthStore.getState().status === "authenticated") {
-        void fullSync(mode).catch(() => null);
+      const authed =
+        isSupabaseConfigured() && useAuthStore.getState().status === "authenticated";
+      if (authed) {
+        const uid = useAuthStore.getState().user?.id ?? null;
+        try {
+          await syncAndHydrateWorkspace(mode);
+          hydratedUserRef.current = uid;
+        } catch (e) {
+          console.error("[glow] initial sync failed:", e);
+        }
       }
       setReady(true);
     })();
@@ -133,14 +145,69 @@ export function AppShell() {
   }, [setGameModeActive, mode]);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) return;
-    const id = window.setInterval(() => {
-      if (useAuthStore.getState().status === "authenticated") {
-        void fullSync(mode).catch(() => null);
+    if (!ready) return;
+    if (authStatus !== "authenticated" || !authUserId) {
+      if (authStatus === "anon" || authStatus === "unavailable") {
+        hydratedUserRef.current = null;
       }
-    }, 120_000);
-    return () => window.clearInterval(id);
-  }, [mode]);
+      return;
+    }
+    // Already hydrated during boot (or this login was handled).
+    if (hydratedUserRef.current === authUserId) return;
+    hydratedUserRef.current = authUserId;
+    let cancelled = false;
+    (async () => {
+      try {
+        await syncAndHydrateWorkspace(mode);
+      } catch (e) {
+        console.error("[glow] sync on login failed:", e);
+        useAuthStore.setState({
+          error:
+            e instanceof Error
+              ? e.message
+              : "Sync failed — check Supabase SQL migration.",
+        });
+      }
+      if (cancelled) return;
+      const list = await listConversations(mode);
+      setConversations(list);
+      setProjects(await listProjects(mode));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, authStatus, authUserId, mode, setConversations, setProjects]);
+
+  useEffect(() => {
+    if (!ready || !isSupabaseConfigured()) return;
+    if (authStatus !== "authenticated" || !authUserId) return;
+
+    const stop = startLiveChatSync(mode, (pulled) => {
+      if (pulled <= 0) return;
+      void (async () => {
+        const list = await listConversations(mode);
+        setConversations(list);
+        setProjects(await listProjects(mode));
+        const activeId = useChatStore.getState().activeConversationId;
+        const streamingNow = useChatStore.getState().streaming;
+        if (activeId && !list.some((c) => c.id === activeId)) {
+          setActiveConversationId(null);
+          setMessages([]);
+          setBranchPath([]);
+          setArtifacts([]);
+          useUiStore.getState().closeArtifacts();
+          return;
+        }
+        // Don't clobber an in-progress stream on this device.
+        if (activeId && !streamingNow) {
+          await loadConversation(activeId);
+        }
+      })();
+    });
+
+    return stop;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, authStatus, authUserId, mode, setConversations, setProjects]);
 
   // Phone: start with sidebar closed; turn off desktop-only modes
   useEffect(() => {
@@ -153,6 +220,8 @@ export function AppShell() {
 
   useEffect(() => {
     if (!ready) return;
+    // Signed-in workspace is loaded by syncAndHydrateWorkspace below.
+    if (authStatus === "authenticated") return;
     (async () => {
       const list = await reloadConversations();
       const projs = await listProjects(mode);
@@ -166,7 +235,7 @@ export function AppShell() {
       void list;
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, ready]);
+  }, [mode, ready, authStatus]);
 
   const ensureConversation = async () => {
     if (activeConversationId) return activeConversationId;
@@ -487,6 +556,11 @@ export function AppShell() {
     };
     await insertMessage(mode, userMsg);
 
+    // Push only (no pull) while answering — avoids wiping the open chat mid-stream.
+    if (useAuthStore.getState().status === "authenticated") {
+      void requestLiveSync(mode, { immediate: true, pushOnly: true }).catch(() => null);
+    }
+
     const assistantId = uid();
     const assistantMsg: Message = {
       id: assistantId,
@@ -553,7 +627,7 @@ export function AppShell() {
         await loadConversation(convId);
         await reloadConversations();
         if (useAuthStore.getState().status === "authenticated") {
-          void fullSync(mode).catch(() => null);
+          void requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
         }
       },
       onError: async (err) => {
@@ -647,7 +721,7 @@ export function AppShell() {
           await loadConversation(convId);
           await reloadConversations();
           if (useAuthStore.getState().status === "authenticated") {
-            void fullSync(mode).catch(() => null);
+            void requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
           }
         },
         onError: async (err) => {
@@ -688,7 +762,7 @@ export function AppShell() {
   };
 
   return (
-    <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
+    <div className="flex h-full min-h-0 bg-[var(--bg)] text-[var(--fg)]">
       {sidebarOpen && isMobile && (
         <button
           type="button"
@@ -700,7 +774,8 @@ export function AppShell() {
       {sidebarOpen && (
         <div
           className={cn(
-            isMobile && "fixed inset-y-0 left-0 z-50 h-full max-h-dvh shadow-2xl",
+            isMobile &&
+              "fixed inset-y-0 left-0 z-50 h-full max-h-dvh w-[min(288px,86vw)] shadow-2xl pl-[env(safe-area-inset-left,0px)]",
           )}
         >
           <ClaudeSidebar

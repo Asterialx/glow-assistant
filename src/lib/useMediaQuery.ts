@@ -24,17 +24,20 @@ function detectPhoneUa(): boolean {
 }
 
 /**
- * Phone / mobile shell — hides desktop-only chrome (MCP, Chrome agent, Game Mode, etc.).
- * True for narrow viewports OR real phone/tablet UA (incl. Tauri iOS).
+ * Phone / mobile shell — narrow viewport layout (drawer sidebar, compact chrome).
  */
 export function useIsMobile(): boolean {
-  const narrow = useMediaQuery("(max-width: 767px)");
-  const [uaPhone] = useState(detectPhoneUa);
-  return narrow || uaPhone;
+  // Layout breakpoint only — avoid treating wide iPad landscape as "phone chrome".
+  return useMediaQuery("(max-width: 767px)");
 }
 
 /** Sync helper for non-React code paths. */
 export function isMobileShell(): boolean {
   if (typeof window === "undefined") return false;
-  return detectPhoneUa() || window.matchMedia("(max-width: 767px)").matches;
+  return window.matchMedia("(max-width: 767px)").matches;
+}
+
+/** UA helper for mic / platform quirks (not layout). */
+export function isPhoneUa(): boolean {
+  return detectPhoneUa();
 }

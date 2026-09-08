@@ -14,6 +14,17 @@ Friends can register on any email → profile step → done.
 To restore OTP later: set the flag to `true`, turn Confirm email **ON**, paste the template below.
 Git checkpoint with full OTP UI: commit `8bcde62`.
 
+## Live chat sync (realtime)
+
+After `001_glow_accounts_sync.sql`, also run:
+
+- `supabase/migrations/002_realtime_sync.sql`
+- `supabase/migrations/003_bump_rev_on_update.sql` (so AI reply edits get a new `rev`)
+
+Or: Supabase → Database → Publications → `supabase_realtime` → enable
+`sync_conversations` and `sync_messages`.
+
+App also polls every ~2.5s as fallback. Assistant replies are only pushed after they finish (not empty stubs).
 ## 1) Fix the email template (required)
 
 Supabase → Authentication → Emails → **Confirm sign up** → replace body with:

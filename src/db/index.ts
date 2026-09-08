@@ -10,6 +10,7 @@ import type {
   UiWidget,
 } from "../lib/types";
 import { nowMs, uid } from "../lib/utils";
+import { createWebMemoryDb } from "./webMemoryDb";
 
 const isTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -18,124 +19,6 @@ type DbLike = {
   execute: (query: string, binds?: unknown[]) => Promise<{ rowsAffected: number }>;
   select: <T>(query: string, binds?: unknown[]) => Promise<T[]>;
 };
-
-/** In-memory fallback so `npm run dev` works without Rust/Tauri. */
-class MemoryDb {
-  tables: Record<string, Record<string, unknown>[]> = {};
-
-  async execute(query: string, binds: unknown[] = []) {
-    const q = query.trim().toLowerCase();
-    if (q.startsWith("create") || q.startsWith("create index")) return { rowsAffected: 0 };
-    if (q.startsWith("insert into")) {
-      const table = query.match(/insert into\s+(\w+)/i)?.[1];
-      if (!table) return { rowsAffected: 0 };
-      if (!this.tables[table]) this.tables[table] = [];
-      // naive: expect column list
-      const colsMatch = query.match(/\(([^)]+)\)\s*values/i);
-      const cols = colsMatch?.[1].split(",").map((c) => c.trim()) ?? [];
-      const row: Record<string, unknown> = {};
-      cols.forEach((c, i) => {
-        row[c] = binds[i];
-      });
-      this.tables[table].push(row);
-      return { rowsAffected: 1 };
-    }
-    if (q.startsWith("alter table")) return { rowsAffected: 0 };
-    if (q.startsWith("update")) {
-      const table = query.match(/update\s+(\w+)/i)?.[1];
-      if (!table || !this.tables[table]) return { rowsAffected: 0 };
-      const whereId = binds[binds.length - 1];
-      const row = this.tables[table].find((r) => r.id === whereId);
-      if (!row) return { rowsAffected: 0 };
-
-      if (/set content/i.test(query) && binds.length >= 3) {
-        row.content = binds[0];
-        row.status = binds[1];
-      }
-      if (/active_leaf_id/i.test(query) && binds.length >= 3) {
-        row.active_leaf_id = binds[0];
-        row.updated_at = binds[1];
-      }
-      if (/set title/i.test(query) && binds.length >= 3) {
-        row.title = binds[0];
-        row.updated_at = binds[1];
-      }
-      if (/set project_id/i.test(query) && binds.length >= 3) {
-        row.project_id = binds[0];
-        row.updated_at = binds[1];
-      }
-      if (/set pinned/i.test(query) && binds.length >= 3) {
-        row.pinned = binds[0];
-        row.updated_at = binds[1];
-      }
-      if (/set unread/i.test(query) && binds.length >= 2) {
-        row.unread = binds[0];
-      }
-      if (/system_prompt/i.test(query) && binds.length >= 3) {
-        row.system_prompt = binds[0];
-        row.updated_at = binds[1];
-      }
-      return { rowsAffected: 1 };
-    }
-    if (q.startsWith("delete")) {
-      const table = query.match(/delete from\s+(\w+)/i)?.[1];
-      if (!table || !this.tables[table]) return { rowsAffected: 0 };
-      const before = this.tables[table].length;
-      if (/where\s+id\s*=\s*\$1/i.test(query)) {
-        this.tables[table] = this.tables[table].filter((r) => r.id !== binds[0]);
-      } else if (/where\s+conversation_id\s*=\s*\$1/i.test(query)) {
-        this.tables[table] = this.tables[table].filter((r) => r.conversation_id !== binds[0]);
-      } else if (/where\s+message_id\s*=\s*\$1/i.test(query)) {
-        this.tables[table] = this.tables[table].filter((r) => r.message_id !== binds[0]);
-      }
-      return { rowsAffected: before - this.tables[table].length };
-    }
-    return { rowsAffected: 0 };
-  }
-
-  async select<T>(query: string, binds: unknown[] = []): Promise<T[]> {
-    const table = query.match(/from\s+(\w+)/i)?.[1];
-    if (!table || !this.tables[table]) return [];
-    let rows = [...this.tables[table]];
-
-    // WHERE id = $1
-    const whereId = query.match(/where\s+id\s*=\s*\$1/i);
-    if (whereId) {
-      rows = rows.filter((r) => r.id === binds[0]);
-    }
-    const whereConv = query.match(/where\s+conversation_id\s*=\s*\$1/i);
-    if (whereConv) {
-      rows = rows.filter((r) => r.conversation_id === binds[0]);
-    }
-    const whereProject = query.match(/where\s+project_id\s*=\s*\$1/i);
-    if (whereProject) {
-      rows = rows.filter((r) => r.project_id === binds[0]);
-    }
-    const whereMode = query.match(/where\s+mode\s*=\s*\$1/i);
-    if (whereMode) {
-      rows = rows.filter((r) => r.mode === binds[0]);
-    }
-    const whereMsg = query.match(/where\s+message_id\s*=\s*\$1/i);
-    if (whereMsg) {
-      rows = rows.filter((r) => r.message_id === binds[0]);
-    }
-    const whereType = query.match(/where\s+record_type\s*=\s*\$1/i);
-    if (whereType) {
-      rows = rows.filter((r) => r.record_type === binds[0]);
-    }
-    if (/order by created_at desc/i.test(query)) {
-      rows.sort((a, b) => Number(b.created_at) - Number(a.created_at));
-    } else if (/order by created_at asc/i.test(query)) {
-      rows.sort((a, b) => Number(a.created_at) - Number(b.created_at));
-    }
-    if (/order by sort_order/i.test(query)) {
-      rows.sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
-    }
-    const limit = query.match(/limit\s+(\d+)/i);
-    if (limit) rows = rows.slice(0, Number(limit[1]));
-    return rows as T[];
-  }
-}
 
 const MODE_SQL = `
 CREATE TABLE IF NOT EXISTS projects (
@@ -196,7 +79,7 @@ const modeDbs: Partial<Record<AppMode, DbLike>> = {};
 
 async function loadDb(name: string): Promise<DbLike> {
   if (!isTauri()) {
-    return new MemoryDb();
+    return createWebMemoryDb(name);
   }
   const { default: Database } = await import("@tauri-apps/plugin-sql");
   return Database.load(`sqlite:${name}.db`);
@@ -329,6 +212,25 @@ export async function deleteConversation(mode: AppMode, id: string) {
   await db.execute(`DELETE FROM artifacts WHERE conversation_id = $1`, [id]);
   await db.execute(`DELETE FROM attachments WHERE conversation_id = $1`, [id]);
   await db.execute(`DELETE FROM conversations WHERE id = $1`, [id]);
+}
+
+/** Wipe local chats for a mode (used on sign-out; cloud copy remains until next login sync). */
+export async function clearLocalWorkspace(mode: AppMode) {
+  const db = await getModeDb(mode);
+  const convs = await listConversations(mode);
+  for (const c of convs) {
+    await deleteConversation(mode, c.id);
+  }
+  try {
+    await db.execute(`DELETE FROM widgets`);
+  } catch {
+    /* optional table */
+  }
+  try {
+    await db.execute(`DELETE FROM projects`);
+  } catch {
+    /* optional */
+  }
 }
 
 export async function setConversationProject(

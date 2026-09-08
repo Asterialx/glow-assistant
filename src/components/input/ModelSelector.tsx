@@ -47,7 +47,7 @@ export function ModelSelector() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex h-9 max-w-[8.5rem] items-center gap-1 rounded-full bg-[var(--bg-hover)] pl-2.5 pr-2 text-[12.5px] hover:bg-[var(--bg-active)] sm:max-w-[14rem]"
+        className="flex h-9 max-w-[8.5rem] items-center gap-1 rounded-full bg-[var(--bg-hover)] pl-2.5 pr-2 text-[12.5px] hover:bg-[var(--bg-active)] sm:max-w-[14rem] max-[767px]:h-11"
       >
         <span className="truncate font-semibold text-[var(--fg)]">{selected.displayName}</span>
         <ChevronDown size={13} className="shrink-0 opacity-60" />
@@ -67,7 +67,7 @@ export function ModelSelector() {
           className={cn(
             "z-[80] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1 shadow-2xl",
             isMobile
-              ? "fixed inset-x-3 bottom-[max(5rem,calc(env(safe-area-inset-bottom,0px)+4.5rem))] max-h-[min(70vh,520px)]"
+              ? "fixed inset-x-3 bottom-[max(0.75rem,calc(env(safe-area-inset-bottom,0px)+5.75rem))] max-h-[min(55dvh,420px)]"
               : "absolute bottom-full right-0 mb-2 max-h-[min(480px,55vh)] w-[340px]",
           )}
         >

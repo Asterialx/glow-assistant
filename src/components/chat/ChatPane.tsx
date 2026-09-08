@@ -461,7 +461,7 @@ export function ChatPane({
                   <div
                     className={cn(
                       "mt-1 flex items-center gap-0.5 text-[var(--fg-faint)]",
-                      isLast ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                      isLast || isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                     )}
                   >
                     {sibs.length > 1 && onSelectLeaf && (

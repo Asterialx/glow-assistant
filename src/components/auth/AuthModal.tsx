@@ -4,7 +4,7 @@ import { useAuthStore } from "../../stores/authStore";
 import { useUiStore } from "../../stores/uiStore";
 import { AUTH_EMAIL_OTP_ENABLED } from "../../lib/authFlags";
 import { GUEST_MESSAGE_LIMIT } from "../../lib/supabase/trial";
-import { fullSync } from "../../lib/supabase/syncClient";
+import { syncAndHydrateWorkspace } from "../../lib/supabase/syncClient";
 import { cn } from "../../lib/utils";
 
 type Mode = "login" | "register" | "verify" | "profile";
@@ -42,7 +42,7 @@ function PasswordField({
           autoComplete={autoComplete}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-2 pl-3 pr-10 text-[13.5px] outline-none focus:border-[var(--accent)]"
+          className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-2 pl-3 pr-10 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
         />
         <button
           type="button"
@@ -231,7 +231,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
   const ru = locale === "ru";
 
   const finishAuth = async () => {
-    await fullSync("home").catch(() => null);
+    await syncAndHydrateWorkspace("home").catch(() => null);
     onClose();
   };
 
@@ -366,11 +366,12 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
   const hideFooterSwitch = mode === "verify" || mode === "profile";
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[2px]">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto bg-black/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
       <div
         className={cn(
-          "relative w-full overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl",
+          "relative w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl sm:rounded-2xl",
           mode === "verify" || mode === "profile" ? "max-w-[420px] p-6" : "max-w-md p-5",
+          "max-h-[min(92dvh,920px)] pb-[max(1rem,env(safe-area-inset-bottom))]",
         )}
       >
         <button
@@ -415,7 +416,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none focus:border-[var(--accent)]"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
               />
             </label>
           )}
@@ -454,7 +455,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
                     autoComplete="given-name"
                     value={firstName}
                     onChange={(e) => setFirstName(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none focus:border-[var(--accent)]"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
                   />
                 </label>
                 <label className="block">
@@ -466,7 +467,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
                     autoComplete="family-name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
-                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none focus:border-[var(--accent)]"
+                    className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
                   />
                 </label>
               </div>
@@ -481,7 +482,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
                   max={120}
                   value={age}
                   onChange={(e) => setAge(e.target.value)}
-                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none focus:border-[var(--accent)]"
+                  className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
                 />
               </label>
             </>

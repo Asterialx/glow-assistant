@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Session, User } from "@supabase/supabase-js";
 import { getSupabase, isSupabaseConfigured } from "../lib/supabase/client";
 import { getOrCreateDeviceId, getDeviceName } from "../lib/accountSync";
+import { resetLocalSessionAfterSignOut } from "../lib/sessionCleanup";
 
 export type AuthStatus = "loading" | "anon" | "needs_verification" | "authenticated" | "unavailable";
 
@@ -152,9 +153,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
-    if (!isSupabaseConfigured()) return;
+    if (!isSupabaseConfigured()) {
+      await resetLocalSessionAfterSignOut();
+      set({
+        session: null,
+        user: null,
+        status: "anon",
+        pendingEmail: null,
+        error: null,
+      });
+      return;
+    }
     const sb = getSupabase();
     await sb.auth.signOut();
+    await resetLocalSessionAfterSignOut();
     set({
       session: null,
       user: null,
