@@ -236,7 +236,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
   const ru = locale === "ru";
 
   const finishAuth = async () => {
-    await syncAndHydrateWorkspace("home").catch(() => null);
+    await syncAndHydrateWorkspace("home", { forceFullPull: true }).catch(() => null);
     onClose();
   };
 

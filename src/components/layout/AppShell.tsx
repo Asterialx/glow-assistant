@@ -141,7 +141,7 @@ export function AppShell() {
       if (authed) {
         const uid = useAuthStore.getState().user?.id ?? null;
         try {
-          await syncAndHydrateWorkspace(mode);
+          await syncAndHydrateWorkspace(mode, { forceFullPull: true });
           hydratedUserRef.current = uid;
         } catch (e) {
           console.error("[glow] initial sync failed:", e);
@@ -165,7 +165,7 @@ export function AppShell() {
     let cancelled = false;
     (async () => {
       try {
-        await syncAndHydrateWorkspace(mode);
+        await syncAndHydrateWorkspace(mode, { forceFullPull: true });
         if (!cancelled) hydratedUserRef.current = authUserId;
       } catch (e) {
         console.error("[glow] sync on login failed:", e);

@@ -24,6 +24,7 @@ import { nowMs } from "../utils";
 
 const CURSOR_KEY = "glow.sync.cursors";
 const LAST_SYNC_KEY = "glow.sync.lastAt";
+const SYNC_USER_KEY = "glow.sync.userId";
 
 type Cursors = Record<string, number>;
 
@@ -38,6 +39,30 @@ export function clearSyncCursors(): void {
   try {
     localStorage.removeItem(CURSOR_KEY);
     localStorage.removeItem(LAST_SYNC_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearSyncUserMarker(): void {
+  try {
+    localStorage.removeItem(SYNC_USER_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function readSyncUserMarker(): string | null {
+  try {
+    return localStorage.getItem(SYNC_USER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeSyncUserMarker(userId: string) {
+  try {
+    localStorage.setItem(SYNC_USER_KEY, userId);
   } catch {
     /* ignore */
   }
@@ -466,12 +491,18 @@ export async function pullRemote(
   return applied;
 }
 
-export async function fullSync(mode: AppMode = "home"): Promise<{ pushed: boolean; pulled: number }> {
+export async function fullSync(
+  mode: AppMode = "home",
+  opts?: { forceFullPull?: boolean },
+): Promise<{ pushed: boolean; pulled: number }> {
   try {
     const gen = syncGeneration;
-    // Re-login / empty device: never trust stale cursors — pull full history.
+    const user = useAuthStore.getState().user;
+    const userId = user?.id ?? null;
     const localConvs = await listConversations(mode);
-    if (localConvs.length === 0) {
+    const userChanged = Boolean(userId && readSyncUserMarker() !== userId);
+    // Empty workspace, new login, or explicit force → never trust stale cursors.
+    if (opts?.forceFullPull || userChanged || localConvs.length === 0) {
       clearSyncCursors();
     }
     if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
@@ -479,8 +510,25 @@ export async function fullSync(mode: AppMode = "home"): Promise<{ pushed: boolea
     await pushAllLocal(mode);
     if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
 
-    const pulled = await pullRemote(mode);
+    let pulled = await pullRemote(mode);
     if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
+
+    // Recovery: local still empty but cloud has chats (stale cursor / partial wipe).
+    const after = await listConversations(mode);
+    if (after.length === 0 && userId) {
+      const sb = getSupabase();
+      const { count, error } = await sb
+        .from("sync_conversations")
+        .select("id", { count: "exact", head: true })
+        .is("deleted_at", null);
+      if (!error && (count ?? 0) > 0) {
+        clearSyncCursors();
+        pulled += await pullRemote(mode);
+      }
+    }
+
+    if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
+    if (userId) writeSyncUserMarker(userId);
     return { pushed: true, pulled };
   } catch (e) {
     const raw = e && typeof e === "object" && "message" in e ? String((e as { message: string }).message) : String(e);
@@ -753,16 +801,20 @@ let hydrateInflight: Promise<{ pushed: boolean; pulled: number }> | null = null;
 
 export async function syncAndHydrateWorkspace(
   mode: AppMode = "home",
+  opts?: { forceFullPull?: boolean },
 ): Promise<{ pushed: boolean; pulled: number }> {
-  if (hydrateInflight) return hydrateInflight;
+  if (hydrateInflight) {
+    if (!opts?.forceFullPull) return hydrateInflight;
+    await hydrateInflight.catch(() => null);
+  }
 
   const gen = syncGeneration;
-  hydrateInflight = (async () => {
+  const run = (async () => {
     const prev = useChatStore.getState();
     const keepId = prev.activeConversationId;
     const keepStreaming = prev.streaming;
 
-    const result = await fullSync(mode);
+    const result = await fullSync(mode, opts);
     if (gen !== syncGeneration) return result;
 
     applySyncedPrefsToUi();
@@ -792,11 +844,14 @@ export async function syncAndHydrateWorkspace(
     });
     useUiStore.getState().closeArtifacts();
     return result;
-  })().finally(() => {
-    hydrateInflight = null;
-  });
+  })();
 
-  return hydrateInflight;
+  hydrateInflight = run;
+  try {
+    return await run;
+  } finally {
+    if (hydrateInflight === run) hydrateInflight = null;
+  }
 }
 
 export function getLastSyncAt(): number | null {

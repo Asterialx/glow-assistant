@@ -1,13 +1,14 @@
 import { clearLocalWorkspace } from "../db";
 import { useChatStore } from "../stores/chatStore";
 import { useUiStore } from "../stores/uiStore";
-import { clearSyncCursors, invalidateSyncGeneration } from "./supabase/syncClient";
+import { clearSyncCursors, clearSyncUserMarker, invalidateSyncGeneration } from "./supabase/syncClient";
 
 /** Reset local UI + cached chats after sign-out (cloud data stays for next login). */
 export async function resetLocalSessionAfterSignOut() {
   // Cancel in-flight sync so it cannot rewrite cursors onto an empty workspace.
   invalidateSyncGeneration();
   clearSyncCursors();
+  clearSyncUserMarker();
 
   useUiStore.getState().setUserName("Guest");
   useChatStore.setState({
