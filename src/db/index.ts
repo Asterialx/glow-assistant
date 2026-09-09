@@ -231,8 +231,9 @@ export async function clearLocalWorkspace(mode: AppMode) {
   } catch {
     /* optional */
   }
-  if (typeof (db as { flushPersist?: () => Promise<void> }).flushPersist === "function") {
-    await (db as { flushPersist: () => Promise<void> }).flushPersist();
+  const flusher = db as { flushPersist?: () => Promise<void> };
+  if (typeof flusher.flushPersist === "function") {
+    await flusher.flushPersist();
   }
 }
 
