@@ -514,7 +514,7 @@ export function SmartInputBar({ onSend, onStop, disabled, streaming, centered, o
         /* After iOS webview insets plugin, paint edge-to-edge and pad only
            for the home indicator (not double-inset dead space). */
         isMobile
-          ? "pb-[max(0.5rem,env(safe-area-inset-bottom,0px))]"
+          ? "pb-[max(0.5rem,calc(env(safe-area-inset-bottom,0px)*var(--kb-safe,1)))]"
           : centered
             ? "pb-0"
             : "pb-5",

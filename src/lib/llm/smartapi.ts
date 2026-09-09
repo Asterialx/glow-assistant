@@ -22,11 +22,14 @@ function isTauri(): boolean {
 function getBaseUrl(modelId?: string): string {
   const model = modelId ? getModel(modelId) : null;
   if (model?.provider === "mcsix") {
+    // Dev Vite proxy / production web same-origin proxy (avoids CORS).
     if (import.meta.env.DEV) return "/mcsix";
+    if (!isTauri()) return "/api/mcsix";
     return import.meta.env.VITE_MCSIX_BASE_URL || "https://api.mcsix.space/v1";
   }
-  // Dev (browser or tauri:dev on localhost:1420): Vite proxy → no CORS
+  // Dev Vite proxy / production web same-origin proxy (avoids CORS).
   if (import.meta.env.DEV) return "/smartapi";
+  if (!isTauri()) return "/api/smartapi";
   return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.smartapi.shop/v1";
 }
 
@@ -311,7 +314,9 @@ export async function streamChatCompletion(
     if (/failed to fetch/i.test(err.message)) {
       callbacks.onError(
         new Error(
-          "Network/CORS: cannot reach SmartAPI from the WebView. Restart the app after the HTTP plugin update.",
+          isTauri()
+            ? "Network/CORS: cannot reach SmartAPI from the WebView. Restart the app after the HTTP plugin update."
+            : "Network error: cannot reach SmartAPI. Check connection, API key in Settings, and try again.",
         ),
       );
       return;

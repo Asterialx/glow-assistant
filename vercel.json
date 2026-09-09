@@ -1,5 +1,18 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }],
+  "rewrites": [
+    {
+      "source": "/api/smartapi/:path*",
+      "destination": "https://api.smartapi.shop/v1/:path*"
+    },
+    {
+      "source": "/api/mcsix/:path*",
+      "destination": "https://api.mcsix.space/v1/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

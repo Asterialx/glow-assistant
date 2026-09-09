@@ -42,6 +42,11 @@ function PasswordField({
           autoComplete={autoComplete}
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => {
+            window.setTimeout(() => {
+              e.target.scrollIntoView({ block: "center", behavior: "smooth" });
+            }, 250);
+          }}
           className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] py-2 pl-3 pr-10 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
         />
         <button
@@ -366,17 +371,32 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
   const hideFooterSwitch = mode === "verify" || mode === "profile";
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center overflow-y-auto bg-black/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
+    <div
+      className="fixed z-[80] flex items-end justify-center overflow-hidden bg-black/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4"
+      style={{
+        top: "var(--vv-offset-top, 0px)",
+        left: "var(--vv-offset-left, 0px)",
+        width: "100vw",
+        height: "var(--app-height, 100dvh)",
+      }}
+    >
       <div
         className={cn(
-          "relative w-full overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl sm:rounded-2xl",
-          mode === "verify" || mode === "profile" ? "max-w-[420px] p-6" : "max-w-md p-5",
-          "max-h-[min(92dvh,920px)] pb-[max(1rem,env(safe-area-inset-bottom))]",
+          "relative flex w-full flex-col overflow-hidden rounded-t-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-xl sm:rounded-2xl",
+          mode === "verify" || mode === "profile" ? "max-w-[420px]" : "max-w-md",
+          "max-h-[min(calc(var(--app-height,100dvh)-0.5rem),920px)]",
         )}
       >
+        <div
+          className={cn(
+            "overflow-y-auto overscroll-contain",
+            mode === "verify" || mode === "profile" ? "p-6" : "p-5",
+            "pb-[max(1rem,env(safe-area-inset-bottom))]",
+          )}
+        >
         <button
           type="button"
-          className="absolute right-3 top-3 rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
           onClick={onClose}
         >
           <X size={16} />
@@ -416,6 +436,11 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
                 autoComplete="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                onFocus={(e) => {
+                  window.setTimeout(() => {
+                    e.target.scrollIntoView({ block: "center", behavior: "smooth" });
+                  }, 250);
+                }}
                 className="w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[16px] outline-none focus:border-[var(--accent)] sm:text-[13.5px]"
               />
             </label>
@@ -615,6 +640,7 @@ export function AuthModal({ open, onClose, reason = "manual", initialMode = "reg
               {ru ? "Уже есть аккаунт? Войти" : "Have an account? Sign in"}
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>
