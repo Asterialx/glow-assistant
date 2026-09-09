@@ -231,6 +231,9 @@ export async function clearLocalWorkspace(mode: AppMode) {
   } catch {
     /* optional */
   }
+  if (typeof (db as { flushPersist?: () => Promise<void> }).flushPersist === "function") {
+    await (db as { flushPersist: () => Promise<void> }).flushPersist();
+  }
 }
 
 export async function setConversationProject(

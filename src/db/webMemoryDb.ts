@@ -3,6 +3,8 @@
 export type WebDbLike = {
   execute: (query: string, binds?: unknown[]) => Promise<{ rowsAffected: number }>;
   select: <T>(query: string, binds?: unknown[]) => Promise<T[]>;
+  /** Flush pending IndexedDB write immediately (sign-out / critical clears). */
+  flushPersist?: () => Promise<void>;
 };
 
 const WEB_IDB_NAME = "glow-web-db";
@@ -77,6 +79,18 @@ class PersistentMemoryDb implements WebDbLike {
         console.warn("[glow] failed to save IndexedDB workspace", e),
       );
     }, 40);
+  }
+
+  async flushPersist() {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = null;
+    }
+    try {
+      await writeWebTables(this.persistKey, this.tables);
+    } catch (e) {
+      console.warn("[glow] failed to flush IndexedDB workspace", e);
+    }
   }
 
   async execute(query: string, binds: unknown[] = []) {

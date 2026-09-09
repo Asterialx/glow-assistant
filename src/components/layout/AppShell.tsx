@@ -162,13 +162,14 @@ export function AppShell() {
     }
     // Already hydrated during boot (or this login was handled).
     if (hydratedUserRef.current === authUserId) return;
-    hydratedUserRef.current = authUserId;
     let cancelled = false;
     (async () => {
       try {
         await syncAndHydrateWorkspace(mode);
+        if (!cancelled) hydratedUserRef.current = authUserId;
       } catch (e) {
         console.error("[glow] sync on login failed:", e);
+        if (!cancelled) hydratedUserRef.current = null;
         useAuthStore.setState({
           error:
             e instanceof Error

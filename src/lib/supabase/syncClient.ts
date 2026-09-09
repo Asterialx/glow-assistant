@@ -27,6 +27,22 @@ const LAST_SYNC_KEY = "glow.sync.lastAt";
 
 type Cursors = Record<string, number>;
 
+/** Bumped on sign-out so in-flight push/pull cannot rewrite cursors into an empty local DB. */
+let syncGeneration = 0;
+
+export function invalidateSyncGeneration(): void {
+  syncGeneration += 1;
+}
+
+export function clearSyncCursors(): void {
+  try {
+    localStorage.removeItem(CURSOR_KEY);
+    localStorage.removeItem(LAST_SYNC_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
 const TABLES = [
   "sync_projects",
   "sync_conversations",
@@ -413,28 +429,38 @@ export async function pullRemote(
   const user = useAuthStore.getState().user;
   if (!user) return 0;
 
+  const gen = syncGeneration;
   const sb = getSupabase();
   const cursors = readCursors();
   let applied = 0;
   const tables = opts?.chatsOnly ? CHAT_TABLES : TABLES;
 
   for (const table of tables) {
-    const since = cursors[table] || 0;
-    const { data, error } = await sb
-      .from(table)
-      .select("*")
-      .gt("rev", since)
-      .order("rev", { ascending: true })
-      .limit(500);
-    if (error) throw error;
-    const rows = (data || []) as Array<Record<string, unknown> & { rev: number }>;
-    for (const row of rows) {
-      await applyRemoteRow(table, row, mode);
-      cursors[table] = Math.max(cursors[table] || 0, Number(row.rev) || 0);
-      applied += 1;
+    if (gen !== syncGeneration) return applied;
+    // Page through changes — a single 500-cap left devices half-synced.
+    for (;;) {
+      if (gen !== syncGeneration) return applied;
+      const since = cursors[table] || 0;
+      const { data, error } = await sb
+        .from(table)
+        .select("*")
+        .gt("rev", since)
+        .order("rev", { ascending: true })
+        .limit(500);
+      if (error) throw error;
+      const rows = (data || []) as Array<Record<string, unknown> & { rev: number }>;
+      if (!rows.length) break;
+      for (const row of rows) {
+        if (gen !== syncGeneration) return applied;
+        await applyRemoteRow(table, row, mode);
+        cursors[table] = Math.max(cursors[table] || 0, Number(row.rev) || 0);
+        applied += 1;
+      }
+      if (rows.length < 500) break;
     }
   }
 
+  if (gen !== syncGeneration) return applied;
   writeCursors(cursors);
   localStorage.setItem(LAST_SYNC_KEY, String(Date.now()));
   return applied;
@@ -442,8 +468,19 @@ export async function pullRemote(
 
 export async function fullSync(mode: AppMode = "home"): Promise<{ pushed: boolean; pulled: number }> {
   try {
+    const gen = syncGeneration;
+    // Re-login / empty device: never trust stale cursors — pull full history.
+    const localConvs = await listConversations(mode);
+    if (localConvs.length === 0) {
+      clearSyncCursors();
+    }
+    if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
+
     await pushAllLocal(mode);
+    if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
+
     const pulled = await pullRemote(mode);
+    if (gen !== syncGeneration) return { pushed: false, pulled: 0 };
     return { pushed: true, pulled };
   } catch (e) {
     const raw = e && typeof e === "object" && "message" in e ? String((e as { message: string }).message) : String(e);
@@ -712,39 +749,54 @@ export function applySyncedPrefsToUi() {
 }
 
 /** Push/pull cloud data, apply prefs, and refresh chat lists in the UI. */
+let hydrateInflight: Promise<{ pushed: boolean; pulled: number }> | null = null;
+
 export async function syncAndHydrateWorkspace(
   mode: AppMode = "home",
 ): Promise<{ pushed: boolean; pulled: number }> {
-  const prev = useChatStore.getState();
-  const keepId = prev.activeConversationId;
-  const keepStreaming = prev.streaming;
+  if (hydrateInflight) return hydrateInflight;
 
-  const result = await fullSync(mode);
-  applySyncedPrefsToUi();
-  const [conversations, projects] = await Promise.all([
-    listConversations(mode),
-    listProjects(mode),
-  ]);
+  const gen = syncGeneration;
+  hydrateInflight = (async () => {
+    const prev = useChatStore.getState();
+    const keepId = prev.activeConversationId;
+    const keepStreaming = prev.streaming;
 
-  const stillExists = Boolean(keepId && conversations.some((c) => c.id === keepId));
+    const result = await fullSync(mode);
+    if (gen !== syncGeneration) return result;
 
-  // Never wipe an open/streaming chat — that caused "chat closed" mid-request.
-  if (keepStreaming || stillExists) {
-    useChatStore.setState({ conversations, projects });
+    applySyncedPrefsToUi();
+    const [conversations, projects] = await Promise.all([
+      listConversations(mode),
+      listProjects(mode),
+    ]);
+
+    if (gen !== syncGeneration) return result;
+
+    const stillExists = Boolean(keepId && conversations.some((c) => c.id === keepId));
+
+    // Never wipe an open/streaming chat — that caused "chat closed" mid-request.
+    if (keepStreaming || stillExists) {
+      useChatStore.setState({ conversations, projects });
+      return result;
+    }
+
+    useChatStore.setState({
+      conversations,
+      projects,
+      activeConversationId: null,
+      messages: [],
+      branchPath: [],
+      artifacts: [],
+      activeArtifactId: null,
+    });
+    useUiStore.getState().closeArtifacts();
     return result;
-  }
-
-  useChatStore.setState({
-    conversations,
-    projects,
-    activeConversationId: null,
-    messages: [],
-    branchPath: [],
-    artifacts: [],
-    activeArtifactId: null,
+  })().finally(() => {
+    hydrateInflight = null;
   });
-  useUiStore.getState().closeArtifacts();
-  return result;
+
+  return hydrateInflight;
 }
 
 export function getLastSyncAt(): number | null {

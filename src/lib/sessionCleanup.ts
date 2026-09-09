@@ -1,9 +1,14 @@
 import { clearLocalWorkspace } from "../db";
 import { useChatStore } from "../stores/chatStore";
 import { useUiStore } from "../stores/uiStore";
+import { clearSyncCursors, invalidateSyncGeneration } from "./supabase/syncClient";
 
 /** Reset local UI + cached chats after sign-out (cloud data stays for next login). */
 export async function resetLocalSessionAfterSignOut() {
+  // Cancel in-flight sync so it cannot rewrite cursors onto an empty workspace.
+  invalidateSyncGeneration();
+  clearSyncCursors();
+
   useUiStore.getState().setUserName("Guest");
   useChatStore.setState({
     conversations: [],
@@ -19,12 +24,6 @@ export async function resetLocalSessionAfterSignOut() {
     panel: "chat",
   });
   useUiStore.getState().closeArtifacts();
-  try {
-    localStorage.removeItem("glow.sync.cursors");
-    localStorage.removeItem("glow.sync.lastAt");
-  } catch {
-    /* ignore */
-  }
   try {
     await clearLocalWorkspace("home");
   } catch {
