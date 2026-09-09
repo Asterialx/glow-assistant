@@ -43,12 +43,13 @@ interface Props {
   disabled?: boolean;
   streaming?: boolean;
   centered?: boolean;
+  onFocusInput?: () => void;
 }
 
 const BASE_ACCEPT =
   "image/*,.pdf,.txt,.md,.csv,.json,.stl,.obj,.dcm,.dicom,.ipynb,.py,.ts,.tsx,.js,.jsx,.html,.css";
 
-export function SmartInputBar({ onSend, onStop, disabled, streaming, centered }: Props) {
+export function SmartInputBar({ onSend, onStop, disabled, streaming, centered, onFocusInput }: Props) {
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const locale = useUiStore((s) => s.locale);
@@ -608,6 +609,7 @@ export function SmartInputBar({ onSend, onStop, disabled, streaming, centered }:
               rows={1}
               placeholder={centered ? t(locale, "placeholderSkills") : t(locale, "placeholder")}
               className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-2.5 pt-1.5 pb-0.5 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
+              onFocus={() => onFocusInput?.()}
               onChange={(e) => {
                 setDraft(e.target.value);
                 resize();

@@ -18,7 +18,6 @@ import { useModeStore } from "../../stores/modeStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useAuthStore } from "../../stores/authStore";
-import { AuthModal } from "../auth/AuthModal";
 import { t } from "../../lib/i18n";
 import { useIsMobile } from "../../lib/useMediaQuery";
 import { cn } from "../../lib/utils";
@@ -41,6 +40,8 @@ interface Props {
   onConversationsChanged: () => void;
   /** Called after a nav action that should close a mobile drawer. */
   onNavigate?: () => void;
+  /** Open auth outside the drawer so it survives mobile sidebar unmount. */
+  onOpenAuth?: (mode: "login" | "register") => void;
 }
 
 export function ClaudeSidebar({
@@ -49,6 +50,7 @@ export function ClaudeSidebar({
   onProjectsChanged,
   onConversationsChanged,
   onNavigate,
+  onOpenAuth,
 }: Props) {
   const mode = useModeStore((s) => s.mode);
   const locale = useUiStore((s) => s.locale);
@@ -68,8 +70,6 @@ export function ClaudeSidebar({
   const [q, setQ] = useState("");
   const [ctxId, setCtxId] = useState<string | null>(null);
   const [projectSubOpen, setProjectSubOpen] = useState(false);
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
   const ctxRef = useRef<HTMLDivElement>(null);
   const authStatus = useAuthStore((s) => s.status);
   const authUser = useAuthStore((s) => s.user);
@@ -512,9 +512,8 @@ export function ClaudeSidebar({
                   type="button"
                   className="flex w-full px-3.5 py-3 text-left text-[13.5px] font-medium hover:bg-[var(--bg-hover)] sm:py-2.5"
                   onClick={() => {
-                    setAuthMode("register");
-                    setAuthOpen(true);
                     setMenuOpen(false);
+                    onOpenAuth?.("register");
                     onNavigate?.();
                   }}
                 >
@@ -524,9 +523,8 @@ export function ClaudeSidebar({
                   type="button"
                   className="flex w-full px-3.5 py-3 text-left text-[13.5px] hover:bg-[var(--bg-hover)] sm:py-2.5"
                   onClick={() => {
-                    setAuthMode("login");
-                    setAuthOpen(true);
                     setMenuOpen(false);
+                    onOpenAuth?.("login");
                     onNavigate?.();
                   }}
                 >
@@ -575,12 +573,6 @@ export function ClaudeSidebar({
         </div>
       </div>
 
-      <AuthModal
-        open={authOpen}
-        onClose={() => setAuthOpen(false)}
-        initialMode={authMode}
-        reason="manual"
-      />
     </aside>
   );
 }

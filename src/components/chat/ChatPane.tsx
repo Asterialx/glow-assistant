@@ -129,6 +129,12 @@ export function ChatPane({
   const [editDraft, setEditDraft] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
   const userActionRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const scrollChatToEnd = (behavior: ScrollBehavior = "auto") => {
+    bottomRef.current?.scrollIntoView({ block: "end", behavior });
+  };
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -136,6 +142,27 @@ export function ChatPane({
       editRef.current.selectionStart = editRef.current.value.length;
     }
   }, [editingId]);
+
+  useEffect(() => {
+    if (empty) return;
+    scrollChatToEnd("auto");
+  }, [messages, empty, streaming]);
+
+  useEffect(() => {
+    if (!isMobile || empty) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onViewport = () => {
+      // After keyboard open/close, keep the latest bubble above the input.
+      window.requestAnimationFrame(() => scrollChatToEnd("auto"));
+    };
+    vv.addEventListener("resize", onViewport);
+    vv.addEventListener("scroll", onViewport);
+    return () => {
+      vv.removeEventListener("resize", onViewport);
+      vv.removeEventListener("scroll", onViewport);
+    };
+  }, [isMobile, empty]);
 
   useEffect(() => {
     if (!selectedUserId) return;
@@ -258,7 +285,7 @@ export function ChatPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-3 py-5 sm:px-4 md:px-8 md:py-6">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-5 sm:px-4 md:px-8 md:py-6">
         <div className="mx-auto flex max-w-[720px] flex-col gap-6 sm:gap-7">
           {messages.map((m, idx) => {
             const isUser = m.role === "user";
@@ -524,6 +551,7 @@ export function ChatPane({
               </div>
             );
           })}
+          <div ref={bottomRef} className="h-px w-full shrink-0" aria-hidden />
         </div>
       </div>
       <SmartInputBar
@@ -531,6 +559,7 @@ export function ChatPane({
         onStop={onStop}
         disabled={streaming}
         streaming={streaming}
+        onFocusInput={isMobile ? () => scrollChatToEnd("smooth") : undefined}
       />
     </div>
   );

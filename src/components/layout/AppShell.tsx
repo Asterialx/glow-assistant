@@ -94,8 +94,16 @@ export function AppShell() {
 
   const [widgetsByMessage, setWidgetsByMessage] = useState<Record<string, UiWidget[]>>({});
   const [ready, setReady] = useState(false);
-  const [authGateOpen, setAuthGateOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("register");
+  const [authReason, setAuthReason] = useState<"manual" | "guest_limit">("manual");
   const streamAbortRef = useRef<AbortController | null>(null);
+
+  const openAuth = (mode: "login" | "register", reason: "manual" | "guest_limit" = "manual") => {
+    setAuthMode(mode);
+    setAuthReason(reason);
+    setAuthOpen(true);
+  };
 
   const reloadConversations = async () => {
     const list = await listConversations(mode);
@@ -376,7 +384,7 @@ export function AppShell() {
 
     const gate = await checkGuestMessageAllowed();
     if (!gate.allowed) {
-      setAuthGateOpen(true);
+      openAuth("register", "guest_limit");
       return;
     }
 
@@ -782,6 +790,7 @@ export function AppShell() {
             onNavigate={() => {
               if (isMobile) setSidebarOpen(false);
             }}
+            onOpenAuth={(mode) => openAuth(mode, "manual")}
             onNewChat={async () => {
               setActiveConversationId(null);
               setMessages([]);
@@ -920,10 +929,10 @@ export function AppShell() {
       <SettingsModal />
       {!isMobile && <AppsAndExtensions />}
       <AuthModal
-        open={authGateOpen}
-        onClose={() => setAuthGateOpen(false)}
-        reason="guest_limit"
-        initialMode="register"
+        open={authOpen}
+        onClose={() => setAuthOpen(false)}
+        reason={authReason}
+        initialMode={authMode}
       />
     </div>
   );
