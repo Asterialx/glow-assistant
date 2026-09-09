@@ -224,8 +224,32 @@ class PersistentMemoryDb implements WebDbLike {
   }
 }
 
-export async function createWebMemoryDb(name: string): Promise<WebDbLike> {
+export async function createWebMemoryDb(
+  name: string,
+  opts?: { legacyKey?: string },
+): Promise<WebDbLike> {
   const db = new PersistentMemoryDb(name);
   await db.hydrate();
+  // One-time migrate from pre-per-user key (glow_home → glow_home__guest / user).
+  if (opts?.legacyKey) {
+    const empty =
+      !db.tables.conversations?.length &&
+      !db.tables.messages?.length &&
+      !db.tables.projects?.length;
+    if (empty) {
+      try {
+        const legacy = await readWebTables(opts.legacyKey);
+        if (legacy && typeof legacy === "object") {
+          const hasData = Object.values(legacy).some((rows) => Array.isArray(rows) && rows.length > 0);
+          if (hasData) {
+            db.tables = legacy;
+            await db.flushPersist();
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
   return db;
 }

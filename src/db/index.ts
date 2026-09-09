@@ -76,10 +76,44 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 
 let metaDb: DbLike | null = null;
 const modeDbs: Partial<Record<AppMode, DbLike>> = {};
+/** null = guest workspace. Authenticated users get an isolated local DB (Ai_asisst-style instant reload). */
+let workspaceOwnerId: string | null = null;
 
-async function loadDb(name: string): Promise<DbLike> {
+function workspaceDbName(mode: AppMode): string {
+  const owner = workspaceOwnerId ? `u_${workspaceOwnerId}` : "guest";
+  return `glow_${mode}__${owner}`;
+}
+
+function legacyWorkspaceDbName(mode: AppMode): string {
+  return `glow_${mode}`;
+}
+
+export function getWorkspaceOwnerId(): string | null {
+  return workspaceOwnerId;
+}
+
+/** Flush + drop cached mode DBs, then bind the next owner (guest or user id). */
+export async function switchWorkspaceOwner(userId: string | null): Promise<void> {
+  if (workspaceOwnerId === userId && Object.keys(modeDbs).length > 0) return;
+
+  for (const mode of Object.keys(modeDbs) as AppMode[]) {
+    const db = modeDbs[mode];
+    const flusher = db as { flushPersist?: () => Promise<void> } | undefined;
+    if (flusher && typeof flusher.flushPersist === "function") {
+      try {
+        await flusher.flushPersist();
+      } catch {
+        /* ignore */
+      }
+    }
+    delete modeDbs[mode];
+  }
+  workspaceOwnerId = userId;
+}
+
+async function loadDb(name: string, legacyKey?: string): Promise<DbLike> {
   if (!isTauri()) {
-    return createWebMemoryDb(name);
+    return createWebMemoryDb(name, legacyKey ? { legacyKey } : undefined);
   }
   const { default: Database } = await import("@tauri-apps/plugin-sql");
   return Database.load(`sqlite:${name}.db`);
@@ -124,7 +158,9 @@ export async function initMetaDb(): Promise<DbLike> {
 
 export async function getModeDb(mode: AppMode): Promise<DbLike> {
   if (modeDbs[mode]) return modeDbs[mode]!;
-  const db = await loadDb(`glow_${mode}`);
+  const name = workspaceDbName(mode);
+  const legacy = workspaceOwnerId ? undefined : legacyWorkspaceDbName(mode);
+  const db = await loadDb(name, legacy);
   await execStatements(db, MODE_SQL);
   // Soft-migrate older DBs
   for (const col of ["pinned INTEGER NOT NULL DEFAULT 0", "unread INTEGER NOT NULL DEFAULT 0"]) {

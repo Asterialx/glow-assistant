@@ -1,11 +1,13 @@
-import { clearLocalWorkspace } from "../db";
+import { switchWorkspaceOwner } from "../db";
 import { useChatStore } from "../stores/chatStore";
 import { useUiStore } from "../stores/uiStore";
 import { clearSyncCursors, clearSyncUserMarker, invalidateSyncGeneration } from "./supabase/syncClient";
 
-/** Reset local UI + cached chats after sign-out (cloud data stays for next login). */
+/**
+ * Reset UI after sign-out. Keeps each user's IndexedDB/SQLite workspace intact
+ * (Ai_asisst-style) so the next login shows chats instantly, then cloud merge runs.
+ */
 export async function resetLocalSessionAfterSignOut() {
-  // Cancel in-flight sync so it cannot rewrite cursors onto an empty workspace.
   invalidateSyncGeneration();
   clearSyncCursors();
   clearSyncUserMarker();
@@ -25,8 +27,10 @@ export async function resetLocalSessionAfterSignOut() {
     panel: "chat",
   });
   useUiStore.getState().closeArtifacts();
+
   try {
-    await clearLocalWorkspace("home");
+    // Switch to guest workspace — do NOT wipe the signed-out user's local cache.
+    await switchWorkspaceOwner(null);
   } catch {
     /* DB may be unavailable in pure web edge cases */
   }

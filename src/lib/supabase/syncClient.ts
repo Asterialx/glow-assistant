@@ -13,6 +13,7 @@ import {
   upsertWidget,
   getModeDb,
   initMetaDb,
+  switchWorkspaceOwner,
 } from "../../db";
 import { getSupabase, isSupabaseConfigured } from "./client";
 import { useAuthStore } from "../../stores/authStore";
@@ -323,10 +324,14 @@ async function applyRemoteRow(table: SyncTable, row: Record<string, unknown>, mo
 
   if (table === "sync_conversations") {
     const db = await getModeDb(mode);
-    const existing = await db.select<{ id: string }>(`SELECT id FROM conversations WHERE id = $1`, [
-      row.id,
-    ]);
+    const existing = await db.select<{ id: string; updated_at: number }>(
+      `SELECT id, updated_at FROM conversations WHERE id = $1`,
+      [row.id],
+    );
+    const remoteUpdated = Number(row.updated_at) || 0;
     if (existing.length) {
+      // LWW: keep newer local edit (Ai_asisst-style merge).
+      if (Number(existing[0]!.updated_at) > remoteUpdated) return;
       await db.execute(
         `UPDATE conversations SET project_id=$1, title=$2, active_leaf_id=$3, updated_at=$4, pinned=$5, unread=$6 WHERE id=$7`,
         [
@@ -799,10 +804,40 @@ export function applySyncedPrefsToUi() {
 /** Push/pull cloud data, apply prefs, and refresh chat lists in the UI. */
 let hydrateInflight: Promise<{ pushed: boolean; pulled: number }> | null = null;
 
+/**
+ * Bind the signed-in user's local workspace, paint chats immediately, then
+ * merge with cloud (Ai_asisst local-first pattern on top of Supabase).
+ */
 export async function syncAndHydrateWorkspace(
   mode: AppMode = "home",
   opts?: { forceFullPull?: boolean },
 ): Promise<{ pushed: boolean; pulled: number }> {
+  const userId = useAuthStore.getState().user?.id ?? null;
+  if (userId) {
+    await switchWorkspaceOwner(userId);
+    // Instant paint from per-user local cache before any network.
+    const [localConvs, localProjects] = await Promise.all([
+      listConversations(mode),
+      listProjects(mode),
+    ]);
+    const keepId = useChatStore.getState().activeConversationId;
+    const keepStreaming = useChatStore.getState().streaming;
+    const stillOpen = Boolean(keepId && localConvs.some((c) => c.id === keepId));
+    useChatStore.setState({
+      conversations: localConvs,
+      projects: localProjects,
+      ...(keepStreaming || stillOpen
+        ? {}
+        : {
+            activeConversationId: null,
+            messages: [],
+            branchPath: [],
+            artifacts: [],
+            activeArtifactId: null,
+          }),
+    });
+  }
+
   if (hydrateInflight) {
     if (!opts?.forceFullPull) return hydrateInflight;
     await hydrateInflight.catch(() => null);
@@ -814,7 +849,7 @@ export async function syncAndHydrateWorkspace(
     const keepId = prev.activeConversationId;
     const keepStreaming = prev.streaming;
 
-    const result = await fullSync(mode, opts);
+    const result = await fullSync(mode, { forceFullPull: opts?.forceFullPull ?? true });
     if (gen !== syncGeneration) return result;
 
     applySyncedPrefsToUi();

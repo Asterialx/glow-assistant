@@ -141,6 +141,7 @@ export function AppShell() {
       if (authed) {
         const uid = useAuthStore.getState().user?.id ?? null;
         try {
+          // Local cache paints first inside syncAndHydrateWorkspace, then cloud merge.
           await syncAndHydrateWorkspace(mode, { forceFullPull: true });
           hydratedUserRef.current = uid;
         } catch (e) {
