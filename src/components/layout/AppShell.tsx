@@ -10,7 +10,7 @@ import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useAuthStore } from "../../stores/authStore";
 import { checkGuestMessageAllowed } from "../../lib/supabase/trial";
-import { requestLiveSync, startLiveChatSync, syncAndHydrateWorkspace } from "../../lib/supabase/syncClient";
+import { requestLiveSync, startLiveChatSync, syncAndHydrateWorkspace, refreshChatsFromCloud } from "../../lib/supabase/syncClient";
 import { isSupabaseConfigured } from "../../lib/supabase/client";
 import {
   addMemory,
@@ -637,7 +637,8 @@ export function AppShell() {
         await loadConversation(convId);
         await reloadConversations();
         if (useAuthStore.getState().status === "authenticated") {
-          void requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
+          // Await push so the phone can pull the finished reply.
+          await requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
         }
       },
       onError: async (err) => {
@@ -645,6 +646,9 @@ export function AppShell() {
         await updateMessageContent(mode, assistantId, `Error: ${err.message}`, "error");
         setStreaming(false);
         await loadConversation(convId);
+        if (useAuthStore.getState().status === "authenticated") {
+          await requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
+        }
       },
       },
       ac.signal,
@@ -731,7 +735,7 @@ export function AppShell() {
           await loadConversation(convId);
           await reloadConversations();
           if (useAuthStore.getState().status === "authenticated") {
-            void requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
+            await requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
           }
         },
         onError: async (err) => {
@@ -739,6 +743,9 @@ export function AppShell() {
           await updateMessageContent(mode, assistantId, `Error: ${err.message}`, "error");
           setStreaming(false);
           await loadConversation(convId);
+          if (useAuthStore.getState().status === "authenticated") {
+            await requestLiveSync(mode, { immediate: true, chatsOnly: true }).catch(() => null);
+          }
         },
       },
       ac.signal,
@@ -805,6 +812,20 @@ export function AppShell() {
               setActiveConversationId(id);
               await loadConversation(id);
               if (isMobile) setSidebarOpen(false);
+              if (useAuthStore.getState().status !== "authenticated") return;
+              // Pull peer updates; if reply body is missing, force re-pull chat tables.
+              await refreshChatsFromCloud(mode);
+              await loadConversation(id);
+              const localMsgs = useChatStore.getState().messages;
+              const needsForce =
+                localMsgs.length === 0 ||
+                (localMsgs.length === 1 && localMsgs[0]?.role === "user") ||
+                localMsgs.some((m) => m.role === "assistant" && !String(m.content || "").trim());
+              if (needsForce) {
+                await refreshChatsFromCloud(mode, { force: true });
+                await loadConversation(id);
+              }
+              await reloadConversations();
             }}
             onProjectsChanged={async () => setProjects(await listProjects(mode))}
             onConversationsChanged={async () => {

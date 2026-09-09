@@ -131,10 +131,17 @@ export function ChatPane({
   const userActionRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
+  const convKey = messages[0]?.conversation_id ?? (empty ? "empty" : "unknown");
 
   const scrollChatToEnd = (behavior: ScrollBehavior = "auto") => {
     bottomRef.current?.scrollIntoView({ block: "end", behavior });
   };
+
+  useEffect(() => {
+    // New chat / switched conversation → stick to bottom again.
+    stickToBottomRef.current = true;
+  }, [convKey]);
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -145,6 +152,7 @@ export function ChatPane({
 
   useEffect(() => {
     if (empty) return;
+    if (!stickToBottomRef.current) return;
     scrollChatToEnd("auto");
   }, [messages, empty, streaming]);
 
@@ -153,14 +161,12 @@ export function ChatPane({
     const vv = window.visualViewport;
     if (!vv) return;
     const onViewport = () => {
-      // After keyboard open/close, keep the latest bubble above the input.
+      if (!stickToBottomRef.current) return;
       window.requestAnimationFrame(() => scrollChatToEnd("auto"));
     };
     vv.addEventListener("resize", onViewport);
-    vv.addEventListener("scroll", onViewport);
     return () => {
       vv.removeEventListener("resize", onViewport);
-      vv.removeEventListener("scroll", onViewport);
     };
   }, [isMobile, empty]);
 
@@ -285,7 +291,16 @@ export function ChatPane({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-5 sm:px-4 md:px-8 md:py-6">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-3 py-5 sm:px-4 md:px-8 md:py-6"
+        onScroll={() => {
+          const el = scrollRef.current;
+          if (!el) return;
+          const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+          stickToBottomRef.current = dist < 100;
+        }}
+      >
         <div className="mx-auto flex max-w-[720px] flex-col gap-6 sm:gap-7">
           {messages.map((m, idx) => {
             const isUser = m.role === "user";
@@ -559,7 +574,13 @@ export function ChatPane({
         onStop={onStop}
         disabled={streaming}
         streaming={streaming}
-        onFocusInput={isMobile ? () => scrollChatToEnd("smooth") : undefined}
+        onFocusInput={
+          isMobile
+            ? () => {
+                if (stickToBottomRef.current) scrollChatToEnd("smooth");
+              }
+            : undefined
+        }
       />
     </div>
   );

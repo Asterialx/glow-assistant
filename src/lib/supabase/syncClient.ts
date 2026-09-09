@@ -45,6 +45,19 @@ export function clearSyncCursors(): void {
   }
 }
 
+/** Reset only chat table cursors so a device can re-pull message bodies. */
+export function clearChatSyncCursors(): void {
+  try {
+    const cursors = readCursors();
+    for (const table of ["sync_conversations", "sync_messages", "sync_artifacts"] as const) {
+      delete cursors[table];
+    }
+    writeCursors(cursors);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function clearSyncUserMarker(): void {
   try {
     localStorage.removeItem(SYNC_USER_KEY);
@@ -612,6 +625,21 @@ export async function pushConversationDeleted(conversationId: string): Promise<v
   await notifyPeersNeedSync();
 }
 
+/** Pull latest chats from cloud into local DB (no push). Used when opening a chat on another device. */
+export async function refreshChatsFromCloud(
+  mode: AppMode = "home",
+  opts?: { force?: boolean },
+): Promise<number> {
+  if (useAuthStore.getState().status !== "authenticated") return 0;
+  try {
+    if (opts?.force) clearChatSyncCursors();
+    return await pullRemote(mode, { chatsOnly: true });
+  } catch (e) {
+    console.warn("[glow] refresh chats failed", e);
+    return 0;
+  }
+}
+
 /** Queue a sync; coalesce bursts. `immediate` starts ASAP (after current in-flight). */
 export function requestLiveSync(
   mode: AppMode = "home",
@@ -849,7 +877,7 @@ export async function syncAndHydrateWorkspace(
     const keepId = prev.activeConversationId;
     const keepStreaming = prev.streaming;
 
-    const result = await fullSync(mode, { forceFullPull: opts?.forceFullPull ?? true });
+    const result = await fullSync(mode, { forceFullPull: Boolean(opts?.forceFullPull) });
     if (gen !== syncGeneration) return result;
 
     applySyncedPrefsToUi();
