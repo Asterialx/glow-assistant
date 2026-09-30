@@ -629,17 +629,17 @@ export function SettingsModal() {
                   <h2 className="mb-2 text-[18px] font-semibold tracking-tight">API</h2>
                   <SettingRow
                     title="Base URL"
-                    description={hint("SmartAPI endpoint (read-only).", "Адрес SmartAPI (только чтение).")}
+                    description={hint("AgentRouter endpoint (read-only).", "Адрес AgentRouter (только чтение).")}
                   >
                     <input
                       readOnly
-                      value={import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.smartapi.shop/v1"}
+                      value={import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1"}
                       className="w-64 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-[family-name:var(--font-mono)] text-[11.5px]"
                     />
                   </SettingRow>
                   <SettingRow
                     title="API key"
-                    description={hint("Your SmartAPI key for chat.", "Ключ SmartAPI для чата.")}
+                    description={hint("AgentRouter key for chat.", "Ключ AgentRouter для чата.")}
                   >
                     <div className="flex gap-2">
                       <input

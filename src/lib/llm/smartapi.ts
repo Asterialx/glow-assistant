@@ -20,14 +20,17 @@ function isTauri(): boolean {
 }
 
 function getBaseUrl(): string {
-  // Dev (browser or tauri:dev on localhost:1420): Vite proxy → no CORS
+  // Dev (browser or tauri:dev on localhost:1420): Vite proxy → no CORS.
   if (import.meta.env.DEV) return "/smartapi";
-  return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.smartapi.shop/v1";
+  return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1";
 }
 
 function getApiKey(): string {
+  const configured = import.meta.env.VITE_SMARTAPI_KEY;
+  if (configured) return configured;
+
   const stored = localStorage.getItem("claude2.apiKey") || localStorage.getItem("glow.apiKey");
-  return stored || import.meta.env.VITE_SMARTAPI_KEY || "";
+  return stored || "";
 }
 
 export function setApiKey(key: string) {
@@ -212,8 +215,8 @@ export async function streamChatCompletion(
       model: apiModel,
       messages,
       stream: true,
-      temperature: Number.isFinite(temperature) ? temperature : 0.7,
       max_tokens: maxTokens,
+      temperature: Number.isFinite(temperature) ? temperature : 0.7,
     };
     const approxBytes = new Blob([JSON.stringify(body)]).size;
     if (approxBytes > 1_500_000) {
@@ -290,7 +293,7 @@ export async function streamChatCompletion(
     if (/failed to fetch/i.test(err.message)) {
       callbacks.onError(
         new Error(
-          "Network/CORS: cannot reach SmartAPI from the WebView. Restart the app after the HTTP plugin update.",
+          "Network/CORS: cannot reach the AI provider from the WebView. Restart the app after the HTTP plugin update.",
         ),
       );
       return;

@@ -1,11 +1,16 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { fileURLToPath, URL } from "node:url";
 
 const host = process.env.TAURI_DEV_HOST;
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const apiBaseUrl = new URL(env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1");
+  const apiPath = apiBaseUrl.pathname.replace(/\/$/, "");
+
+  return ({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -31,10 +36,11 @@ export default defineConfig({
     },
     proxy: {
       "/smartapi": {
-        target: "https://api.smartapi.shop",
+        // Keep provider traffic same-origin in the browser during development.
+        target: apiBaseUrl.origin,
         changeOrigin: true,
         secure: true,
-        rewrite: (path) => path.replace(/^\/smartapi/, "/v1"),
+        rewrite: (path) => path.replace(/^\/smartapi/, apiPath),
       },
     },
   },
@@ -46,4 +52,5 @@ export default defineConfig({
   worker: {
     format: "es",
   },
+  });
 });

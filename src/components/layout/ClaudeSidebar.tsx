@@ -23,14 +23,8 @@ import { useChatStore } from "../../stores/chatStore";
 import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
 import type { AppMode, Conversation } from "../../lib/types";
-import {
-  createProject,
-  deleteConversation,
-  renameConversation,
-  setConversationPinned,
-  setConversationProject,
-  setConversationUnread,
-} from "../../db";
+import { createProject } from "../../db";
+import { conversationService } from "../../conversation/conversationService";
 
 interface Props {
   onNewChat: () => void;
@@ -127,13 +121,13 @@ export function ClaudeSidebar({
   };
 
   const doPin = async (c: Conversation) => {
-    await setConversationPinned(mode, c.id, !Number(c.pinned));
+    await conversationService.setConversationPinned(mode, c.id, !Number(c.pinned));
     closeCtx();
     onConversationsChanged();
   };
 
   const doUnread = async (c: Conversation) => {
-    await setConversationUnread(mode, c.id, !Number(c.unread));
+    await conversationService.setConversationUnread(mode, c.id, !Number(c.unread));
     closeCtx();
     onConversationsChanged();
   };
@@ -144,7 +138,7 @@ export function ClaudeSidebar({
       c.title,
     );
     if (next == null) return;
-    await renameConversation(mode, c.id, next);
+    await conversationService.renameConversation(mode, c.id, next);
     closeCtx();
     onConversationsChanged();
   };
@@ -154,7 +148,7 @@ export function ClaudeSidebar({
       locale === "ru" ? `Удалить «${c.title}»?` : `Delete “${c.title}”?`,
     );
     if (!ok) return;
-    await deleteConversation(mode, c.id);
+    await conversationService.deleteConversation(mode, c.id);
     if (activeConversationId === c.id) {
       setActiveConversationId(null);
       onNewChat();
@@ -164,7 +158,7 @@ export function ClaudeSidebar({
   };
 
   const doAddToProject = async (c: Conversation, projectId: string | null) => {
-    await setConversationProject(mode, c.id, projectId);
+    await conversationService.setConversationProject(mode, c.id, projectId);
     closeCtx();
     onConversationsChanged();
   };
@@ -310,7 +304,7 @@ export function ClaudeSidebar({
                   className="flex min-w-0 flex-1 items-center gap-2.5"
                   onClick={() => {
                     if (Number(c.unread)) {
-                      void setConversationUnread(mode, c.id, false).then(onConversationsChanged);
+                      void conversationService.setConversationUnread(mode, c.id, false).then(onConversationsChanged);
                     }
                     onSelectConversation(c.id);
                   }}

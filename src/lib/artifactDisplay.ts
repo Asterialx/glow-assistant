@@ -1,6 +1,7 @@
 /** Detect / strip Artifacts fences so chat never dumps raw markup. */
 
 import { hasIncompleteWidgetFence, stripInlineUiFromText } from "./widgetParse";
+import { CODE_ARTIFACT_FENCE } from "./artifactCode";
 
 const HTML_FENCE_OPEN = /```html\b/i;
 
@@ -29,7 +30,7 @@ export function stripHtmlArtifactFences(text: string): string {
 export function stripPanelCodeFences(text: string): string {
   return text
     .replace(/```(?:jupyter|python-cell)\b[^\n]*\n[\s\S]*?```/gi, "")
-    .replace(/```(tsx?|jsx?|python|rs|ts|js)\b[^\n]*\n([\s\S]*?)```/gi, (full, _lang, body: string) => {
+    .replace(CODE_ARTIFACT_FENCE, (full, _lang, body: string) => {
       const lines = body.split("\n").filter((l) => l.trim()).length;
       return lines >= 8 ? "" : full;
     })

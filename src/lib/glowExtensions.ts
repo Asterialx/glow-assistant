@@ -4,12 +4,7 @@ import { useUiStore } from "../stores/uiStore";
 import { openChromeBrowser, setMcpEnabled } from "./tauri";
 import { nowMs, uid } from "./utils";
 import type { Artifact, Message } from "./types";
-import {
-  createConversation,
-  insertMessage,
-  listConversations,
-  updateConversationLeaf,
-} from "../db";
+import { conversationService } from "../conversation/conversationService";
 
 /** Enable Chrome agent + open a confirmation chat. */
 export async function enableChromeAgent(): Promise<void> {
@@ -18,10 +13,6 @@ export async function enableChromeAgent(): Promise<void> {
   const ru = locale === "ru";
   const {
     activeProjectId,
-    setConversations,
-    setActiveConversationId,
-    setMessages,
-    setBranchPath,
   } = useChatStore.getState();
 
   await setMcpEnabled("chrome", true);
@@ -34,7 +25,7 @@ export async function enableChromeAgent(): Promise<void> {
   }
   const ok = await openChromeBrowser("https://www.google.com");
 
-  const conv = await createConversation(mode, activeProjectId, "Chrome Agent");
+  const conv = await conversationService.createConversation(mode, activeProjectId, "Chrome Agent");
   const notice: Message = {
     id: uid(),
     conversation_id: conv.id,
@@ -51,12 +42,7 @@ export async function enableChromeAgent(): Promise<void> {
     status: "done",
     created_at: nowMs(),
   };
-  await insertMessage(mode, notice);
-  await updateConversationLeaf(mode, conv.id, notice.id);
-  setConversations(await listConversations(mode));
-  setActiveConversationId(conv.id);
-  setMessages([notice]);
-  setBranchPath([notice]);
+  await conversationService.appendMessage(mode, notice);
   useUiStore.getState().setAppsOpen(false);
 }
 

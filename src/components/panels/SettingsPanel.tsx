@@ -11,7 +11,7 @@ export function SettingsPanel() {
       "",
   );
   const [base] = useState(
-    import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.smartapi.shop/v1",
+    import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1",
   );
   const [memory, setMemory] = useState<GlobalMemory[]>([]);
   const [watch, setWatch] = useState("osu!.exe, ModernWarfare.exe, Warzone.exe");
@@ -33,7 +33,7 @@ export function SettingsPanel() {
       </div>
 
       <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
-        <h3 className="text-sm font-medium">SmartAPI</h3>
+        <h3 className="text-sm font-medium">AgentRouter</h3>
         <label className="mt-2 block text-xs text-[var(--color-muted)]">Base URL</label>
         <input
           className="mt-1 w-full rounded border border-[var(--color-border)] bg-black/20 px-2 py-1.5 font-[family-name:var(--font-mono)] text-xs"

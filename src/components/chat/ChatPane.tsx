@@ -42,6 +42,7 @@ interface Props {
   onWidgetChange?: (widget: UiWidget) => void;
   onSend: (text: string, files?: File[]) => void;
   streaming?: boolean;
+  onStop?: () => void;
 }
 
 /** Themed mini-player for voice notes; hide STT / metadata from the bubble. */
@@ -96,6 +97,7 @@ export function ChatPane({
   onWidgetChange,
   onSend,
   streaming,
+  onStop,
 }: Props) {
   const locale = useUiStore((s) => s.locale);
   const designMode = useModeStore((s) => s.designMode);
@@ -176,16 +178,19 @@ export function ChatPane({
   if (empty) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-4">
-        <div className="mb-8 flex items-center gap-3">
-          <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
-            ✻
-          </span>
-          <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
-            {t(locale, "greeting")}
-          </h1>
+        <div className="mb-7 max-w-[620px] text-center">
+          <div className="mb-3 flex items-center justify-center gap-3">
+            <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
+              ✻
+            </span>
+            <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
+              {t(locale, "taskTitle")}
+            </h1>
+          </div>
+          <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{t(locale, "taskSubtitle")}</p>
         </div>
         <div className="w-full">
-          <SmartInputBar onSend={onSend} disabled={streaming} centered />
+          <SmartInputBar onSend={onSend} disabled={streaming} onStop={onStop} centered />
         </div>
       </div>
     );
@@ -272,9 +277,10 @@ export function ChatPane({
               ["html", "jupyter", "code", "stl", "obj", "dcm", "pdf"].includes(a.kind),
             );
             const showBuilding = display.buildingHtml || display.buildingWidget;
+            const showResponseStatus = showThinking || showBuilding || isStreaming;
             const widgets = widgetsByMessage[m.id] || [];
             const prose =
-              display.content ||
+              (m.content.startsWith("Error:") ? "" : display.content) ||
               (showBuilding
                 ? ""
                 : display.hasHtmlArtifact && !isStreaming
@@ -285,24 +291,24 @@ export function ChatPane({
 
             return (
               <div key={m.id} className="group flex flex-col gap-2">
-                <div className="flex items-center gap-2 text-[13px] text-[var(--fg-faint)]">
-                  <span className="text-[15px] leading-none text-[var(--accent)]">✻</span>
-                  <span>
-                    {showThinking
-                      ? t(locale, "thinking")
-                      : display.buildingHtml
-                        ? designMode
-                          ? t(locale, "buildingDesign")
-                          : t(locale, "buildingArtifact")
-                        : display.buildingWidget
-                          ? locale === "ru"
-                            ? "Собираю виджет…"
-                            : "Building widget…"
-                          : isStreaming
-                            ? t(locale, "writing")
-                            : `Glow${m.model_id ? ` · ${m.model_id}` : ""}`}
-                  </span>
-                </div>
+                {showResponseStatus && (
+                  <div className="flex items-center gap-2 text-[13px] text-[var(--fg-faint)]">
+                    <span className="text-[15px] leading-none text-[var(--accent)]">✻</span>
+                    <span>
+                      {showThinking
+                        ? t(locale, "thinking")
+                        : display.buildingHtml
+                          ? designMode
+                            ? t(locale, "buildingDesign")
+                            : t(locale, "buildingArtifact")
+                          : display.buildingWidget
+                            ? locale === "ru"
+                              ? "Собираю виджет…"
+                              : "Building widget…"
+                          : t(locale, "preparingResult")}
+                    </span>
+                  </div>
+                )}
 
                 <div
                   className={cn(
@@ -355,6 +361,19 @@ export function ChatPane({
                   </button>
                 )}
 
+                {!isStreaming && m.content.startsWith("Error:") && isLast && (
+                  <div className="mt-1 flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-[13px] text-[var(--fg-muted)]">
+                    <span className="min-w-0 flex-1">{friendlyError(locale, m.content)}</span>
+                    <button
+                      type="button"
+                      onClick={() => onRegenerate?.(m)}
+                      className="shrink-0 rounded-lg bg-[var(--bg-hover)] px-2.5 py-1.5 font-medium text-[var(--fg)] hover:bg-[var(--bg-active)]"
+                    >
+                      {t(locale, "tryAgain")}
+                    </button>
+                  </div>
+                )}
+
                 {!isStreaming && m.content && !m.content.startsWith("Error:") && (
                   <div
                     className={cn(
@@ -403,9 +422,75 @@ export function ChatPane({
           })}
         </div>
       </div>
-      <SmartInputBar onSend={onSend} disabled={streaming} />
+      <SmartInputBar onSend={onSend} disabled={streaming} onStop={onStop} />
     </div>
   );
+}
+
+function friendlyError(locale: "en" | "ru", content: string): string {
+  if (/API key missing/i.test(content)) {
+    return locale === "ru"
+      ? "Добавьте API key в настройках, затем повторите попытку."
+      : "Add an API key in Settings, then try again.";
+  }
+  if (/rate.limit|rate_limit/i.test(content)) {
+    return locale === "ru"
+      ? "Провайдер временно ограничил запросы. Попробуйте ещё раз немного позже."
+      : "The provider is temporarily limiting requests. Try again in a moment.";
+  }
+  const apiError = content.match(/API\s+(\d{3}):\s*([\s\S]*)/i);
+  if (apiError) {
+    const status = Number(apiError[1]);
+    const detail = safeApiErrorDetail(apiError[2]);
+    if (status === 401 || status === 403) {
+      return locale === "ru"
+        ? `Провайдер отклонил API-ключ (HTTP ${status}). Проверьте ключ и доступ к модели.${detail ? ` ${detail}` : ""}`
+        : `The provider rejected the API key (HTTP ${status}). Check the key and model access.${detail ? ` ${detail}` : ""}`;
+    }
+    if (status === 404) {
+      return locale === "ru"
+        ? `Провайдер не нашёл модель или endpoint (HTTP 404). Проверьте ID модели.${detail ? ` ${detail}` : ""}`
+        : `The provider could not find the model or endpoint (HTTP 404). Check the model ID.${detail ? ` ${detail}` : ""}`;
+    }
+    if (status === 429) {
+      return locale === "ru"
+        ? `Провайдер ограничил запросы (HTTP 429). Проверьте лимит или попробуйте позже.${detail ? ` ${detail}` : ""}`
+        : `The provider rate-limited the request (HTTP 429). Check your quota or try again later.${detail ? ` ${detail}` : ""}`;
+    }
+    return locale === "ru"
+      ? `Ошибка провайдера (HTTP ${status}).${detail ? ` ${detail}` : ""}`
+      : `Provider error (HTTP ${status}).${detail ? ` ${detail}` : ""}`;
+  }
+  if (/network|cors|failed to fetch|fetch failed/i.test(content)) {
+    return locale === "ru"
+      ? "Не удалось соединиться с API. Проверьте интернет и повторите попытку."
+      : "Could not connect to the API. Check your internet connection and try again.";
+  }
+  return t(locale, "generationError");
+}
+
+function safeApiErrorDetail(raw: string): string {
+  let detail = raw.trim();
+  try {
+    const parsed: unknown = JSON.parse(detail);
+    if (parsed && typeof parsed === "object") {
+      const record = parsed as { error?: unknown; message?: unknown };
+      const error = record.error;
+      if (typeof error === "string") detail = error;
+      else if (error && typeof error === "object" && "message" in error) {
+        const message = (error as { message?: unknown }).message;
+        if (typeof message === "string") detail = message;
+      } else if (typeof record.message === "string") detail = record.message;
+    }
+  } catch {
+    // Keep plain-text provider errors, but strip credential-like strings below.
+  }
+  return detail
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/sk-[A-Za-z0-9_-]{8,}/g, "[redacted key]")
+    .replace(/tc_live_[A-Za-z0-9_-]{8,}/g, "[redacted key]")
+    .replace(/\s+/g, " ")
+    .slice(0, 180);
 }
 
 function IconBtn({

@@ -34,6 +34,13 @@ interface ChatState {
   appendStreamingToken: (messageId: string, token: string) => void;
 }
 
+const DEFAULT_MODEL_ID = MODEL_CATALOG[0].id;
+
+function getInitialModelId(): string {
+  const stored = localStorage.getItem("glow.model");
+  return MODEL_CATALOG.some((model) => model.id === stored) ? stored! : DEFAULT_MODEL_ID;
+}
+
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
   activeConversationId: null,
@@ -41,10 +48,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   branchPath: [],
   projects: [],
   activeProjectId: null,
-  selectedModelId:
-    localStorage.getItem("glow.model") ||
-    MODEL_CATALOG.find((m) => m.id === "sonnet-5")?.id ||
-    MODEL_CATALOG[0].id,
+  selectedModelId: getInitialModelId(),
   temperature: Number(localStorage.getItem("glow.temperature") || "0.7"),
   maxTokens: Number(localStorage.getItem("glow.maxTokens") || "4096"),
   artifacts: [],

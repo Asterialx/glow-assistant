@@ -6,11 +6,12 @@ import {
   Hand,
   X,
   ArrowUp,
+  Square,
   Globe,
 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { ModelSelector } from "./ModelSelector";
 import { PlusActionMenu } from "./PlusActionMenu";
+import { ModelSelector } from "./ModelSelector";
 import { useChatStore } from "../../stores/chatStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useModeStore } from "../../stores/modeStore";
@@ -38,6 +39,7 @@ interface Props {
   onSend: (text: string, files?: File[]) => void;
   disabled?: boolean;
   centered?: boolean;
+  onStop?: () => void;
 }
 
 const BASE_ACCEPT =
@@ -45,7 +47,7 @@ const BASE_ACCEPT =
 
 const DOT_COUNT = 48;
 
-export function SmartInputBar({ onSend, disabled, centered }: Props) {
+export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const locale = useUiStore((s) => s.locale);
@@ -578,7 +580,7 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
               value={draft}
               disabled={disabled}
               rows={1}
-              placeholder={centered ? t(locale, "placeholderSkills") : t(locale, "placeholder")}
+              placeholder={centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
               className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
               onChange={(e) => {
                 setDraft(e.target.value);
@@ -671,10 +673,9 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   onChange={(e) => setFiles((f) => [...f, ...Array.from(e.target.files || [])])}
                 />
               </div>
+              <ModelSelector />
 
               <div className="ml-auto flex items-center gap-0.5">
-                <ModelSelector />
-
                 <div
                   className="relative"
                   ref={micMenuRef}
@@ -789,7 +790,17 @@ export function SmartInputBar({ onSend, disabled, centered }: Props) {
                   )}
                 </div>
 
-                {canSend && (
+                {disabled && onStop ? (
+                  <button
+                    type="button"
+                    onClick={onStop}
+                    className="ml-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-[var(--fg)] text-[var(--bg)] transition-opacity hover:opacity-85"
+                    title={t(locale, "stopGenerating")}
+                    aria-label={t(locale, "stopGenerating")}
+                  >
+                    <Square size={13} fill="currentColor" strokeWidth={1.8} />
+                  </button>
+                ) : canSend && (
                   <button
                     type="button"
                     onClick={() => submit()}

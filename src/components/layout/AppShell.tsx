@@ -10,27 +10,17 @@ import { useUiStore } from "../../stores/uiStore";
 import {
   addMemory,
   bootstrapDatabases,
-  createConversation,
   deleteWidgetsForMessage,
-  insertMessage,
   listArtifacts,
-  listConversations,
   listMemory,
-  listMessages,
   listProjects,
   listWidgets,
-  logTokenUsage,
-  pathToLeaf,
   saveArtifact,
-  updateConversationLeaf,
-  updateMessageContent,
   upsertWidget,
-  renameConversation,
 } from "../../db";
-import { buildChatPayload, streamChatCompletion } from "../../lib/llm/smartapi";
 import { onGameMode, redactPii, setMcpEnabled } from "../../lib/tauri";
 import { extractPdfText, fileToBase64 } from "../../lib/pdfExtract";
-import { isDefaultChatTitle, nowMs, titleFromFirstMessage, uid } from "../../lib/utils";
+import { nowMs, uid } from "../../lib/utils";
 import type { Artifact, Message, UiWidget } from "../../lib/types";
 import { htmlArtifactTitle, isLabLikeHtml } from "../../lib/artifactDisplay";
 import { detectDesignFrame } from "../../lib/designMode";
@@ -43,6 +33,7 @@ import {
 import { PanelLeft, Search, X } from "lucide-react";
 import { feedbackPreferenceHints } from "../../lib/feedbackProfile";
 import { hydrateExtensionMcp, useExtensionsStore } from "../../lib/extensions/registry";
+import { conversationService, type LegacyGenerationOptions } from "../../conversation/conversationService";
 
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
@@ -79,34 +70,36 @@ export function AppShell() {
     setProjects,
     setArtifacts,
     setActiveArtifactId,
-    setStreaming,
-    appendStreamingToken,
   } = useChatStore();
 
   const [widgetsByMessage, setWidgetsByMessage] = useState<Record<string, UiWidget[]>>({});
   const [ready, setReady] = useState(false);
 
   const reloadConversations = async () => {
-    const list = await listConversations(mode);
-    setConversations(list);
-    return list;
+    return conversationService.refresh(mode);
   };
 
   const loadConversation = async (id: string) => {
-    const msgs = await listMessages(mode, id);
-    setMessages(msgs);
-    const conv = (await listConversations(mode)).find((c) => c.id === id);
-    const path = pathToLeaf(msgs, conv?.active_leaf_id ?? msgs.at(-1)?.id ?? null);
-    setBranchPath(path);
+    await conversationService.select(mode, id);
     const arts = await listArtifacts(mode, id);
     setArtifacts(arts);
     if (arts.length === 0) useUiStore.getState().closeArtifacts();
     const map: Record<string, UiWidget[]> = {};
-    for (const m of msgs) {
+    for (const m of conversationService.getState().messages) {
       map[m.id] = await listWidgets(mode, m.id);
     }
     setWidgetsByMessage(map);
   };
+
+  useEffect(() => {
+    return conversationService.subscribe((state) => {
+      setConversations(state.conversations);
+      setActiveConversationId(state.activeConversationId);
+      setMessages(state.messages);
+      setBranchPath(state.branchPath);
+      useChatStore.getState().setStreaming(state.streaming);
+    });
+  }, [setActiveConversationId, setBranchPath, setConversations, setMessages]);
 
   useEffect(() => {
     (async () => {
@@ -117,6 +110,18 @@ export function AppShell() {
     onGameMode((s) => setGameModeActive(s.active));
   }, [setGameModeActive]);
 
+  // A sidebar must never consume the narrow chat column. On compact screens it
+  // starts closed and, when requested, is rendered as an overlay below.
+  useEffect(() => {
+    const desktop = window.matchMedia("(min-width: 768px)");
+    const closeOnCompactScreen = () => {
+      if (!desktop.matches) setSidebarOpen(false);
+    };
+    closeOnCompactScreen();
+    desktop.addEventListener("change", closeOnCompactScreen);
+    return () => desktop.removeEventListener("change", closeOnCompactScreen);
+  }, [setSidebarOpen]);
+
   useEffect(() => {
     if (!ready) return;
     (async () => {
@@ -124,9 +129,7 @@ export function AppShell() {
       const projs = await listProjects(mode);
       setProjects(projs);
       // Empty-first Claude style: don't auto-open last chat on mode switch if none selected
-      setActiveConversationId(null);
-      setMessages([]);
-      setBranchPath([]);
+      conversationService.startNew();
       setArtifacts([]);
       useUiStore.getState().closeArtifacts();
       void list;
@@ -135,11 +138,25 @@ export function AppShell() {
   }, [mode, ready]);
 
   const ensureConversation = async () => {
-    if (activeConversationId) return activeConversationId;
-    const c = await createConversation(mode, activeProjectId);
-    await reloadConversations();
-    setActiveConversationId(c.id);
-    return c.id;
+    return (await conversationService.ensureConversation(mode, activeProjectId)).id;
+  };
+
+  const createGenerationOptions = async (): Promise<LegacyGenerationOptions> => {
+    const project = projects.find((item) => item.id === activeProjectId);
+    const custom = localStorage.getItem("glow.instructions") || "";
+    const memory = memoryPaused ? [] : (await listMemory()).map((item) => item.fact);
+    const feedback = feedbackPreferenceHints();
+    const extensions = useExtensionsStore.getState().capabilityHints();
+    return {
+      mode,
+      modelId: selectedModelId,
+      temperature,
+      maxTokens,
+      systemExtra: [project?.system_prompt, custom, feedback, extensions].filter(Boolean).join("\n\n"),
+      memory,
+      designMode,
+      webSearch,
+    };
   };
 
   const extractMemory = async (assistantText: string) => {
@@ -417,218 +434,100 @@ export function AppShell() {
       content = (await redactPii(content)).text;
     }
 
-    // Name chat from the first user question (skip if already renamed / branch edit)
-    const existing = useChatStore.getState().conversations.find((c) => c.id === convId);
-    if ((!existing || isDefaultChatTitle(existing.title)) && parentOverride === undefined) {
-      const title = titleFromFirstMessage(text);
-      if (title && !isDefaultChatTitle(title)) {
-        await renameConversation(mode, convId, title);
-        await reloadConversations();
-      }
-    }
-
-    const userMsg: Message = {
-      id: uid(),
-      conversation_id: convId,
-      parent_id: parentId,
-      role: "user",
+    const result = await conversationService.send({
+      scope: mode,
+      conversationId: convId,
       content,
-      model_id: null,
-      status: "done",
-      created_at: nowMs(),
-    };
-    await insertMessage(mode, userMsg);
-
-    const assistantId = uid();
-    const assistantMsg: Message = {
-      id: assistantId,
-      conversation_id: convId,
-      parent_id: userMsg.id,
-      role: "assistant",
-      content: "",
-      model_id: selectedModelId,
-      status: "streaming",
-      created_at: nowMs(),
-    };
-    await insertMessage(mode, assistantMsg);
-    await updateConversationLeaf(mode, convId, assistantId);
-
-    const msgs = await listMessages(mode, convId);
-    setMessages(msgs);
-    setBranchPath(pathToLeaf(msgs, assistantId));
-    setStreaming(true);
-
-    const project = projects.find((p) => p.id === activeProjectId);
-    const custom = localStorage.getItem("glow.instructions") || "";
-    const memory = memoryPaused ? [] : (await listMemory()).map((m) => m.fact);
-    const feedback = feedbackPreferenceHints();
-    const extensions = useExtensionsStore.getState().capabilityHints();
-    const systemExtra = [project?.system_prompt, custom, feedback, extensions]
-      .filter(Boolean)
-      .join("\n\n");
-    const payload = buildChatPayload(
-      mode,
-      pathToLeaf(msgs, assistantId).filter((m) => m.id !== assistantId),
-      systemExtra,
-      memory,
-      false,
-      selectedModelId,
-      designMode,
-      webSearch,
-    );
-
-    await streamChatCompletion(
-      selectedModelId,
-      payload,
-      {
-      onToken: (token) => appendStreamingToken(assistantId, token),
-      onDone: async (usage) => {
-        const finalContent =
-          useChatStore.getState().branchPath.find((m) => m.id === assistantId)?.content || "";
-        await updateMessageContent(mode, assistantId, finalContent, "done");
-        await logTokenUsage({
-          mode,
-          conversation_id: convId,
-          message_id: assistantId,
-          model_id: selectedModelId,
-          input_tokens: usage.inputTokens,
-          output_tokens: usage.outputTokens,
-          cost_units: usage.costUnits,
-        });
-        await maybeSpawnArtifacts(convId, assistantId, finalContent, text);
-        await extractMemory(finalContent);
-        setStreaming(false);
-        await loadConversation(convId);
-        await reloadConversations();
-      },
-      onError: async (err) => {
-        await updateMessageContent(mode, assistantId, `Error: ${err.message}`, "error");
-        setStreaming(false);
-        await loadConversation(convId);
-      },
-      },
-      undefined,
-      { temperature, maxTokens },
-    );
+      modelId: selectedModelId,
+      generation: await createGenerationOptions(),
+      ...(parentOverride !== undefined ? { parentId } : {}),
+      titleSource: text,
+    });
+    if (!result) return;
+    if (!result.error) {
+      await maybeSpawnArtifacts(convId, result.assistantMessage.id, result.assistantMessage.content, text);
+      await extractMemory(result.assistantMessage.content);
+    }
+    await loadConversation(convId);
   };
 
   /** Re-run assistant reply under the same user message (new branch leaf). */
   const handleRegenerate = async (assistantMessage: Message) => {
-    if (streaming || assistantMessage.role !== "assistant") return;
-    const convId = assistantMessage.conversation_id;
-    const parentUserId = assistantMessage.parent_id;
-    if (!parentUserId) return;
-
-    const all = await listMessages(mode, convId);
-    const userMsg = all.find((m) => m.id === parentUserId && m.role === "user");
-    if (!userMsg) return;
-
-    const assistantId = uid();
-    const assistantMsg: Message = {
-      id: assistantId,
-      conversation_id: convId,
-      parent_id: parentUserId,
-      role: "assistant",
-      content: "",
-      model_id: selectedModelId,
-      status: "streaming",
-      created_at: nowMs(),
-    };
-    await insertMessage(mode, assistantMsg);
-    await updateConversationLeaf(mode, convId, assistantId);
-
-    const msgs = await listMessages(mode, convId);
-    setMessages(msgs);
-    setBranchPath(pathToLeaf(msgs, assistantId));
-    setStreaming(true);
-
-    const project = projects.find((p) => p.id === activeProjectId);
-    const custom = localStorage.getItem("glow.instructions") || "";
-    const memory = memoryPaused ? [] : (await listMemory()).map((m) => m.fact);
-    const feedback = feedbackPreferenceHints();
-    const extensions = useExtensionsStore.getState().capabilityHints();
-    const systemExtra = [project?.system_prompt, custom, feedback, extensions]
-      .filter(Boolean)
-      .join("\n\n");
-    const history = pathToLeaf(msgs, assistantId).filter((m) => m.id !== assistantId);
-    const payload = buildChatPayload(
-      mode,
-      history,
-      systemExtra,
-      memory,
-      false,
-      selectedModelId,
-      designMode,
-      webSearch,
-    );
-
-    await streamChatCompletion(
-      selectedModelId,
-      payload,
-      {
-        onToken: (token) => appendStreamingToken(assistantId, token),
-        onDone: async (usage) => {
-          const finalContent =
-            useChatStore.getState().branchPath.find((m) => m.id === assistantId)?.content || "";
-          await updateMessageContent(mode, assistantId, finalContent, "done");
-          await logTokenUsage({
-            mode,
-            conversation_id: convId,
-            message_id: assistantId,
-            model_id: selectedModelId,
-            input_tokens: usage.inputTokens,
-            output_tokens: usage.outputTokens,
-            cost_units: usage.costUnits,
-          });
-          await maybeSpawnArtifacts(convId, assistantId, finalContent, userMsg.content);
-          await extractMemory(finalContent);
-          setStreaming(false);
-          await loadConversation(convId);
-          await reloadConversations();
-        },
-        onError: async (err) => {
-          await updateMessageContent(mode, assistantId, `Error: ${err.message}`, "error");
-          setStreaming(false);
-          await loadConversation(convId);
-        },
-      },
-      undefined,
-      { temperature, maxTokens },
-    );
+    const result = await conversationService.regenerate({
+      scope: mode,
+      assistantMessage,
+      modelId: selectedModelId,
+      generation: await createGenerationOptions(),
+    });
+    if (!result) return;
+    if (!result.error) {
+      const userMessage = conversationService
+        .getState()
+        .messages.find((message) => message.id === assistantMessage.parent_id);
+      await maybeSpawnArtifacts(
+        result.conversationId,
+        result.assistantMessage.id,
+        result.assistantMessage.content,
+        userMessage?.content || "",
+      );
+      await extractMemory(result.assistantMessage.content);
+    }
+    await loadConversation(result.conversationId);
   };
 
   const handleEditBranch = async (message: Message, editedText: string) => {
-    const edited = editedText.trim();
-    if (!edited || edited === message.content) return;
-    // Branch from the parent of the edited user message (do not rely on async setState)
-    await updateConversationLeaf(mode, message.conversation_id, message.parent_id);
-    const msgs = await listMessages(mode, message.conversation_id);
-    setMessages(msgs);
-    setBranchPath(pathToLeaf(msgs, message.parent_id));
-    setActiveConversationId(message.conversation_id);
-    await handleSend(edited, undefined, message.parent_id);
+    let content = editedText.trim();
+    if (mode === "med") content = (await redactPii(content)).text;
+    const result = await conversationService.editAndResend({
+      scope: mode,
+      editedMessage: message,
+      content,
+      modelId: selectedModelId,
+      generation: await createGenerationOptions(),
+      conversationId: message.conversation_id,
+      parentId: message.parent_id,
+      titleSource: editedText,
+    });
+    if (!result) return;
+    if (!result.error) {
+      await maybeSpawnArtifacts(
+        result.conversationId,
+        result.assistantMessage.id,
+        result.assistantMessage.content,
+        editedText,
+      );
+      await extractMemory(result.assistantMessage.content);
+    }
+    await loadConversation(result.conversationId);
   };
 
   return (
     <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
       {sidebarOpen && (
-        <ClaudeSidebar
-          onNewChat={async () => {
-            setActiveConversationId(null);
-            setMessages([]);
-            setBranchPath([]);
-            setArtifacts([]);
-            useUiStore.getState().closeArtifacts();
-          }}
-          onSelectConversation={async (id) => {
-            setActiveConversationId(id);
-            await loadConversation(id);
-          }}
-          onProjectsChanged={async () => setProjects(await listProjects(mode))}
-          onConversationsChanged={async () => {
-            await reloadConversations();
-          }}
-        />
+        <>
+          <button
+            type="button"
+            aria-label="Close sidebar"
+            className="fixed inset-0 z-30 bg-black/35 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 z-40 shadow-2xl md:static md:z-auto md:shadow-none">
+            <ClaudeSidebar
+              onNewChat={async () => {
+                conversationService.startNew();
+                setArtifacts([]);
+                useUiStore.getState().closeArtifacts();
+              }}
+              onSelectConversation={async (id) => {
+                await loadConversation(id);
+              }}
+              onProjectsChanged={async () => setProjects(await listProjects(mode))}
+              onConversationsChanged={async () => {
+                await reloadConversations();
+              }}
+            />
+          </div>
+        </>
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -716,6 +615,7 @@ export function AppShell() {
             }}
             onSend={handleSend}
             streaming={streaming}
+            onStop={() => conversationService.stopGeneration()}
           />
           {artifactsOpen && (
             <ArtifactsPanel

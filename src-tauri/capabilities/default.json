@@ -28,6 +28,7 @@
     {
       "identifier": "http:default",
       "allow": [
+        { "url": "https://co.agentrouter.org/**" },
         { "url": "https://api.smartapi.shop/**" },
         { "url": "https://huggingface.co/**" },
         { "url": "https://*.huggingface.co/**" },

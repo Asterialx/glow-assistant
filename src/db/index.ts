@@ -392,6 +392,11 @@ export async function updateMessageContent(
   ]);
 }
 
+export async function deleteMessage(mode: AppMode, id: string) {
+  const db = await getModeDb(mode);
+  await db.execute(`DELETE FROM messages WHERE id = $1`, [id]);
+}
+
 export async function listMessages(mode: AppMode, conversationId: string): Promise<Message[]> {
   const db = await getModeDb(mode);
   return db.select<Message>(

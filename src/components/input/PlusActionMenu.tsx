@@ -15,9 +15,10 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useChatStore } from "../../stores/chatStore";
 import { useModeStore } from "../../stores/modeStore";
 import { useUiStore } from "../../stores/uiStore";
-import { createProject, listConversations, setConversationProject } from "../../db";
+import { createProject } from "../../db";
 import { cn } from "../../lib/utils";
 import { enableChromeAgent, enableGlowDesign } from "../../lib/glowExtensions";
+import { conversationService } from "../../conversation/conversationService";
 
 type SubKey = "project" | "skills" | "connector" | null;
 
@@ -50,7 +51,6 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const setProjects = useChatStore((s) => s.setProjects);
   const setActiveProjectId = useChatStore((s) => s.setActiveProjectId);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
-  const setConversations = useChatStore((s) => s.setConversations);
   const setDraft = useChatStore((s) => s.setDraft);
   const draft = useChatStore((s) => s.draft);
   const setAppsOpen = useUiStore((s) => s.setAppsOpen);
@@ -165,8 +165,7 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
               onClick={async () => {
                 setActiveProjectId(p.id);
                 if (activeConversationId) {
-                  await setConversationProject(mode, activeConversationId, p.id);
-                  setConversations(await listConversations(mode));
+                  await conversationService.setConversationProject(mode, activeConversationId, p.id);
                 }
                 onClose();
               }}
@@ -183,8 +182,7 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
                 setProjects([created, ...projects]);
                 setActiveProjectId(created.id);
                 if (activeConversationId) {
-                  await setConversationProject(mode, activeConversationId, created.id);
-                  setConversations(await listConversations(mode));
+                  await conversationService.setConversationProject(mode, activeConversationId, created.id);
                 }
                 onClose();
               }}

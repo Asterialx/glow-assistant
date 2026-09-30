@@ -1,5 +1,6 @@
 import type { UiWidget } from "./types";
 import { nowMs, uid } from "./utils";
+import { extractCodeArtifact } from "./artifactCode";
 
 export type WidgetPayload =
   | { type: "checklist"; items: Array<{ text: string; done: boolean }> }
@@ -335,13 +336,4 @@ export function hasIncompleteWidgetFence(text: string): boolean {
 }
 
 /** Code blocks large enough for the Artifacts panel (not tiny snippets / widgets). */
-export function extractCodeArtifact(text: string): { lang: string; body: string } | null {
-  const withoutWidgets = text.replace(WIDGET_FENCE_RE, "");
-  const re = /```(tsx?|jsx?|python|rs|ts|js)\b[^\n]*\n([\s\S]*?)```/i;
-  const m = withoutWidgets.match(re);
-  if (!m) return null;
-  const body = (m[2] ?? "").trimEnd();
-  const lines = body.split("\n").filter((l) => l.trim()).length;
-  if (lines < 8) return null;
-  return { lang: (m[1] || "code").toLowerCase(), body };
-}
+export { extractCodeArtifact };

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Artifact } from "../../lib/types";
-import { Box, Code2, ExternalLink, FileText, Layers, Monitor, Smartphone, X } from "lucide-react";
+import { Box, Check, Code2, Copy, ExternalLink, FileText, Layers, Monitor, Smartphone, X } from "lucide-react";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
@@ -348,6 +348,7 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
   const [jupyterOut, setJupyterOut] = useState("");
   const [jupyterBusy, setJupyterBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const closeArtifacts = useUiStore((s) => s.closeArtifacts);
   const locale = useUiStore((s) => s.locale);
   const width = useUiStore((s) => s.artifactsWidth);
@@ -403,6 +404,17 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
       setJupyterOut(e instanceof Error ? e.message : String(e));
     } finally {
       setJupyterBusy(false);
+    }
+  };
+
+  const copyCode = async () => {
+    if (!active?.content_text) return;
+    try {
+      await navigator.clipboard.writeText(active.content_text);
+      setCopiedCode(true);
+      window.setTimeout(() => setCopiedCode(false), 1500);
+    } catch {
+      // Clipboard access is optional in restricted WebViews.
     }
   };
 
@@ -483,11 +495,33 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
           />
         )}
         {active?.kind === "code" && (
-          <pre className="h-full overflow-auto p-3 font-[family-name:var(--font-mono)] text-xs leading-relaxed">
-            <Code2 className="mb-2 inline" size={14} /> {active.title}
-            {"\n\n"}
-            {active.content_text}
-          </pre>
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
+              <Code2 size={14} className="text-[var(--accent)]" />
+              <span className="min-w-0 flex-1 truncate font-[family-name:var(--font-mono)] text-xs text-[var(--fg-muted)]">
+                {active.title || "Code"}
+              </span>
+              <button
+                type="button"
+                disabled={!active.content_text}
+                onClick={() => void copyCode()}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] disabled:opacity-50"
+                aria-label={locale === "ru" ? "Скопировать код" : "Copy code"}
+              >
+                {copiedCode ? <Check size={12} /> : <Copy size={12} />}
+                {copiedCode ? (locale === "ru" ? "Скопировано" : "Copied") : (locale === "ru" ? "Копировать" : "Copy")}
+              </button>
+            </div>
+            {active.content_text ? (
+              <pre className="min-h-0 flex-1 overflow-auto p-3 font-[family-name:var(--font-mono)] text-xs leading-relaxed text-[var(--fg)]">
+                {active.content_text}
+              </pre>
+            ) : (
+              <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-[var(--fg-muted)]">
+                {locale === "ru" ? "В этом Artifact пока нет кода." : "This Artifact has no code yet."}
+              </div>
+            )}
+          </div>
         )}
         {(active?.kind === "stl" || active?.kind === "obj") && (
           <ModelViewer source={active.content_text || ""} ext={active.kind} />

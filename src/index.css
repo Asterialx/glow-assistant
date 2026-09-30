@@ -79,6 +79,12 @@ body {
 .prose-chat p {
   margin: 0.55em 0;
 }
+.prose-chat > :first-child {
+  margin-top: 0;
+}
+.prose-chat > :last-child {
+  margin-bottom: 0;
+}
 .prose-chat pre {
   background: var(--bg-input);
   border: 1px solid var(--border);
