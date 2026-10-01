@@ -7,6 +7,7 @@ import { forceGameMode, getGameModeStatus, safeInvoke } from "../../lib/tauri";
 export function SettingsPanel() {
   const [key, setKey] = useState(
     localStorage.getItem("claude2.apiKey") ||
+      localStorage.getItem("glow.apiKey") ||
       import.meta.env.VITE_SMARTAPI_KEY ||
       "",
   );

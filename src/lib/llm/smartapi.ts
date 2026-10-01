@@ -25,12 +25,12 @@ function getBaseUrl(): string {
   return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1";
 }
 
-function getApiKey(): string {
-  const configured = import.meta.env.VITE_SMARTAPI_KEY;
-  if (configured) return configured;
-
+function getApiKeys(): string[] {
   const stored = localStorage.getItem("claude2.apiKey") || localStorage.getItem("glow.apiKey");
-  return stored || "";
+  // Prefer a key explicitly saved in Glow; the build-time key is a fallback.
+  // If the saved key has since been revoked, the request path retries with this fallback.
+  const candidates = [stored?.trim(), import.meta.env.VITE_SMARTAPI_KEY?.trim()];
+  return [...new Set(candidates.filter((key): key is string => Boolean(key)))];
 }
 
 export function setApiKey(key: string) {
@@ -194,8 +194,8 @@ export async function streamChatCompletion(
 ): Promise<void> {
   const model = getModel(modelId);
   const url = `${getBaseUrl()}/chat/completions`;
-  const key = getApiKey();
-  if (!key) {
+  const apiKeys = getApiKeys();
+  if (apiKeys.length === 0) {
     callbacks.onError(
       new Error("API key missing. Set VITE_SMARTAPI_KEY or paste a key in Settings."),
     );
@@ -223,15 +223,20 @@ export async function streamChatCompletion(
       console.warn("Chat payload large", approxBytes, "— stripping further");
     }
 
-    const res = await apiFetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
+    let res: Response | undefined;
+    for (const [index, key] of apiKeys.entries()) {
+      res = await apiFetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${key}`,
+        },
+        body: JSON.stringify(body),
+        signal,
+      });
+      if ((res.status !== 401 && res.status !== 403) || index === apiKeys.length - 1) break;
+    }
+    if (!res) throw new Error("No API response");
 
     if (!res.ok) {
       const text = (await res.text().catch(() => "")).trim();

@@ -94,10 +94,13 @@ function HtmlDesignPreview({
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[linear-gradient(160deg,#1c1917_0%,#292524_100%)] p-4">
           <div
             className="relative shrink-0 rounded-[2.2rem] border-[3px] border-[#44403c] bg-black p-[10px] shadow-2xl"
-            style={{ width: 320 }}
+            style={{ width: 300 }}
           >
             <div className="absolute left-1/2 top-2 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black" />
-            <div className="overflow-hidden rounded-[1.7rem] bg-white" style={{ height: 640 }}>
+            <div
+              className="overflow-hidden rounded-[1.7rem] bg-white"
+              style={{ height: "min(520px, 58vh)" }}
+            >
               <iframe
                 title="phone-preview"
                 sandbox="allow-scripts"

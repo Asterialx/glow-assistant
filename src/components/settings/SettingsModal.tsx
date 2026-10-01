@@ -208,7 +208,10 @@ export function SettingsModal() {
   const [voiceSpeed, setVoiceSpeed] = useState(localStorage.getItem("glow.voiceSpeed") || "Normal");
   const [notifyDone, setNotifyDone] = useState(() => loadFlag("glow.notifyDone", false));
   const [apiKey, setApiKeyState] = useState(
-    localStorage.getItem("claude2.apiKey") || import.meta.env.VITE_SMARTAPI_KEY || "",
+    localStorage.getItem("claude2.apiKey") ||
+      localStorage.getItem("glow.apiKey") ||
+      import.meta.env.VITE_SMARTAPI_KEY ||
+      "",
   );
 
   // Capabilities
