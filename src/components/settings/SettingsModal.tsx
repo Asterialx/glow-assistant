@@ -26,11 +26,9 @@ import {
 import { useUiStore } from "../../stores/uiStore";
 import { THEMES, type ThemeId } from "../../lib/themes";
 import { t, type Locale } from "../../lib/i18n";
-import { setApiKey } from "../../lib/llm/smartapi";
 import { DevicesSection } from "./DevicesSection";
 import { AgentsPanel } from "../panels/AgentsPanel";
 import { StudyPanel } from "../panels/StudyPanel";
-import { MedPanel } from "../panels/MedPanel";
 import {
   getOrCreateAccount,
   getDeviceName,
@@ -60,8 +58,7 @@ type TabId =
   | "memory"
   | "agents"
   | "study"
-  | "med"
-  | "med-tools";
+  | "med";
 
 type NavItem = { id: TabId; label: string; icon: typeof Gear };
 type NavGroup = { title: string; items: NavItem[] };
@@ -207,12 +204,6 @@ export function SettingsModal() {
   const [voiceStyle, setVoiceStyle] = useState(localStorage.getItem("glow.voiceStyle") || "Glassy");
   const [voiceSpeed, setVoiceSpeed] = useState(localStorage.getItem("glow.voiceSpeed") || "Normal");
   const [notifyDone, setNotifyDone] = useState(() => loadFlag("glow.notifyDone", false));
-  const [apiKey, setApiKeyState] = useState(
-    localStorage.getItem("claude2.apiKey") ||
-      localStorage.getItem("glow.apiKey") ||
-      import.meta.env.VITE_SMARTAPI_KEY ||
-      "",
-  );
 
   // Capabilities
   const [toolMode, setToolMode] = useState(
@@ -282,7 +273,6 @@ export function SettingsModal() {
           { id: "agents", label: "Agents & MCP", icon: Bot },
           { id: "developer", label: "Developer", icon: Wrench },
           { id: "study", label: "Study & Focus", icon: BookOpen },
-          { id: "med-tools", label: "Med tools", icon: Shield },
         ],
       },
       {
@@ -632,34 +622,20 @@ export function SettingsModal() {
                   <h2 className="mb-2 text-[18px] font-semibold tracking-tight">API</h2>
                   <SettingRow
                     title="Base URL"
-                    description={hint("AgentRouter endpoint (read-only).", "Адрес AgentRouter (только чтение).")}
+                    description={hint("xKiro endpoint (read-only).", "Адрес xKiro (только чтение).")}
                   >
                     <input
                       readOnly
-                      value={import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1"}
+                      value={import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.xkiro.com/v1"}
                       className="w-64 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-[family-name:var(--font-mono)] text-[11.5px]"
                     />
                   </SettingRow>
-                  <SettingRow
-                    title="API key"
-                    description={hint("AgentRouter key for chat.", "Ключ AgentRouter для чата.")}
-                  >
-                    <div className="flex gap-2">
-                      <input
-                        type="password"
-                        value={apiKey}
-                        onChange={(e) => setApiKeyState(e.target.value)}
-                        className="w-48 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-[family-name:var(--font-mono)] text-[12px]"
-                      />
-                      <button
-                        type="button"
-                        className="rounded-xl bg-[var(--fg)] px-3 py-2 text-[12.5px] text-[var(--bg)]"
-                        onClick={() => setApiKey(apiKey)}
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </SettingRow>
+                  <p className="text-[12.5px] text-[var(--fg-muted)]">
+                    {hint(
+                      "The provider credential is kept on the local development server and is never entered or stored in the app.",
+                      "Ключ провайдера хранится только на локальном сервере разработки и не вводится и не сохраняется в приложении.",
+                    )}
+                  </p>
                 </section>
               </div>
             )}
@@ -1217,12 +1193,6 @@ export function SettingsModal() {
             {tab === "study" && (
               <div className="-mx-4 max-h-[min(70vh,720px)] overflow-y-auto px-2">
                 <StudyPanel />
-              </div>
-            )}
-
-            {tab === "med-tools" && (
-              <div className="-mx-4 max-h-[min(70vh,720px)] overflow-y-auto px-2">
-                <MedPanel />
               </div>
             )}
 

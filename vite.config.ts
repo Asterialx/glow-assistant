@@ -41,6 +41,14 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         secure: true,
         rewrite: (path) => path.replace(/^\/smartapi/, apiPath),
+        configure: (proxy) => {
+          proxy.on("proxyReq", (proxyRequest) => {
+            const providerApiKey = env.OPENROUTER_API_KEY || env.XKIRO_API_KEY;
+            if (providerApiKey) {
+              proxyRequest.setHeader("Authorization", `Bearer ${providerApiKey}`);
+            }
+          });
+        },
       },
     },
   },

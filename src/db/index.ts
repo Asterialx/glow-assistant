@@ -1,7 +1,7 @@
-import { MODEL_CATALOG } from "../lib/models";
 import type {
   AppMode,
   Artifact,
+  ArtifactRevision,
   Conversation,
   GlobalMemory,
   Message,
@@ -48,6 +48,19 @@ class MemoryDb {
       const row = this.tables[table].find((r) => r.id === whereId);
       if (!row) return { rowsAffected: 0 };
 
+      if (table === "artifacts" && /set conversation_id/i.test(query) && binds.length >= 8) {
+        Object.assign(row, {
+          conversation_id: binds[0],
+          message_id: binds[1],
+          kind: binds[2],
+          title: binds[3],
+          content_path: binds[4],
+          content_text: binds[5],
+          meta_json: binds[6],
+        });
+        return { rowsAffected: 1 };
+      }
+
       if (/set content/i.test(query) && binds.length >= 3) {
         row.content = binds[0];
         row.status = binds[1];
@@ -87,6 +100,8 @@ class MemoryDb {
         this.tables[table] = this.tables[table].filter((r) => r.conversation_id !== binds[0]);
       } else if (/where\s+message_id\s*=\s*\$1/i.test(query)) {
         this.tables[table] = this.tables[table].filter((r) => r.message_id !== binds[0]);
+      } else if (/where\s+artifact_id\s*=\s*\$1/i.test(query)) {
+        this.tables[table] = this.tables[table].filter((r) => r.artifact_id !== binds[0]);
       }
       return { rowsAffected: before - this.tables[table].length };
     }
@@ -119,6 +134,10 @@ class MemoryDb {
     if (whereMsg) {
       rows = rows.filter((r) => r.message_id === binds[0]);
     }
+    const whereArtifact = query.match(/where\s+artifact_id\s*=\s*\$1/i);
+    if (whereArtifact) {
+      rows = rows.filter((r) => r.artifact_id === binds[0]);
+    }
     const whereType = query.match(/where\s+record_type\s*=\s*\$1/i);
     if (whereType) {
       rows = rows.filter((r) => r.record_type === binds[0]);
@@ -130,6 +149,9 @@ class MemoryDb {
     }
     if (/order by sort_order/i.test(query)) {
       rows.sort((a, b) => Number(a.sort_order) - Number(b.sort_order));
+    }
+    if (/order by revision_number/i.test(query)) {
+      rows.sort((a, b) => Number(a.revision_number) - Number(b.revision_number));
     }
     const limit = query.match(/limit\s+(\d+)/i);
     if (limit) rows = rows.slice(0, Number(limit[1]));
@@ -160,6 +182,10 @@ CREATE TABLE IF NOT EXISTS artifacts (
   id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, message_id TEXT,
   kind TEXT NOT NULL, title TEXT, content_path TEXT, content_text TEXT,
   meta_json TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS artifact_revisions (
+  id TEXT PRIMARY KEY, artifact_id TEXT NOT NULL, revision_number INTEGER NOT NULL,
+  kind TEXT NOT NULL, title TEXT, content_path TEXT, content_text TEXT,
+  meta_json TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL, source_message_id TEXT);
 CREATE TABLE IF NOT EXISTS domain_records (
   id TEXT PRIMARY KEY, record_type TEXT NOT NULL, payload_json TEXT NOT NULL,
   created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
@@ -217,25 +243,6 @@ export async function initMetaDb(): Promise<DbLike> {
   metaDb = await loadDb("glow_meta");
   await execStatements(metaDb, META_SQL);
 
-  const existing = await metaDb.select<{ id: string }>("SELECT id FROM model_catalog LIMIT 1");
-  if (existing.length === 0) {
-    for (const m of MODEL_CATALOG) {
-      await metaDb.execute(
-        `INSERT INTO model_catalog (id, display_name, provider, cost_multiplier, cost_per_image, tier, use_case, sort_order, enabled)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1)`,
-        [
-          m.id,
-          m.displayName,
-          m.provider,
-          m.costMultiplier,
-          m.costPerImage,
-          m.tier,
-          m.useCase,
-          m.sortOrder,
-        ],
-      );
-    }
-  }
   return metaDb;
 }
 
@@ -325,6 +332,10 @@ export async function renameConversation(mode: AppMode, id: string, title: strin
 
 export async function deleteConversation(mode: AppMode, id: string) {
   const db = await getModeDb(mode);
+  const artifacts = await listArtifacts(mode, id);
+  for (const artifact of artifacts) {
+    await db.execute(`DELETE FROM artifact_revisions WHERE artifact_id = $1`, [artifact.id]);
+  }
   await db.execute(`DELETE FROM messages WHERE conversation_id = $1`, [id]);
   await db.execute(`DELETE FROM artifacts WHERE conversation_id = $1`, [id]);
   await db.execute(`DELETE FROM attachments WHERE conversation_id = $1`, [id]);
@@ -619,6 +630,89 @@ export async function listDomainRecords(mode: AppMode, recordType: string) {
 export async function bootstrapDatabases() {
   await initMetaDb();
   await getModeDb("home");
-  await getModeDb("code");
-  await getModeDb("med");
+}
+
+export async function updateArtifact(mode: AppMode, artifact: Artifact) {
+  const db = await getModeDb(mode);
+  await db.execute(
+    `UPDATE artifacts SET conversation_id=$1, message_id=$2, kind=$3, title=$4,
+      content_path=$5, content_text=$6, meta_json=$7 WHERE id=$8`,
+    [
+      artifact.conversation_id,
+      artifact.message_id,
+      artifact.kind,
+      artifact.title,
+      artifact.content_path,
+      artifact.content_text,
+      artifact.meta_json,
+      artifact.id,
+    ],
+  );
+}
+
+export async function listArtifactRevisions(mode: AppMode, artifactId: string): Promise<ArtifactRevision[]> {
+  const db = await getModeDb(mode);
+  return db.select<ArtifactRevision>(
+    `SELECT * FROM artifact_revisions WHERE artifact_id=$1 ORDER BY revision_number ASC`,
+    [artifactId],
+  );
+}
+
+export async function snapshotArtifactRevision(
+  mode: AppMode,
+  artifact: Artifact,
+  sourceMessageId: string | null,
+) {
+  const db = await getModeDb(mode);
+  const revisions = await listArtifactRevisions(mode, artifact.id);
+  const revision: ArtifactRevision = {
+    id: uid(),
+    artifact_id: artifact.id,
+    revision_number: revisions.length + 1,
+    kind: artifact.kind,
+    title: artifact.title,
+    content_path: artifact.content_path,
+    content_text: artifact.content_text,
+    meta_json: artifact.meta_json,
+    created_at: nowMs(),
+    source_message_id: sourceMessageId,
+  };
+  await db.execute(
+    `INSERT INTO artifact_revisions (id, artifact_id, revision_number, kind, title, content_path, content_text, meta_json, created_at, source_message_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [
+      revision.id,
+      revision.artifact_id,
+      revision.revision_number,
+      revision.kind,
+      revision.title,
+      revision.content_path,
+      revision.content_text,
+      revision.meta_json,
+      revision.created_at,
+      revision.source_message_id,
+    ],
+  );
+  return revision;
+}
+
+export async function restoreArtifactRevision(mode: AppMode, artifactId: string, revisionId: string) {
+  const db = await getModeDb(mode);
+  const [current] = await db.select<Artifact>(`SELECT * FROM artifacts WHERE id=$1`, [artifactId]);
+  const [revision] = await db.select<ArtifactRevision>(
+    `SELECT * FROM artifact_revisions WHERE id=$1`,
+    [revisionId],
+  );
+  if (!current || !revision || revision.artifact_id !== artifactId) return null;
+  await snapshotArtifactRevision(mode, current, current.message_id);
+  const restored: Artifact = {
+    ...current,
+    kind: revision.kind,
+    title: revision.title,
+    content_path: revision.content_path,
+    content_text: revision.content_text,
+    meta_json: revision.meta_json,
+  };
+  await updateArtifact(mode, restored);
+  return restored;
 }

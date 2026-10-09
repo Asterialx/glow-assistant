@@ -166,18 +166,29 @@ export async function setMcpEnabled(id: string, enabled: boolean) {
   return safeInvoke("mcp_set_enabled", { id, enabled });
 }
 
-export async function runShell(command: string, cwd?: string) {
-  return safeInvoke<{ stdout: string; stderr: string; code: number }>("run_shell_command", {
-    command,
-    cwd,
-  });
+export async function runShell(
+  command: string,
+  cwd?: string,
+): Promise<{ stdout: string; stderr: string; code: number } | null> {
+  // Arbitrary shell execution is intentionally unavailable in the desktop app.
+  void command;
+  void cwd;
+  return null;
 }
 
 /** Open URL or launch Chrome (Tauri shell; browser fallback). */
 export async function openExternal(url: string) {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+
   try {
     const { open } = await import("@tauri-apps/plugin-shell");
-    await open(url);
+    await open(parsed.toString());
     return true;
   } catch {
     try {
@@ -191,77 +202,15 @@ export async function openExternal(url: string) {
 
 /** Launch Google Chrome; fall back to default browser. */
 export async function openChromeBrowser(url = "https://www.google.com") {
-  const safe = url.replace(/"/g, "");
-  const attempts = [
-    `cmd /c start "" chrome "${safe}"`,
-    `cmd /c start chrome "${safe}"`,
-    `powershell -NoProfile -Command "Start-Process chrome '${safe.replace(/'/g, "''")}'"`,
-  ];
-  for (const command of attempts) {
-    const r = await runShell(command);
-    if (r && r.code === 0) return true;
-  }
-  return openExternal(safe);
+  return openExternal(url);
 }
 
-/** Open a live HTML preview in the default browser / Chrome. */
-export async function openHtmlPreview(html: string): Promise<boolean> {
-  // Always try an in-app browser tab first (works in Vite; sometimes in Tauri too)
-  try {
-    const w = window.open("", "_blank");
-    if (w) {
-      w.document.open();
-      w.document.write(html);
-      w.document.close();
-      return true;
-    }
-  } catch {
-    /* continue */
-  }
-
-  if (!isTauriEnv()) return false;
-
-  // Tauri fallback: write temp HTML via PowerShell -EncodedCommand
-  try {
-    const script = [
-      "$p = Join-Path $env:TEMP 'glow-design-preview.html'",
-      "$html = @'",
-      html.replace(/'@/g, "'@"),
-      "'@",
-      "[IO.File]::WriteAllText($p, $html, [Text.UTF8Encoding]::new($false))",
-      "try { Start-Process chrome $p } catch { Start-Process $p }",
-    ].join("\r\n");
-    const encoded = encodePowerShell(script);
-    const r = await runShell(`powershell -NoProfile -EncodedCommand ${encoded}`);
-    return Boolean(r && r.code === 0);
-  } catch {
-    return false;
-  }
-}
-
-function encodePowerShell(script: string): string {
-  // UTF-16LE → base64 for powershell -EncodedCommand
-  const buf = new Uint8Array(script.length * 2);
-  for (let i = 0; i < script.length; i++) {
-    const c = script.charCodeAt(i);
-    buf[i * 2] = c & 0xff;
-    buf[i * 2 + 1] = (c >> 8) & 0xff;
-  }
-  let bin = "";
-  buf.forEach((b) => {
-    bin += String.fromCharCode(b);
-  });
-  return btoa(bin);
-}
-
-function isTauriEnv(): boolean {
-  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-}
-
-export async function listDirectory(path: string) {
-  return safeInvoke<Array<{ name: string; path: string; is_dir: boolean }>>("list_directory", {
-    path,
-  });
+export async function listDirectory(
+  path: string,
+): Promise<Array<{ name: string; path: string; is_dir: boolean }> | null> {
+  // Arbitrary filesystem traversal is intentionally unavailable in the desktop app.
+  void path;
+  return null;
 }
 
 export async function parseBiomarkers(text: string) {

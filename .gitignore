@@ -16,6 +16,7 @@ tsconfig.tsbuildinfo
 
 # local QA fixtures
 tmp-qa/
+.codex-remote-attachments/
 
 # editors
 .vscode/*

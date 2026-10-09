@@ -83,7 +83,7 @@ export const EXTENSION_CATALOG: ExtensionDef[] = [
       { key: "root", label: "Root path", placeholder: "C:\\Users" },
     ],
     capabilities: [
-      "Filesystem extension ON: you may ask the user for a path and they can list directories with Desktop Agent (list_directory).",
+      "Filesystem access is not available yet. Do not ask the user for arbitrary paths or attempt directory traversal.",
     ],
   },
   {

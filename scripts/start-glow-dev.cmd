@@ -14,4 +14,6 @@ if errorlevel 2 (
   exit /b 0
 )
 
-start "Glow Vite" /MIN cmd /c "npm run dev"
+set "LOG_DIR=%LOCALAPPDATA%\GlowAI\logs"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1
+npm run dev >> "%LOG_DIR%\dev-server.log" 2>&1

@@ -4,6 +4,10 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import type { Artifact, Message, UiWidget } from "../../lib/types";
 import { InlineWidgets } from "../widgets/InlineWidgets";
+import { GenUiArtifact } from "../widgets/GenUiArtifact";
+import { InlineHtmlArtifact } from "../artifacts/InlineHtmlArtifact";
+import { isInlineHtmlArtifact } from "../../lib/htmlArtifact";
+import { recoverInlineArtifacts } from "../../lib/genUi";
 import {
   Pencil,
   Copy,
@@ -14,10 +18,12 @@ import {
   Check,
   X,
   PanelRight,
+  ArrowDown,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useUiStore } from "../../stores/uiStore";
+import { useChatStore } from "../../stores/chatStore";
 import { useModeStore } from "../../stores/modeStore";
 import { t } from "../../lib/i18n";
 import { SmartInputBar } from "../input/SmartInputBar";
@@ -100,6 +106,9 @@ export function ChatPane({
   onStop,
 }: Props) {
   const locale = useUiStore((s) => s.locale);
+  const artifactsOpen = useUiStore((s) => s.artifactsOpen);
+  const closeArtifacts = useUiStore((s) => s.closeArtifacts);
+  const activeArtifactId = useChatStore((s) => s.activeArtifactId);
   const designMode = useModeStore((s) => s.designMode);
   const empty = messages.length === 0;
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -108,6 +117,11 @@ export function ChatPane({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const followMessagesRef = useRef(true);
+  const scrollMetricsRef = useRef({ scrollHeight: 0, clientHeight: 0 });
+  const touchYRef = useRef<number | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   useEffect(() => {
     if (editingId && editRef.current) {
@@ -125,6 +139,59 @@ export function ChatPane({
       stopSpeaking();
     };
   }, [speakingId]);
+
+  useLayoutEffect(() => {
+    const container = messageListRef.current;
+    if (container && followMessagesRef.current) {
+      container.scrollTop = container.scrollHeight;
+    }
+    if (container) {
+      scrollMetricsRef.current = {
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight,
+      };
+    }
+  }, [messages, streaming]);
+
+  const updateScrollFollow = () => {
+    const container = messageListRef.current;
+    if (!container) return;
+    const dimensionsChanged =
+      scrollMetricsRef.current.scrollHeight !== container.scrollHeight ||
+      scrollMetricsRef.current.clientHeight !== container.clientHeight;
+    if (dimensionsChanged && followMessagesRef.current) {
+      container.scrollTop = container.scrollHeight;
+      scrollMetricsRef.current = {
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight,
+      };
+      return;
+    }
+    scrollMetricsRef.current = {
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    };
+    const atBottom = container.scrollHeight - container.clientHeight - container.scrollTop <= 4;
+    followMessagesRef.current = atBottom;
+    setShowScrollToBottom(!atBottom);
+  };
+
+  const stopFollowingOnUpwardGesture = () => {
+    followMessagesRef.current = false;
+    setShowScrollToBottom(true);
+  };
+
+  const jumpToBottomAndFollow = () => {
+    const container = messageListRef.current;
+    if (!container) return;
+    followMessagesRef.current = true;
+    container.scrollTop = container.scrollHeight;
+    scrollMetricsRef.current = {
+      scrollHeight: container.scrollHeight,
+      clientHeight: container.clientHeight,
+    };
+    setShowScrollToBottom(false);
+  };
 
   const copyText = async (id: string, text: string) => {
     try {
@@ -197,8 +264,25 @@ export function ChatPane({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-4 py-6 md:px-8">
+    <div className="relative flex min-h-0 flex-1 flex-col">
+      <div
+        ref={messageListRef}
+        onScroll={updateScrollFollow}
+        onWheel={(event) => {
+          if (event.deltaY < 0) stopFollowingOnUpwardGesture();
+        }}
+        onTouchStart={(event) => {
+          touchYRef.current = event.touches[0]?.clientY ?? null;
+        }}
+        onTouchMove={(event) => {
+          const currentY = event.touches[0]?.clientY;
+          if (currentY != null && touchYRef.current != null && currentY > touchYRef.current) {
+            stopFollowingOnUpwardGesture();
+          }
+          touchYRef.current = currentY ?? null;
+        }}
+        className="flex-1 overflow-y-auto px-4 py-6 md:px-8"
+      >
         <div className="mx-auto flex max-w-[720px] flex-col gap-7">
           {messages.map((m, idx) => {
             const isUser = m.role === "user";
@@ -272,9 +356,10 @@ export function ChatPane({
 
             const display = getAssistantDisplay(m.content, isStreaming);
             const messageArts = artifacts.filter((a) => a.message_id === m.id);
+            const recoveredArts = isStreaming ? [] : recoverInlineArtifacts(m, messageArts);
             // Only real Artifacts — never inline widgets
             const panelArt = messageArts.find((a) =>
-              ["html", "jupyter", "code", "stl", "obj", "dcm", "pdf"].includes(a.kind),
+              ["html", "genui", "jupyter", "code", "stl", "obj", "dcm", "pdf"].includes(a.kind),
             );
             const showBuilding = display.buildingHtml || display.buildingWidget;
             const showResponseStatus = showThinking || showBuilding || isStreaming;
@@ -333,6 +418,13 @@ export function ChatPane({
                       {designMode ? t(locale, "buildingDesign") : t(locale, "buildingArtifact")}
                     </p>
                   )}
+                  {display.incompleteHtml && (
+                    <p role="status" className="mt-2 text-[13px] text-[var(--fg-muted)]">
+                      {locale === "ru"
+                        ? "Артефакт не удалось завершить, поэтому он не показан как готовый. Нажмите «Повторить ответ», чтобы попробовать ещё раз."
+                        : "The artifact did not finish generating, so it was not shown as complete. Regenerate the response to try again."}
+                    </p>
+                  )}
                   {display.buildingWidget && (
                     <p className="mt-1 text-[15px] text-[var(--fg-muted)]">
                       {locale === "ru" ? "Собираю виджет…" : "Building widget…"}
@@ -343,9 +435,32 @@ export function ChatPane({
                   {!isStreaming && widgets.length > 0 && (
                     <InlineWidgets widgets={widgets} onChange={onWidgetChange} />
                   )}
+                  {!isStreaming && [...messageArts, ...recoveredArts].filter((artifact) => artifact.kind === "genui" || isInlineHtmlArtifact(artifact)).map((artifact) =>
+                    artifactsOpen && activeArtifactId === artifact.id ? (
+                      <button
+                        key={artifact.id}
+                        type="button"
+                        onClick={closeArtifacts}
+                        className="my-3 inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
+                      >
+                        <PanelRight size={14} className="text-[var(--accent)]" />
+                        {locale === "ru" ? "Артефакт открыт в рабочей области · Вернуть в чат" : "Artifact is open in Workspace · Return to chat"}
+                      </button>
+                    ) : artifact.kind === "html" ? (
+                      <InlineHtmlArtifact key={artifact.id} artifact={artifact} onExpand={onOpenArtifact} />
+                    ) : (
+                      <GenUiArtifact
+                        key={artifact.id}
+                        artifact={artifact}
+                        surface="inline"
+                        onExpand={recoveredArts.includes(artifact) ? undefined : onOpenArtifact}
+                        onSend={onSend}
+                      />
+                    ),
+                  )}
                 </div>
 
-                {!isStreaming && panelArt && panelArt.kind === "html" && onOpenArtifact && (
+                {!isStreaming && panelArt && panelArt.kind === "html" && !isInlineHtmlArtifact(panelArt) && onOpenArtifact && (
                   <button
                     type="button"
                     onClick={() => onOpenArtifact(panelArt.id)}
@@ -422,6 +537,18 @@ export function ChatPane({
           })}
         </div>
       </div>
+      {showScrollToBottom && (
+        <button
+          type="button"
+          onClick={jumpToBottomAndFollow}
+          aria-label={locale === "ru" ? "Перейти вниз и включить автопрокрутку" : "Jump to bottom and resume auto-scroll"}
+          title={locale === "ru" ? "Перейти вниз и включить автопрокрутку" : "Jump to bottom and resume auto-scroll"}
+          className="absolute bottom-[5.25rem] left-1/2 z-20 inline-flex -translate-x-1/2 items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-2 text-[12px] font-medium text-[var(--fg)] shadow-lg transition-colors hover:bg-[var(--bg-hover)]"
+        >
+          <ArrowDown size={14} />
+          {locale === "ru" ? "Вниз" : "Scroll to bottom"}
+        </button>
+      )}
       <SmartInputBar onSend={onSend} disabled={streaming} onStop={onStop} />
     </div>
   );

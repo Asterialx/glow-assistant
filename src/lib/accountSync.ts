@@ -308,7 +308,6 @@ export function exportSyncPackage(): string {
     locale: localStorage.getItem("glow.locale"),
     instructions: localStorage.getItem("glow.instructions"),
     feedbackProfile: localStorage.getItem("glow.feedbackProfile"),
-    apiKeySet: Boolean(localStorage.getItem("claude2.apiKey") || localStorage.getItem("glow.apiKey")),
     devices: listDevices().map(({ id, name, platform, linkedAt }) => ({
       id,
       name,

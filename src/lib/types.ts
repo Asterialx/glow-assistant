@@ -58,12 +58,25 @@ export interface Artifact {
   id: string;
   conversation_id: string;
   message_id: string | null;
-  kind: "html" | "code" | "pdf" | "stl" | "obj" | "dcm" | "jupyter" | "image";
+  kind: "html" | "genui" | "code" | "pdf" | "stl" | "obj" | "dcm" | "jupyter" | "image";
   title: string | null;
   content_path: string | null;
   content_text: string | null;
   meta_json: string;
   created_at: number;
+}
+
+export interface ArtifactRevision {
+  id: string;
+  artifact_id: string;
+  revision_number: number;
+  kind: Artifact["kind"];
+  title: string | null;
+  content_path: string | null;
+  content_text: string | null;
+  meta_json: string;
+  created_at: number;
+  source_message_id: string | null;
 }
 
 export interface Attachment {

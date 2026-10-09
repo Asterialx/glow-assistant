@@ -3,9 +3,6 @@ use crate::mcp;
 use crate::pii::{self, RedactionResult};
 use crate::state::{AppState, GameModeState, McpServerConfig};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
 use tauri::State;
 
 #[tauri::command]
@@ -35,76 +32,6 @@ pub fn game_mode_force(state: State<'_, AppState>, forced: bool) -> GameModeStat
         g.active = forced || g.detected_process.is_some();
     }
     game_mode::snapshot(&state)
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct DirEntryDto {
-    pub name: String,
-    pub path: String,
-    pub is_dir: bool,
-}
-
-#[tauri::command]
-pub fn list_directory(path: String) -> Result<Vec<DirEntryDto>, String> {
-    let entries = fs::read_dir(&path).map_err(|e| e.to_string())?;
-    let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let meta = entry.metadata().ok();
-        out.push(DirEntryDto {
-            name: entry.file_name().to_string_lossy().to_string(),
-            path: entry.path().to_string_lossy().to_string(),
-            is_dir: meta.map(|m| m.is_dir()).unwrap_or(false),
-        });
-    }
-    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-    Ok(out)
-}
-
-#[tauri::command]
-pub fn read_text_file(path: String) -> Result<String, String> {
-    fs::read_to_string(&path).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-pub fn write_text_file(path: String, content: String) -> Result<(), String> {
-    if let Some(parent) = PathBuf::from(&path).parent() {
-        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    fs::write(&path, content).map_err(|e| e.to_string())
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct ShellResult {
-    pub stdout: String,
-    pub stderr: String,
-    pub code: i32,
-}
-
-#[tauri::command]
-pub fn run_shell_command(command: String, cwd: Option<String>) -> Result<ShellResult, String> {
-    #[cfg(target_os = "windows")]
-    let mut cmd = {
-        let mut c = Command::new("cmd");
-        c.args(["/C", &command]);
-        c
-    };
-    #[cfg(not(target_os = "windows"))]
-    let mut cmd = {
-        let mut c = Command::new("sh");
-        c.args(["-c", &command]);
-        c
-    };
-
-    if let Some(dir) = cwd {
-        cmd.current_dir(dir);
-    }
-
-    let output = cmd.output().map_err(|e| e.to_string())?;
-    Ok(ShellResult {
-        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
-        code: output.status.code().unwrap_or(-1),
-    })
 }
 
 #[tauri::command]

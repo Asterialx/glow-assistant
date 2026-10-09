@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { Artifact } from "../../lib/types";
-import { Box, Check, Code2, Copy, ExternalLink, FileText, Layers, Monitor, Smartphone, X } from "lucide-react";
+import type { Artifact, ArtifactRevision } from "../../lib/types";
+import { Box, Check, Code2, Copy, FileText, Layers, Monitor, Smartphone, X } from "lucide-react";
 import * as THREE from "three";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { OBJLoader } from "three/examples/jsm/loaders/OBJLoader.js";
@@ -8,13 +8,17 @@ import { useUiStore } from "../../stores/uiStore";
 import { useModeStore } from "../../stores/modeStore";
 import { t } from "../../lib/i18n";
 import type { DesignFrame } from "../../lib/designMode";
-import { openHtmlPreview } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
+import { GenUiArtifact } from "../widgets/GenUiArtifact";
+import { HtmlArtifactFrame } from "./HtmlArtifactFrame";
 
 interface Props {
   artifacts: Artifact[];
+  revisionsByArtifact: Record<string, ArtifactRevision[]>;
   activeId: string | null;
   onSelect: (id: string) => void;
+  onSend: (text: string) => void;
+  onRestoreRevision: (artifactId: string, revisionId: string) => void;
 }
 
 function parseMeta(art: Artifact | undefined): { preview?: DesignFrame; design?: boolean } {
@@ -26,31 +30,21 @@ function parseMeta(art: Artifact | undefined): { preview?: DesignFrame; design?:
 }
 
 function HtmlDesignPreview({
-  html,
+  artifact,
   initialFrame,
   dragging,
 }: {
-  html: string;
+  artifact: Artifact;
   initialFrame: DesignFrame;
   dragging: boolean;
 }) {
-  const locale = useUiStore((s) => s.locale);
   const designMode = useModeStore((s) => s.designMode);
   const [frame, setFrame] = useState<DesignFrame>(initialFrame);
-  const [opening, setOpening] = useState(false);
+  const html = artifact.content_text;
 
   useEffect(() => {
     setFrame(initialFrame);
   }, [initialFrame, html]);
-
-  const openBrowser = async () => {
-    setOpening(true);
-    try {
-      await openHtmlPreview(html);
-    } finally {
-      setOpening(false);
-    }
-  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -79,46 +73,35 @@ function HtmlDesignPreview({
         >
           <Smartphone size={12} /> Phone
         </button>
-        <button
-          type="button"
-          disabled={opening}
-          onClick={() => void openBrowser()}
-          className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] disabled:opacity-50"
-        >
-          <ExternalLink size={12} />
-          {opening ? "…" : locale === "ru" ? "В браузере" : "Open browser"}
-        </button>
       </div>
 
       {frame === "phone" ? (
         <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto bg-[linear-gradient(160deg,#1c1917_0%,#292524_100%)] p-4">
           <div
             className="relative shrink-0 rounded-[2.2rem] border-[3px] border-[#44403c] bg-black p-[10px] shadow-2xl"
-            style={{ width: 300 }}
+            style={{ width: 300, maxWidth: "100%" }}
           >
             <div className="absolute left-1/2 top-2 z-10 h-5 w-24 -translate-x-1/2 rounded-full bg-black" />
             <div
               className="overflow-hidden rounded-[1.7rem] bg-white"
               style={{ height: "min(520px, 58vh)" }}
             >
-              <iframe
+              <HtmlArtifactFrame
+                artifact={artifact}
                 title="phone-preview"
-                sandbox="allow-scripts"
                 className="h-full w-full border-0 bg-white"
-                style={dragging ? { pointerEvents: "none" } : undefined}
-                srcDoc={html || "<p>Empty</p>"}
+                dragging={dragging}
               />
             </div>
             <div className="mx-auto mt-2 h-1 w-20 rounded-full bg-[#57534e]" />
           </div>
         </div>
       ) : (
-        <iframe
+        <HtmlArtifactFrame
+          artifact={artifact}
           title="desktop-preview"
-          sandbox="allow-scripts"
           className={cn("min-h-0 flex-1 w-full bg-white", designMode && "border-0")}
-          style={dragging ? { pointerEvents: "none" } : undefined}
-          srcDoc={html || "<p>Empty</p>"}
+          dragging={dragging}
         />
       )}
     </div>
@@ -341,7 +324,14 @@ async function getPyodide(): Promise<{
   }>;
 }
 
-export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
+export function ArtifactsPanel({
+  artifacts,
+  revisionsByArtifact,
+  activeId,
+  onSelect,
+  onSend,
+  onRestoreRevision,
+}: Props) {
   const active = artifacts.find((a) => a.id === activeId) || artifacts[0];
   const [jupyterCode, setJupyterCode] = useState(
     active?.kind === "jupyter" && active.content_text
@@ -481,6 +471,29 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
           </button>
         ))}
       </div>
+      {active && (revisionsByArtifact[active.id]?.length || 0) > 0 && (
+        <div className="flex items-center justify-end gap-2 border-b border-[var(--border)] px-3 py-1.5">
+          <span className="text-[11px] text-[var(--fg-faint)]">
+            {locale === "ru" ? `Текущая · версия ${(revisionsByArtifact[active.id] || []).length + 1}` : `Current · version ${(revisionsByArtifact[active.id] || []).length + 1}`}
+          </span>
+          <select
+            value=""
+            aria-label={locale === "ru" ? "История версий артефакта" : "Artifact revision history"}
+            onChange={(event) => {
+              const revisionId = event.currentTarget.value;
+              if (revisionId) onRestoreRevision(active.id, revisionId);
+            }}
+            className="max-w-44 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2 py-1 text-[11px] text-[var(--fg-muted)]"
+          >
+            <option value="">{locale === "ru" ? "Восстановить версию…" : "Restore version…"}</option>
+            {(revisionsByArtifact[active.id] || []).map((revision) => (
+              <option key={revision.id} value={revision.id}>
+                {locale === "ru" ? `Версия ${revision.revision_number} · ${new Date(revision.created_at).toLocaleString("ru-RU")}` : `Version ${revision.revision_number} · ${new Date(revision.created_at).toLocaleString()}`}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="min-h-0 flex-1">
         {!active && (
           <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
@@ -492,10 +505,15 @@ export function ArtifactsPanel({ artifacts, activeId, onSelect }: Props) {
         )}
         {active?.kind === "html" && (
           <HtmlDesignPreview
-            html={active.content_text || "<p>Empty</p>"}
+            artifact={active}
             initialFrame={parseMeta(active).preview === "phone" ? "phone" : "desktop"}
             dragging={dragging}
           />
+        )}
+        {active?.kind === "genui" && (
+          <div className="h-full overflow-auto p-3">
+            <GenUiArtifact artifact={active} surface="workspace" onSend={onSend} />
+          </div>
         )}
         {active?.kind === "code" && (
           <div className="flex h-full min-h-0 flex-col">

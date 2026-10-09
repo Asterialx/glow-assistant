@@ -1,18 +1,11 @@
 import { useEffect, useState } from "react";
-import { setApiKey } from "../../lib/llm/smartapi";
 import { listMemory } from "../../db";
 import type { GlobalMemory } from "../../lib/types";
 import { forceGameMode, getGameModeStatus, safeInvoke } from "../../lib/tauri";
 
 export function SettingsPanel() {
-  const [key, setKey] = useState(
-    localStorage.getItem("claude2.apiKey") ||
-      localStorage.getItem("glow.apiKey") ||
-      import.meta.env.VITE_SMARTAPI_KEY ||
-      "",
-  );
   const [base] = useState(
-    import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1",
+    import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.xkiro.com/v1",
   );
   const [memory, setMemory] = useState<GlobalMemory[]>([]);
   const [watch, setWatch] = useState("osu!.exe, ModernWarfare.exe, Warzone.exe");
@@ -29,35 +22,21 @@ export function SettingsPanel() {
       <div>
         <h2 className="font-[family-name:var(--font-display)] text-xl font-semibold">Settings</h2>
         <p className="mt-1 text-sm text-[var(--color-muted)]">
-          API keys stay on this device. Prefer env / local settings — do not commit secrets.
+          Provider secrets belong on the local development server and must never be committed.
         </p>
       </div>
 
       <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
-        <h3 className="text-sm font-medium">AgentRouter</h3>
+        <h3 className="text-sm font-medium">xKiro</h3>
         <label className="mt-2 block text-xs text-[var(--color-muted)]">Base URL</label>
         <input
           className="mt-1 w-full rounded border border-[var(--color-border)] bg-black/20 px-2 py-1.5 font-[family-name:var(--font-mono)] text-xs"
           value={base}
           readOnly
         />
-        <label className="mt-3 block text-xs text-[var(--color-muted)]">API Key</label>
-        <input
-          type="password"
-          className="mt-1 w-full rounded border border-[var(--color-border)] bg-black/20 px-2 py-1.5 font-[family-name:var(--font-mono)] text-xs"
-          value={key}
-          onChange={(e) => setKey(e.target.value)}
-        />
-        <button
-          type="button"
-          className="mt-2 rounded bg-[var(--accent)] px-3 py-1.5 text-sm text-[#0c0e12]"
-          onClick={() => {
-            setApiKey(key);
-            alert("API key saved locally");
-          }}
-        >
-          Save key
-        </button>
+        <p className="mt-3 text-xs text-[var(--color-muted)]">
+          The API key is supplied by the local development server and is not stored in the app.
+        </p>
       </section>
 
       <section className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">

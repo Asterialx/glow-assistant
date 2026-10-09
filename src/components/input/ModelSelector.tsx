@@ -1,16 +1,35 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
-import { MODEL_CATALOG } from "../../lib/models";
+import { Check, ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
+import { loadModelCatalog } from "../../lib/models";
 import { cn } from "../../lib/utils";
 import { useChatStore } from "../../stores/chatStore";
 
 export function ModelSelector() {
   const selectedModelId = useChatStore((state) => state.selectedModelId);
+  const models = useChatStore((state) => state.models);
   const setSelectedModelId = useChatStore((state) => state.setSelectedModelId);
+  const setModels = useChatStore((state) => state.setModels);
   const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
-  const selected = MODEL_CATALOG.find((model) => model.id === selectedModelId) ?? MODEL_CATALOG[0];
-  const models = [...MODEL_CATALOG].sort((a, b) => a.sortOrder - b.sortOrder);
+  const selected = models.find((model) => model.id === selectedModelId);
+
+  const refreshModels = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setModels(await loadModelCatalog());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Не удалось загрузить модели");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshModels();
+  }, []);
 
   useEffect(() => {
     const onDocumentClick = (event: MouseEvent) => {
@@ -25,12 +44,12 @@ export function ModelSelector() {
       <button
         type="button"
         onClick={() => setOpen((isOpen) => !isOpen)}
-        aria-label={`Выбрать модель. Сейчас: ${selected.displayName}`}
+        aria-label={`Выбрать модель. Сейчас: ${selected?.displayName ?? "Загрузка моделей"}`}
         aria-haspopup="listbox"
         aria-expanded={open}
         className="flex max-w-[190px] items-center gap-1 rounded-full px-2.5 py-1 text-[12.5px] text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
       >
-        <span className="truncate font-medium">{selected.displayName}</span>
+        <span className="truncate font-medium">{selected?.displayName ?? (loading ? "Загрузка моделей…" : "Модели недоступны")}</span>
         <ChevronDown size={13} className="shrink-0 opacity-60" />
       </button>
 
@@ -40,6 +59,24 @@ export function ModelSelector() {
           aria-label="Доступные модели"
           className="absolute bottom-full left-0 z-50 mb-2 max-h-[min(60vh,480px)] w-[min(280px,calc(100vw-48px))] overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1 shadow-2xl"
         >
+          <div className="px-3 py-2 text-[11px] text-[var(--fg-faint)]">
+            {import.meta.env.VITE_SMARTAPI_BASE_URL?.includes("openrouter.ai")
+              ? "OpenRouter"
+              : "Бесплатные модели xKiro"}
+          </div>
+          {loading && (
+            <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-[var(--fg-muted)]">
+              <LoaderCircle size={14} className="animate-spin" /> Загружаю список моделей…
+            </div>
+          )}
+          {error && (
+            <div className="px-3 py-3 text-[12px] text-[var(--fg-muted)]">
+              <p>{error}</p>
+              <button type="button" onClick={() => void refreshModels()} className="mt-2 inline-flex items-center gap-1.5 text-[var(--fg)]">
+                <RefreshCw size={12} /> Повторить
+              </button>
+            </div>
+          )}
           {models.map((model) => {
             const active = model.id === selectedModelId;
             return (

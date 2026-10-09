@@ -12,17 +12,23 @@ import {
   bootstrapDatabases,
   deleteWidgetsForMessage,
   listArtifacts,
+  listArtifactRevisions,
   listMemory,
   listProjects,
   listWidgets,
+  restoreArtifactRevision,
   saveArtifact,
+  snapshotArtifactRevision,
+  updateArtifact,
   upsertWidget,
 } from "../../db";
 import { onGameMode, redactPii, setMcpEnabled } from "../../lib/tauri";
 import { extractPdfText, fileToBase64 } from "../../lib/pdfExtract";
 import { nowMs, uid } from "../../lib/utils";
-import type { Artifact, Message, UiWidget } from "../../lib/types";
-import { htmlArtifactTitle, isLabLikeHtml } from "../../lib/artifactDisplay";
+import type { Artifact, ArtifactRevision, Message, UiWidget } from "../../lib/types";
+import { extractHtmlArtifact, htmlArtifactTitle, isLabLikeHtml } from "../../lib/artifactDisplay";
+import { htmlPresentation, isInlineHtmlArtifact } from "../../lib/htmlArtifact";
+import { extractGenUiBlocks, genUiTitle, isArtifactEditRequest, requestedChartType, validateGenUiBlock } from "../../lib/genUi";
 import { detectDesignFrame } from "../../lib/designMode";
 import {
   extractAllWidgetPayloads,
@@ -73,6 +79,7 @@ export function AppShell() {
   } = useChatStore();
 
   const [widgetsByMessage, setWidgetsByMessage] = useState<Record<string, UiWidget[]>>({});
+  const [artifactRevisions, setArtifactRevisions] = useState<Record<string, ArtifactRevision[]>>({});
   const [ready, setReady] = useState(false);
 
   const reloadConversations = async () => {
@@ -83,6 +90,14 @@ export function AppShell() {
     await conversationService.select(mode, id);
     const arts = await listArtifacts(mode, id);
     setArtifacts(arts);
+    const activeId = useChatStore.getState().activeArtifactId;
+    setActiveArtifactId(
+      arts.some((artifact) => artifact.id === activeId) ? activeId : arts[0]?.id || null,
+    );
+    const revisions = await Promise.all(
+      arts.map(async (artifact) => [artifact.id, await listArtifactRevisions(mode, artifact.id)] as const),
+    );
+    setArtifactRevisions(Object.fromEntries(revisions));
     if (arts.length === 0) useUiStore.getState().closeArtifacts();
     const map: Record<string, UiWidget[]> = {};
     for (const m of conversationService.getState().messages) {
@@ -99,7 +114,7 @@ export function AppShell() {
       setBranchPath(state.branchPath);
       useChatStore.getState().setStreaming(state.streaming);
     });
-  }, [setActiveConversationId, setBranchPath, setConversations, setMessages]);
+  }, [conversationService, setActiveConversationId, setBranchPath, setConversations, setMessages]);
 
   useEffect(() => {
     (async () => {
@@ -131,6 +146,8 @@ export function AppShell() {
       // Empty-first Claude style: don't auto-open last chat on mode switch if none selected
       conversationService.startNew();
       setArtifacts([]);
+      setActiveArtifactId(null);
+      setArtifactRevisions({});
       useUiStore.getState().closeArtifacts();
       void list;
     })();
@@ -141,8 +158,23 @@ export function AppShell() {
     return (await conversationService.ensureConversation(mode, activeProjectId)).id;
   };
 
-  const createGenerationOptions = async (): Promise<LegacyGenerationOptions> => {
+  const createGenerationOptions = async (userText = ""): Promise<LegacyGenerationOptions> => {
     const project = projects.find((item) => item.id === activeProjectId);
+    const activeArtifact = useChatStore.getState().artifacts.find(
+      (artifact) => artifact.id === useChatStore.getState().activeArtifactId,
+    );
+    const replacementFormat =
+      activeArtifact?.kind === "html"
+        ? "Return the complete replacement inside one ```html fence."
+        : activeArtifact?.kind === "genui"
+          ? "Return the complete replacement as one validated ```glow-ui JSON block, keeping a compatible block type when possible."
+          : "Return the complete replacement in the same code/Jupyter format as the active artifact.";
+    const artifactContext =
+      activeArtifact &&
+      activeArtifact.conversation_id === activeConversationId &&
+      isArtifactEditRequest(userText)
+        ? `The user is explicitly modifying the active artifact (id: ${activeArtifact.id}, type: ${activeArtifact.kind}). Preserve that artifact identity and return a complete replacement, not a new independent artifact. ${replacementFormat} Existing content:\n${(activeArtifact.content_text || "").slice(0, 8000)}`
+        : "";
     const custom = localStorage.getItem("glow.instructions") || "";
     const memory = memoryPaused ? [] : (await listMemory()).map((item) => item.fact);
     const feedback = feedbackPreferenceHints();
@@ -152,7 +184,7 @@ export function AppShell() {
       modelId: selectedModelId,
       temperature,
       maxTokens,
-      systemExtra: [project?.system_prompt, custom, feedback, extensions].filter(Boolean).join("\n\n"),
+      systemExtra: [project?.system_prompt, custom, feedback, extensions, artifactContext].filter(Boolean).join("\n\n"),
       memory,
       designMode,
       webSearch,
@@ -193,13 +225,58 @@ export function AppShell() {
     const hasBiomarkerWidget = payloads.some((p) => p.type === "biomarker_table");
 
     // Artifacts panel ONLY — never checklists / progress / flashcards / biomarkers
-    const htmlMatch = text.match(/```html\b[^\n]*\n([\s\S]*?)```/i);
+    const genUiBlocks = designMode ? [] : extractGenUiBlocks(text);
+    const htmlMatch = extractHtmlArtifact(text);
     const jupyterMatch = text.match(/```(?:jupyter|python-cell)\b[^\n]*\n([\s\S]*?)```/i);
     const codeArt = designMode ? null : extractCodeArtifact(text);
     const created: Artifact[] = [];
+    const activeArtifact = useChatStore.getState().artifacts.find(
+      (artifact) => artifact.id === useChatStore.getState().activeArtifactId,
+    );
+    const updateTarget =
+      activeArtifact?.conversation_id === convId &&
+      ["genui", "html", "code", "jupyter"].includes(activeArtifact.kind) &&
+      isArtifactEditRequest(userHint)
+        ? activeArtifact
+        : null;
+    let updatedExisting = false;
+    const persistGeneratedArtifact = async (candidate: Artifact) => {
+      if (updateTarget && !updatedExisting) {
+        const updated = {
+          ...candidate,
+          id: updateTarget.id,
+          conversation_id: updateTarget.conversation_id,
+          created_at: updateTarget.created_at,
+        };
+        await snapshotArtifactRevision(mode, updateTarget, messageId);
+        await updateArtifact(mode, updated);
+        created.push(updated);
+        updatedExisting = true;
+      } else {
+        await saveArtifact(mode, candidate);
+        created.push(candidate);
+      }
+    };
 
-    if (htmlMatch) {
-      const htmlBody = htmlMatch[1] ?? "";
+    for (const block of genUiBlocks) {
+      const art: Artifact = {
+        id: uid(),
+        conversation_id: convId,
+        message_id: messageId,
+        kind: "genui",
+        title: genUiTitle(block),
+        content_path: null,
+        content_text: JSON.stringify(block),
+        meta_json: JSON.stringify({ schema: "glow-ui/v1", componentType: block.type }),
+        created_at: nowMs(),
+      };
+      await persistGeneratedArtifact(art);
+    }
+
+    // Never publish a truncated document as a working artifact. A closed
+    // fence alone is not enough when the model started a full HTML document.
+    if (htmlMatch?.complete) {
+      const htmlBody = htmlMatch.body;
       // Lab tables belong inline — do not open Artifacts for them
       if (!isLabLikeHtml(htmlBody) && !hasBiomarkerWidget) {
         const frame = designMode
@@ -216,11 +293,11 @@ export function AppShell() {
           meta_json: JSON.stringify({
             preview: frame,
             design: designMode,
+            presentation: designMode ? "workspace" : htmlPresentation(htmlBody),
           }),
           created_at: nowMs(),
         };
-        await saveArtifact(mode, art);
-        created.push(art);
+        await persistGeneratedArtifact(art);
       }
     }
     if (jupyterMatch) {
@@ -235,8 +312,7 @@ export function AppShell() {
         meta_json: "{}",
         created_at: nowMs(),
       };
-      await saveArtifact(mode, art);
-      created.push(art);
+      await persistGeneratedArtifact(art);
     } else if (codeArt) {
       const art: Artifact = {
         id: uid(),
@@ -249,16 +325,21 @@ export function AppShell() {
         meta_json: JSON.stringify({ lang: codeArt.lang }),
         created_at: nowMs(),
       };
-      await saveArtifact(mode, art);
-      created.push(art);
+      await persistGeneratedArtifact(art);
     }
 
     if (created.length) {
       const artifactsEnabled = localStorage.getItem("glow.capArtifacts") !== "0";
-      setArtifacts([...created, ...useChatStore.getState().artifacts]);
+      const createdIds = new Set(created.map((artifact) => artifact.id));
+      setArtifacts([
+        ...created,
+        ...useChatStore.getState().artifacts.filter((artifact) => !createdIds.has(artifact.id)),
+      ]);
       setActiveArtifactId(created[0].id);
-      // Design mode always opens live preview
-      if (artifactsEnabled || designMode) openArtifacts();
+      // Compact GenUI blocks stay inline; only larger artifacts open Workspace automatically.
+      if (created.some((artifact) => artifact.kind !== "genui" && !isInlineHtmlArtifact(artifact)) && (artifactsEnabled || designMode)) {
+        openArtifacts();
+      }
       if (designMode && created[0]?.kind === "html") {
         const frame = detectDesignFrame(created[0].content_text || "", userHint);
         if (frame === "phone") {
@@ -276,6 +357,25 @@ export function AppShell() {
     parentOverride?: string | null,
   ) => {
     if (streaming) return;
+    const localChartType = !files?.length ? requestedChartType(text) : null;
+    const activeArtifact = useChatStore.getState().artifacts.find(
+      (artifact) => artifact.id === useChatStore.getState().activeArtifactId,
+    );
+    if (
+      localChartType &&
+      activeArtifact?.kind === "genui" &&
+      activeArtifact.conversation_id === activeConversationId
+    ) {
+      try {
+        const block = validateGenUiBlock(JSON.parse(activeArtifact.content_text || "null"));
+        if (block?.type === "chart") {
+          useUiStore.getState().setArtifactViewState(activeArtifact.id, { chartType: localChartType });
+          return;
+        }
+      } catch {
+        // Invalid stored UI falls back to the normal conversation path.
+      }
+    }
     const convId = await ensureConversation();
     const parentId =
       parentOverride !== undefined ? parentOverride : (branchPath.at(-1)?.id ?? null);
@@ -439,7 +539,7 @@ export function AppShell() {
       conversationId: convId,
       content,
       modelId: selectedModelId,
-      generation: await createGenerationOptions(),
+      generation: await createGenerationOptions(text),
       ...(parentOverride !== undefined ? { parentId } : {}),
       titleSource: text,
     });
@@ -453,17 +553,17 @@ export function AppShell() {
 
   /** Re-run assistant reply under the same user message (new branch leaf). */
   const handleRegenerate = async (assistantMessage: Message) => {
+    const userMessage = conversationService
+      .getState()
+      .messages.find((message) => message.id === assistantMessage.parent_id);
     const result = await conversationService.regenerate({
       scope: mode,
       assistantMessage,
       modelId: selectedModelId,
-      generation: await createGenerationOptions(),
+      generation: await createGenerationOptions(userMessage?.content || ""),
     });
     if (!result) return;
     if (!result.error) {
-      const userMessage = conversationService
-        .getState()
-        .messages.find((message) => message.id === assistantMessage.parent_id);
       await maybeSpawnArtifacts(
         result.conversationId,
         result.assistantMessage.id,
@@ -483,7 +583,7 @@ export function AppShell() {
       editedMessage: message,
       content,
       modelId: selectedModelId,
-      generation: await createGenerationOptions(),
+      generation: await createGenerationOptions(editedText),
       conversationId: message.conversation_id,
       parentId: message.parent_id,
       titleSource: editedText,
@@ -499,6 +599,18 @@ export function AppShell() {
       await extractMemory(result.assistantMessage.content);
     }
     await loadConversation(result.conversationId);
+  };
+
+  const handleRestoreArtifactRevision = async (artifactId: string, revisionId: string) => {
+    const restored = await restoreArtifactRevision(mode, artifactId, revisionId);
+    if (!restored) return;
+    const [nextArtifacts, nextRevisions] = await Promise.all([
+      listArtifacts(mode, restored.conversation_id),
+      listArtifactRevisions(mode, artifactId),
+    ]);
+    setArtifacts(nextArtifacts);
+    setArtifactRevisions((previous) => ({ ...previous, [artifactId]: nextRevisions }));
+    setActiveArtifactId(artifactId);
   };
 
   return (
@@ -622,6 +734,9 @@ export function AppShell() {
               artifacts={artifacts}
               activeId={activeArtifactId}
               onSelect={setActiveArtifactId}
+              onSend={(text) => void handleSend(text)}
+              revisionsByArtifact={artifactRevisions}
+              onRestoreRevision={handleRestoreArtifactRevision}
             />
           )}
         </div>

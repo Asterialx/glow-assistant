@@ -1,8 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Home,
-  Code2,
-  Stethoscope,
   Plus,
   Folder,
   SlidersHorizontal,
@@ -22,7 +19,7 @@ import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
 import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
-import type { AppMode, Conversation } from "../../lib/types";
+import type { Conversation } from "../../lib/types";
 import { createProject } from "../../db";
 import { conversationService } from "../../conversation/conversationService";
 
@@ -40,7 +37,6 @@ export function ClaudeSidebar({
   onConversationsChanged,
 }: Props) {
   const mode = useModeStore((s) => s.mode);
-  const setMode = useModeStore((s) => s.setMode);
   const locale = useUiStore((s) => s.locale);
   const userName = useUiStore((s) => s.userName);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
@@ -58,12 +54,6 @@ export function ClaudeSidebar({
   const [ctxId, setCtxId] = useState<string | null>(null);
   const [projectSubOpen, setProjectSubOpen] = useState(false);
   const ctxRef = useRef<HTMLDivElement>(null);
-
-  const modes: { id: AppMode; label: string; icon: typeof Home }[] = [
-    { id: "home", label: t(locale, "home"), icon: Home },
-    { id: "code", label: t(locale, "code"), icon: Code2 },
-    { id: "med", label: t(locale, "med"), icon: Stethoscope },
-  ];
 
   const filtered = useMemo(
     () =>
@@ -165,27 +155,16 @@ export function ClaudeSidebar({
 
   return (
     <aside className="flex h-full w-[260px] shrink-0 flex-col bg-[var(--bg-sidebar)]">
-      <div className="px-3 pt-3">
-        <div className="inline-flex rounded-full bg-[var(--bg)] p-0.5">
-          {modes.map(({ id, label, icon: Icon }) => {
-            const active = mode === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setMode(id)}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] font-medium transition-colors",
-                  active
-                    ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm"
-                    : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
-                )}
-              >
-                <Icon size={13} strokeWidth={1.7} />
-                {label}
-              </button>
-            );
-          })}
+      <div className="mx-3 border-b border-[var(--border)] px-1 pb-4 pt-4">
+        <div className="flex items-center justify-center gap-2.5">
+          <img
+            src="/glow-mark.png"
+            alt="Glow"
+            className="h-6 w-6 shrink-0 object-contain"
+          />
+          <span className="text-[16px] font-semibold tracking-[-0.02em] text-[var(--fg)]">
+            Glow
+          </span>
         </div>
       </div>
 

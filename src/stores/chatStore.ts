@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import type { Artifact, Conversation, Message, Project } from "../lib/types";
-import { MODEL_CATALOG } from "../lib/models";
+import type { Artifact, Conversation, Message, ModelInfo, Project } from "../lib/types";
 
 interface ChatState {
   conversations: Conversation[];
@@ -10,6 +9,7 @@ interface ChatState {
   projects: Project[];
   activeProjectId: string | null;
   selectedModelId: string;
+  models: ModelInfo[];
   temperature: number;
   maxTokens: number;
   artifacts: Artifact[];
@@ -24,6 +24,7 @@ interface ChatState {
   setProjects: (p: Project[]) => void;
   setActiveProjectId: (id: string | null) => void;
   setSelectedModelId: (id: string) => void;
+  setModels: (models: ModelInfo[]) => void;
   setTemperature: (n: number) => void;
   setMaxTokens: (n: number) => void;
   setArtifacts: (a: Artifact[]) => void;
@@ -34,12 +35,7 @@ interface ChatState {
   appendStreamingToken: (messageId: string, token: string) => void;
 }
 
-const DEFAULT_MODEL_ID = MODEL_CATALOG[0].id;
-
-function getInitialModelId(): string {
-  const stored = localStorage.getItem("glow.model");
-  return MODEL_CATALOG.some((model) => model.id === stored) ? stored! : DEFAULT_MODEL_ID;
-}
+const DEFAULT_MODEL_ID = "mistralai/ministral-14b";
 
 export const useChatStore = create<ChatState>((set, get) => ({
   conversations: [],
@@ -48,7 +44,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
   branchPath: [],
   projects: [],
   activeProjectId: null,
-  selectedModelId: getInitialModelId(),
+  selectedModelId: localStorage.getItem("glow.model") || DEFAULT_MODEL_ID,
+  models: [],
   temperature: Number(localStorage.getItem("glow.temperature") || "0.7"),
   maxTokens: Number(localStorage.getItem("glow.maxTokens") || "4096"),
   artifacts: [],
@@ -65,6 +62,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setSelectedModelId: (selectedModelId) => {
     localStorage.setItem("glow.model", selectedModelId);
     set({ selectedModelId });
+  },
+  setModels: (models) => {
+    const selectedModelId = models.some((model) => model.id === get().selectedModelId)
+      ? get().selectedModelId
+      : models.find((model) => model.id === DEFAULT_MODEL_ID)?.id || models[0]?.id || DEFAULT_MODEL_ID;
+    localStorage.setItem("glow.model", selectedModelId);
+    set({ models, selectedModelId });
   },
   setTemperature: (temperature) => {
     localStorage.setItem("glow.temperature", String(temperature));

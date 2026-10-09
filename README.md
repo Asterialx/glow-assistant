@@ -1,24 +1,73 @@
-# Glow Assistant
+# Glow
 
-Local-first AI family workspace (Tauri 2 + React + SQLite) with Home / Code / Med modes.
+Glow — AI-рабочее пространство для учёбы, программирования, текстов и анализа. Диалог, интерактивные инструменты и результаты работы находятся рядом: в чате или в отдельной рабочей области.
 
-## Run
+## Возможности
+
+- Чаты со streaming-ответами, остановкой и повторной генерацией.
+- **GenUI** — интерактивные блоки в сообщениях: калькуляторы с полями и ползунками, графики, таблицы, чек-листы и адаптивные опросы.
+- **Inline Artifacts** — инструменты прямо в разговоре с возможностью раскрыть их в рабочей области.
+- **Canvas / интерактивные схемы** — геометрия и вычисляемые показатели, которые меняются вместе с введёнными значениями.
+- **Планы подготовки** — дни, раскрываемые темы, задания с отметками выполнения и общий прогресс.
+- **HTML Artifacts** — мини-инструменты с предпросмотром Desktop / Phone.
+- Темы оформления и автопрокрутка, которая прекращается при чтении предыдущих сообщений.
+
+GenUI появляется, когда модель возвращает поддерживаемый структурированный блок. Качество генерации зависит от модели; произвольный текст не превращается автоматически в интерактивный инструмент. Нативные блоки используют проверяемые данные, а HTML-предпросмотр отделён от них.
+
+## Локальный запуск
+
+Нужны Node.js и npm. Для desktop-версии также нужны Rust и зависимости Tauri 2 (на Windows — Microsoft C++ Build Tools и WebView2).
 
 ```bash
+git clone https://github.com/Asterialx/glow-assistant.git
+cd glow-assistant
 npm install
-npm run dev          # UI at http://localhost:1420
-npm run tauri:dev    # desktop window
-npm run tauri:build  # produces .exe + NSIS setup in src-tauri/target/release/bundle/
 ```
 
-Installers after build:
-- `dist-installers/Glow Assistant_0.1.0_x64-setup.exe` (NSIS)
-- `dist-installers/Glow Assistant_0.1.0_x64_en-US.msi`
-- `dist-installers/Glow Assistant.exe` (portable)
+Скопируйте `.env.example` в `.env.local` и укажите свой ключ:
 
-(Also under `src-tauri/target/release/bundle/` when not using a custom Cargo target dir.)
+```dotenv
+VITE_SMARTAPI_BASE_URL=https://openrouter.ai/api/v1
+VITE_PROVIDER_PROXY_ENABLED=true
+OPENROUTER_API_KEY=your-api-key
+```
 
-## Notes
+Эта конфигурация выбирает `z-ai/glm-5.3-flash`; модель должна быть доступна у провайдера. Для каталога xKiro используйте `https://api.xkiro.com/v1` и `XKIRO_API_KEY` вместо `OPENROUTER_API_KEY`. Каталог xKiro отбирает бесплатные chat-модели.
 
-- Soft Claude-like light UI
-- API key in `.env` / Settings — do not commit secrets
+```bash
+npm run dev
+```
+
+Откройте `http://localhost:1420/`. В dev-режиме запросы проходят через локальный Vite proxy; ключ остаётся на сервере. `.env` и `.env.local` не должны попадать в Git. Не публикуйте этот локальный сервер как публичный API.
+
+```bash
+npm run tauri:dev    # desktop в режиме разработки
+npm run build        # проверка TypeScript и сборка web
+npm run tauri:build  # сборка desktop-пакета
+```
+
+Production-сборка не включает Vite proxy: доступ к API нужно настраивать отдельно. Не помещайте секреты в `VITE_*` — эти значения доступны клиенту.
+
+В браузерном dev-режиме используется временная база в памяти: история чатов не переживает перезагрузку страницы. Desktop использует SQLite. Отметки интерактивных блоков сохраняются отдельно в локальном состоянии интерфейса.
+
+## Проверки
+
+Для тестов нужен Node.js с поддержкой встроенного удаления типов (например, 22.18+).
+
+```bash
+node --test tests/genUi.test.mjs tests/studyPlan.test.mjs
+npm run build
+```
+
+Тесты проверяют формулы, валидацию GenUI, извлечение блоков и прогресс учебных планов без обращения к платному API.
+
+## Структура
+
+- `src/components/` — интерфейс, чат, Artifacts и интерактивные блоки.
+- `src/lib/` — обработка ответов, модели, формулы и проверка данных.
+- `src/stores/` — состояние приложения.
+- `src/db/` — доступ к данным.
+- `src-tauri/` — desktop-оболочка.
+- `docs/` — продуктовые принципы, архитектура, решения и исследования.
+
+Стек: React, TypeScript, Vite, Zustand, Tailwind CSS, Tauri 2 и SQLite.

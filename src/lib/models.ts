@@ -1,191 +1,78 @@
 import type { ModelInfo } from "./types";
 
-/** Static catalog based on the models exposed by the configured SmartAPI account. */
-export const MODEL_CATALOG: ModelInfo[] = [
-  {
-    id: "claude-fable-5",
-    displayName: "Claude Fable 5",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "General assistant",
-    sortOrder: 10,
-  },
-  {
-    id: "claude-fable-5-1",
-    displayName: "Claude Fable 5.1",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "General assistant",
-    sortOrder: 20,
-  },
-  {
-    id: "claude-opus-4-6",
-    displayName: "Claude Opus 4.6",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex tasks",
-    sortOrder: 30,
-  },
-  {
-    id: "claude-opus-4-7",
-    displayName: "Claude Opus 4.7",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex tasks",
-    sortOrder: 40,
-  },
-  {
-    id: "claude-opus-4-8",
-    displayName: "Claude Opus 4.8",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex tasks",
-    sortOrder: 50,
-  },
-  {
-    id: "claude-opus-5",
-    displayName: "Claude Opus 5",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex tasks",
-    sortOrder: 60,
-  },
-  {
-    id: "claude-opus-5-5",
-    displayName: "Claude Opus 5.5",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex tasks",
-    sortOrder: 70,
-  },
-  {
-    id: "claude-sonnet-4-6",
-    displayName: "Claude Sonnet 4.6",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "Everyday work",
-    sortOrder: 80,
-  },
-  {
-    id: "claude-sonnet-5",
-    displayName: "Claude Sonnet 5",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "Everyday work",
-    sortOrder: 90,
-  },
-  {
-    id: "claude-sonnet-5-5",
-    displayName: "Claude Sonnet 5.5",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "Everyday work",
-    sortOrder: 100,
-  },
-  {
-    id: "codex-auto-review",
-    displayName: "Codex Auto Review",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "Code review",
-    sortOrder: 110,
-  },
-  {
-    id: "gpt-5.5",
-    displayName: "GPT 5.5",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "General assistant",
-    sortOrder: 120,
-  },
-  {
-    id: "gpt-5.6-luna",
-    displayName: "GPT 5.6 Luna",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "Fast everyday work",
-    sortOrder: 130,
-  },
-  {
-    id: "gpt-5.6-sol",
-    displayName: "GPT 5.6 Sol",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex reasoning",
-    sortOrder: 140,
-  },
-  {
-    id: "gpt-5.6-terra",
-    displayName: "GPT 5.6 Terra",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "General assistant",
-    sortOrder: 150,
-  },
-  {
-    id: "gpt-6-astra",
-    displayName: "GPT 6 Astra",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex reasoning",
-    sortOrder: 160,
-  },
-  {
-    id: "gpt-6-luna",
-    displayName: "GPT 6 Luna",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "balanced",
-    useCase: "Fast everyday work",
-    sortOrder: 170,
-  },
-  {
-    id: "gpt-6-sol",
-    displayName: "GPT 6 Sol",
-    provider: "smartapi",
-    costMultiplier: null,
-    costPerImage: null,
-    tier: "premium",
-    useCase: "Complex reasoning",
-    sortOrder: 180,
-  },
-];
+interface XkiroModel {
+  id: string;
+  display_name: string;
+  modality: string;
+  access_tier: string;
+}
+
+interface XkiroModelsResponse {
+  data?: XkiroModel[];
+}
+
+let activeCatalog: ModelInfo[] = [];
+let catalogRequest: Promise<ModelInfo[]> | null = null;
+
+/** Fetch the account-safe model list exposed by xKiro's public catalog. */
+export function loadModelCatalog(): Promise<ModelInfo[]> {
+  if (catalogRequest) return catalogRequest;
+
+  const isOpenRouter = import.meta.env.VITE_SMARTAPI_BASE_URL?.includes("openrouter.ai");
+  const baseUrl = import.meta.env.DEV
+    ? "/smartapi"
+    : import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.xkiro.com/v1";
+
+  catalogRequest = fetch(`${baseUrl.replace(/\/$/, "")}/models`)
+    .then(async (response) => {
+      if (!response.ok) throw new Error(`Model catalog request failed (${response.status})`);
+      const payload = (await response.json()) as XkiroModelsResponse;
+      if (isOpenRouter) {
+        const glm = (payload.data ?? []).find((model) => model.id === "z-ai/glm-5.3-flash");
+        if (!glm) throw new Error("OpenRouter does not list z-ai/glm-5.3-flash for this account");
+        const model: ModelInfo = {
+          id: glm.id,
+          displayName: glm.display_name || "GLM 5.3 Flash",
+          provider: "z-ai",
+          costMultiplier: null,
+          costPerImage: null,
+          tier: "cheap",
+          useCase: "Fast general-purpose chat and coding",
+          sortOrder: 0,
+        };
+        activeCatalog = [model];
+        return activeCatalog;
+      }
+      const freeChatModels = (payload.data ?? [])
+        .filter((model) => model.modality === "chat" && model.access_tier === "free")
+        .map((model, index): ModelInfo => ({
+          id: model.id,
+          displayName: model.display_name || model.id,
+          provider: model.id.split("/", 1)[0] || "xkiro",
+          costMultiplier: null,
+          costPerImage: null,
+          tier: "cheap",
+          useCase: "Free chat model",
+          sortOrder: index,
+        }))
+        .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+      if (freeChatModels.length === 0) {
+        throw new Error("xKiro returned no free chat models for this catalog");
+      }
+      activeCatalog = freeChatModels;
+      return freeChatModels;
+    })
+    .catch((error: unknown) => {
+      catalogRequest = null;
+      throw error;
+    });
+
+  return catalogRequest;
+}
 
 export function getModel(id: string): ModelInfo | undefined {
-  return MODEL_CATALOG.find((m) => m.id === id);
+  return activeCatalog.find((model) => model.id === id);
 }
 
 export function formatCostBadge(model: ModelInfo): string {

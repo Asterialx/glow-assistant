@@ -1,0 +1,99 @@
+.glow-study-plan .glow-plan-topic {
+  border-radius: 18px;
+}
+
+.glow-study-plan .glow-plan-topic-button {
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--fg) 11%, transparent);
+  border-radius: 18px;
+  color: var(--fg);
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--fg) 8%, transparent), transparent 55%),
+    color-mix(in srgb, var(--bg-hover) 48%, transparent);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--fg) 12%, transparent),
+    inset 0 -1px 0 color-mix(in srgb, var(--bg) 24%, transparent),
+    0 3px 10px color-mix(in srgb, var(--shadow) 30%, transparent);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+}
+
+.glow-study-plan .glow-plan-topic-button:hover {
+  border-color: color-mix(in srgb, var(--fg) 21%, transparent);
+  background-color: color-mix(in srgb, var(--fg) 5%, transparent);
+}
+
+.glow-study-plan .glow-plan-topic[open] > .glow-plan-topic-button {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border));
+  background-color: var(--accent-soft);
+}
+
+.glow-study-plan .glow-plan-topic-button:active {
+  box-shadow: inset 0 1px 4px color-mix(in srgb, var(--shadow) 45%, transparent);
+}
+
+.glow-study-plan .glow-plan-topic-button:focus-visible,
+.glow-study-plan .glow-plan-check:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.glow-study-plan .glow-plan-count {
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--fg) 9%, transparent);
+  border-radius: 999px;
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--fg) 4%, transparent);
+}
+
+.glow-study-plan .glow-plan-check {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--fg) 24%, transparent);
+  border-radius: 6px;
+  background: linear-gradient(145deg, color-mix(in srgb, var(--fg) 9%, transparent), transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--fg) 12%, transparent);
+}
+
+.glow-study-plan .glow-plan-check:checked,
+.glow-study-plan .glow-plan-check:indeterminate {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.glow-study-plan .glow-plan-check:checked::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 2px;
+  width: 5px;
+  height: 9px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.glow-study-plan .glow-plan-check:indeterminate::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glow-study-plan .glow-plan-topic-button { transition: none; }
+}
+
+@media (forced-colors: active) {
+  .glow-study-plan .glow-plan-topic-button { border-color: ButtonText; }
+  .glow-study-plan .glow-plan-check { appearance: auto; background: none; box-shadow: none; }
+  .glow-study-plan .glow-plan-check::after { display: none; }
+}
