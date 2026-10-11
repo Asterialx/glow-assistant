@@ -31,6 +31,8 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
     await streamChatCompletion(generation.modelId, payload, callbacks, signal, {
       temperature: generation.temperature,
       maxTokens: generation.maxTokens,
+      conversationId: history.at(-1)?.conversation_id,
+      scope: generation.mode,
     });
   },
 };

@@ -45,3 +45,4 @@ export const useModeStore = create<ModeState>((set) => ({
     set({ webSearch });
   },
 }));
+import { accountStorage as localStorage } from "../auth/accountStorage";

@@ -203,25 +203,17 @@ export function SettingsModal() {
   );
   const [voiceStyle, setVoiceStyle] = useState(localStorage.getItem("glow.voiceStyle") || "Glassy");
   const [voiceSpeed, setVoiceSpeed] = useState(localStorage.getItem("glow.voiceSpeed") || "Normal");
-  const [notifyDone, setNotifyDone] = useState(() => loadFlag("glow.notifyDone", false));
 
   // Capabilities
   const [toolMode, setToolMode] = useState(
     localStorage.getItem("glow.toolMode") || "Load tools when needed",
   );
-  const [connectorSearch, setConnectorSearch] = useState(() => loadFlag("glow.connectorSearch"));
   const [switchModels, setSwitchModels] = useState(() => loadFlag("glow.switchModels", true));
   const [artifactsOn, setArtifactsOn] = useState(() => loadFlag("glow.capArtifacts", true));
   const [aiArtifacts, setAiArtifacts] = useState(() => loadFlag("glow.aiArtifacts"));
-  const [inlineViz, setInlineViz] = useState(() => loadFlag("glow.inlineViz", true));
-  const [codeExec, setCodeExec] = useState(() => loadFlag("glow.codeExec", true));
-  const [networkEgress, setNetworkEgress] = useState(() => loadFlag("glow.networkEgress"));
 
   // Memory / desktop
   const [memoryOn, setMemoryOn] = useState(() => loadFlag("glow.memoryFromChats"));
-  const [runStartup, setRunStartup] = useState(() => loadFlag("glow.runStartup"));
-  const [sysTray, setSysTray] = useState(() => loadFlag("glow.sysTray", true));
-  const [keepAwake, setKeepAwake] = useState(() => loadFlag("glow.keepAwake"));
   const [shortcut] = useState("Control+Alt+Space");
   const [quietDays, setQuietDays] = useState<boolean[]>(() => {
     try {
@@ -233,15 +225,6 @@ export function SettingsModal() {
   const [mcpServers, setMcpServers] = useState<
     Array<{ id: string; name: string; enabled: boolean; category: string }>
   >([]);
-  const [connectorFilter, setConnectorFilter] = useState<"all" | "connected" | "not">("all");
-  const [connectedIds, setConnectedIds] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("glow.connectors") || "[]");
-    } catch {
-      return [];
-    }
-  });
-
   const kind = THEMES.find((th) => th.id === themeId)?.kind || "dark";
   const appearanceMode =
     themeId === "claude-light" || themeId === "paper" || themeId === "sand"
@@ -319,18 +302,7 @@ export function SettingsModal() {
     setUserName(name);
   };
 
-  const popularConnectors = [
-    { id: "gmail", name: "Gmail" },
-    { id: "gdrive", name: "Google Drive" },
-    { id: "slack", name: "Slack" },
-    { id: "github", name: "GitHub Integration", type: "Web" },
-  ];
 
-  const skills = [
-    { name: "morning", updated: "7/24/26", author: "Glow" },
-    { name: "skill-creator", updated: "7/24/26", author: "Glow" },
-    { name: "design-reflect", updated: "8/2/26", author: "Glow" },
-  ];
 
   const devices = listDevices();
   const thisDevice = devices.find((d) => d.isThis);
@@ -608,13 +580,9 @@ export function SettingsModal() {
                       "Уведомление, когда длинный ответ готов.",
                     )}
                   >
-                    <Toggle
-                      on={notifyDone}
-                      onChange={(v) => {
-                        setNotifyDone(v);
-                        saveFlag("glow.notifyDone", v);
-                      }}
-                    />
+                    <span className="text-[12px] text-[var(--fg-muted)]">
+                      {hint("Not available in this version", "Недоступно в этой версии")}
+                    </span>
                   </SettingRow>
                 </section>
 
@@ -622,7 +590,7 @@ export function SettingsModal() {
                   <h2 className="mb-2 text-[18px] font-semibold tracking-tight">API</h2>
                   <SettingRow
                     title="Base URL"
-                    description={hint("xKiro endpoint (read-only).", "Адрес xKiro (только чтение).")}
+                    description={hint("Provider endpoint (read-only).", "Адрес провайдера (только чтение).")}
                   >
                     <input
                       readOnly
@@ -645,19 +613,19 @@ export function SettingsModal() {
               <div className="space-y-10">
                 <div>
                   <h2 className="mb-5 text-[18px] font-semibold tracking-tight">Account</h2>
-                  <SettingRow title="Log out of all devices">
+                  <SettingRow title={hint("Clear local device list", "Очистить локальный список устройств")}>
                     <button
                       type="button"
                       className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px] hover:bg-[var(--bg-hover)]"
                       onClick={() => {
                         localStorage.removeItem("glow.devices");
-                        alert(locale === "ru" ? "Сессии сброшены локально." : "Sessions cleared locally.");
+                        alert(locale === "ru" ? "Локальный список устройств очищен. Это не завершает сессии на других устройствах." : "Local device list cleared. Other device sessions are unchanged.");
                       }}
                     >
-                      Log out
+                      {hint("Clear list", "Очистить список")}
                     </button>
                   </SettingRow>
-                  <SettingRow title="Delete your account">
+                  <SettingRow title={hint("Reset local profile", "Сбросить локальный профиль")}>
                     <button
                       type="button"
                       className="rounded-xl bg-[var(--fg)] px-3 py-1.5 text-[13px] text-[var(--bg)]"
@@ -677,10 +645,10 @@ export function SettingsModal() {
                           "glow.userName",
                           "glow.instructions",
                         ].forEach((k) => localStorage.removeItem(k));
-                        setUserName("Sergey");
+                        setUserName(locale === "ru" ? "Гость" : "Guest");
                       }}
                     >
-                      Delete account
+                      {hint("Reset profile", "Сбросить профиль")}
                     </button>
                   </SettingRow>
                   <SettingRow title="Organization ID">
@@ -776,7 +744,7 @@ export function SettingsModal() {
                     "По умолчанию Glow не отправляет аналитику использования.",
                   )}
                 >
-                  <Toggle on={false} onChange={() => {}} />
+                  <span className="text-[12px] text-[var(--fg-muted)]">{hint("Off", "Выключено")}</span>
                 </SettingRow>
                 <p className="mt-4 text-[13px] text-[var(--fg-muted)]">{t(locale, "medDisclaimer")}</p>
               </div>
@@ -822,13 +790,7 @@ export function SettingsModal() {
                       "Glow может подсказывать релевантные connectors по ходу разговора.",
                     )}
                   >
-                    <Toggle
-                      on={connectorSearch}
-                      onChange={(v) => {
-                        setConnectorSearch(v);
-                        saveFlag("glow.connectorSearch", v);
-                      }}
-                    />
+                    <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
                   </SettingRow>
                   <SettingRow
                     title="Switch models when a message is flagged"
@@ -886,13 +848,7 @@ export function SettingsModal() {
                       "Графики и диаграммы прямо в чате, без отдельной панели.",
                     )}
                   >
-                    <Toggle
-                      on={inlineViz}
-                      onChange={(v) => {
-                        setInlineViz(v);
-                        saveFlag("glow.inlineViz", v);
-                      }}
-                    />
+                    <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
                   </SettingRow>
                 </section>
                 <section>
@@ -904,13 +860,7 @@ export function SettingsModal() {
                       "Запуск кода и создание docs / PDF / таблиц. Нужно для Skills.",
                     )}
                   >
-                    <Toggle
-                      on={codeExec}
-                      onChange={(v) => {
-                        setCodeExec(v);
-                        saveFlag("glow.codeExec", v);
-                      }}
-                    />
+                    <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
                   </SettingRow>
                   <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
                     <div className="flex items-start justify-between gap-4">
@@ -923,21 +873,10 @@ export function SettingsModal() {
                           )}
                         </p>
                         <div className="mt-2 flex gap-3 text-[12.5px] text-[#5b8def]">
-                          <button type="button" className="hover:underline">
-                            View package manager domains
-                          </button>
-                          <button type="button" className="hover:underline">
-                            security risks
-                          </button>
+                          <span className="text-[var(--fg-muted)]">{hint("Package installation is not connected.", "Установка пакетов не подключена.")}</span>
                         </div>
                       </div>
-                      <Toggle
-                        on={networkEgress}
-                        onChange={(v) => {
-                          setNetworkEgress(v);
-                          saveFlag("glow.networkEgress", v);
-                        }}
-                      />
+                      <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
                     </div>
                   </div>
                   <p className="mt-4 text-[13px] text-[var(--fg-muted)]">
@@ -1042,97 +981,18 @@ export function SettingsModal() {
             )}
 
             {tab === "glow-code" && (
-              <div>
-                <h2 className="mb-2 text-[18px] font-semibold">Glow Code</h2>
-                <p className="mb-6 text-[13px] text-[var(--fg-muted)]">
-                  {hint(
-                    "Coding workspace preferences for the Code mode.",
-                    "Настройки рабочего пространства для режима Code.",
-                  )}
-                </p>
-                <SettingRow
-                  title="Default mode on launch"
-                  description={hint("Open Glow in Code mode.", "Открывать Glow сразу в режиме Code.")}
-                >
-                  <Toggle
-                    on={localStorage.getItem("glow.defaultCode") === "1"}
-                    onChange={(v) => saveFlag("glow.defaultCode", v)}
-                  />
-                </SettingRow>
-                <SettingRow
-                  title="Inline diffs"
-                  description={hint(
-                    "Show proposed edits as diffs in chat.",
-                    "Показывать правки кода как diff прямо в чате.",
-                  )}
-                >
-                  <Toggle on={true} onChange={() => {}} />
-                </SettingRow>
-              </div>
+              <p className="text-[13px] text-[var(--fg-muted)]">
+                {hint("Code mode and inline diffs are not available in this version. You can still discuss code in chat.",
+                  "Режим Code и встроенные diff пока недоступны. Обсуждение кода в обычном чате работает.")}
+              </p>
             )}
 
             {/* DESKTOP GENERAL */}
             {tab === "desktop-general" && (
-              <div>
-                <h2 className="mb-6 text-[18px] font-semibold">General desktop settings</h2>
-                <SettingRow
-                  title="Run on startup"
-                  description={hint(
-                    "Automatically start Glow when you log in to your computer",
-                    "Запускать Glow вместе с Windows.",
-                  )}
-                >
-                  <Toggle
-                    on={runStartup}
-                    onChange={(v) => {
-                      setRunStartup(v);
-                      saveFlag("glow.runStartup", v);
-                    }}
-                  />
-                </SettingRow>
-                <SettingRow
-                  title="Quick Entry keyboard shortcut"
-                  description={hint(
-                    "Quickly open Glow from anywhere",
-                    "Горячая клавиша, чтобы быстро открыть Glow.",
-                  )}
-                >
-                  <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-[12.5px]">
-                    {shortcut}
-                    <X size={12} className="opacity-50" />
-                  </span>
-                </SettingRow>
-                <SettingRow
-                  title="System tray"
-                  description={hint(
-                    "Keep Glow running in the system tray",
-                    "Держать Glow в трее (рядом с часами).",
-                  )}
-                >
-                  <Toggle
-                    on={sysTray}
-                    onChange={(v) => {
-                      setSysTray(v);
-                      saveFlag("glow.sysTray", v);
-                    }}
-                  />
-                </SettingRow>
-                <SettingRow
-                  title="Keep computer awake"
-                  description={hint(
-                    "Prevent your computer from idle-sleeping while Glow is open so scheduled tasks can run. Your display can still turn off.",
-                    "Не усыплять ПК, пока Glow открыт (экран всё равно может гаснуть). Нужно для фоновых задач.",
-                  )}
-                >
-                  <Toggle
-                    on={keepAwake}
-                    onChange={(v) => {
-                      setKeepAwake(v);
-                      saveFlag("glow.keepAwake", v);
-                    }}
-                  />
-                </SettingRow>
-              </div>
+              <p className="text-[13px] text-[var(--fg-muted)]">
+                {hint("Startup, system tray, and sleep prevention are not configurable in the app. Previously saved switches did not change OS settings.",
+                  "Автозапуск, трей и предотвращение сна не настраиваются в приложении. Прежние переключатели не меняли настройки ОС.")}
+              </p>
             )}
 
             {/* EXTENSIONS */}
@@ -1198,191 +1058,47 @@ export function SettingsModal() {
 
             {/* SKILLS */}
             {tab === "skills" && (
-              <div>
-                <div className="mb-5 flex items-center justify-between">
-                  <h2 className="text-[18px] font-semibold">Skills</h2>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]">
-                      <Search size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Browse
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Add <ChevronDown size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-                  <div className="grid grid-cols-3 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                    <span>Skill</span>
-                    <span>Last updated</span>
-                    <span>Author</span>
-                  </div>
-                  {skills.map((s) => (
-                    <div
-                      key={s.name}
-                      className="grid grid-cols-3 border-b border-[var(--border)] px-3 py-3 text-[13.5px] last:border-0"
-                    >
-                      <span>{s.name}</span>
-                      <span className="text-[var(--fg-muted)]">{s.updated}</span>
-                      <span className="text-[var(--fg-muted)]">{s.author}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <section className="space-y-3">
+                <h2 className="text-[18px] font-semibold">Skills</h2>
+                <p className="text-[13px] text-[var(--fg-muted)]">
+                  {hint("Built-in prompt presets are available in the chat + menu → Skills. They fill the draft; they do not install tools.",
+                    "Готовые шаблоны запроса доступны в чате: + → Skills. Они заполняют черновик, а не устанавливают инструменты.")}
+                </p>
+                <p className="text-[13px] text-[var(--fg-muted)]">morning · skill-creator · design-reflect</p>
+                <button type="button" onClick={() => setOpen(false)}
+                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px] hover:bg-[var(--bg-hover)]">
+                  {hint("Back to chat", "Вернуться в чат")}
+                </button>
+              </section>
             )}
 
             {/* CONNECTORS */}
             {tab === "connectors" && (
-              <div>
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-[18px] font-semibold">Connectors</h2>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]">
-                      <Search size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Add <ChevronDown size={13} />
-                    </button>
-                  </div>
-                </div>
-                <div className="mb-4 inline-flex rounded-xl bg-[var(--bg)] p-0.5">
-                  {(
-                    [
-                      ["all", "All"],
-                      ["connected", "Connected"],
-                      ["not", "Not connected"],
-                    ] as const
-                  ).map(([id, label]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setConnectorFilter(id)}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-[12.5px]",
-                        connectorFilter === id
-                          ? "bg-[var(--bg-elevated)] font-medium shadow-sm"
-                          : "text-[var(--fg-muted)]",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <p className="mb-2 text-[11px] font-medium tracking-wide text-[var(--fg-faint)]">
-                  POPULAR
+              <section className="space-y-3">
+                <h2 className="text-[18px] font-semibold">Connectors</h2>
+                <p className="text-[13px] text-[var(--fg-muted)]">
+                  {hint("External account connections are not available. No accounts are connected by this screen.",
+                    "Подключение внешних аккаунтов пока недоступно. Этот экран не подключает Gmail, Drive, Slack или GitHub.")}
                 </p>
-                <div className="mb-6 space-y-2">
-                  {popularConnectors.slice(0, 3).map((c) => {
-                    const on = connectedIds.includes(c.id);
-                    if (connectorFilter === "connected" && !on) return null;
-                    if (connectorFilter === "not" && on) return null;
-                    return (
-                      <div
-                        key={c.id}
-                        className="flex items-center justify-between rounded-xl border border-[var(--border)] px-3 py-3"
-                      >
-                        <span className="text-[13.5px] font-medium">{c.name}</span>
-                        <button
-                          type="button"
-                          className="rounded-xl border border-[var(--border)] px-3 py-1 text-[12.5px]"
-                          onClick={() => {
-                            const next = on
-                              ? connectedIds.filter((x) => x !== c.id)
-                              : [...connectedIds, c.id];
-                            setConnectedIds(next);
-                            localStorage.setItem("glow.connectors", JSON.stringify(next));
-                          }}
-                        >
-                          {on ? "Connected" : "Connect"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div className="overflow-hidden rounded-xl border border-[var(--border)]">
-                  <div className="grid grid-cols-3 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                    <span>Connector</span>
-                    <span>Type</span>
-                    <span>Status</span>
-                  </div>
-                  {popularConnectors.slice(3).map((c) => {
-                    const on = connectedIds.includes(c.id);
-                    return (
-                      <div
-                        key={c.id}
-                        className="grid grid-cols-3 items-center px-3 py-3 text-[13.5px]"
-                      >
-                        <span>{c.name}</span>
-                        <span className="text-[var(--fg-muted)]">{c.type || "Web"}</span>
-                        <button
-                          type="button"
-                          className="w-fit rounded-xl border border-[var(--border)] px-3 py-1 text-[12.5px]"
-                          onClick={() => {
-                            const next = on
-                              ? connectedIds.filter((x) => x !== c.id)
-                              : [...connectedIds, c.id];
-                            setConnectedIds(next);
-                            localStorage.setItem("glow.connectors", JSON.stringify(next));
-                          }}
-                        >
-                          {on ? "Connected" : "Connect"}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
+                <button type="button" onClick={() => setTab("extensions")}
+                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px] hover:bg-[var(--bg-hover)]">
+                  {hint("Open extensions", "Открыть расширения")}
+                </button>
+              </section>
             )}
 
             {/* PLUGINS */}
             {tab === "plugins" && (
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-[18px] font-semibold">Plugins</h2>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]">
-                      <Search size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Browse
-                    </button>
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px]"
-                    >
-                      Add <ChevronDown size={13} />
-                    </button>
-                  </div>
-                </div>
-                <EmptyArt
-                  title={hint(
-                    "Give Glow role-level expertise with plugins",
-                    "Plugins дают Glow экспертизу под роль (как набор Skills + connectors).",
-                  )}
-                  action={
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px]"
-                    >
-                      Browse plugins
-                    </button>
-                  }
-                />
-              </div>
+              <section className="space-y-3">
+                <h2 className="text-[18px] font-semibold">Plugins</h2>
+                <p className="text-[13px] text-[var(--fg-muted)]">
+                  {hint("Plugin installation is not available in this version.", "Установка плагинов в этой версии недоступна.")}
+                </p>
+                <button type="button" onClick={() => setTab("skills")}
+                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px] hover:bg-[var(--bg-hover)]">
+                  {hint("Open skills", "Открыть навыки")}
+                </button>
+              </section>
             )}
 
             {/* MEMORY */}
@@ -1425,3 +1141,4 @@ export function SettingsModal() {
     </div>
   );
 }
+import { accountStorage as localStorage } from "../../auth/accountStorage";

@@ -171,14 +171,13 @@ export const EXTENSION_CATALOG: ExtensionDef[] = [
   },
   {
     id: "chrome",
-    name: "Chrome Agent",
-    description: "Browse the web with Playwright-backed Chrome agent.",
-    descriptionRu: "Браузерный агент Chrome (Playwright).",
+    name: "Browser",
+    description: "Open an external browser. AI browser automation is not connected.",
+    descriptionRu: "Открытие внешнего браузера. Управление через ИИ не подключено.",
     category: "browser",
     icon: Chrome,
-    mcpId: "chrome",
     capabilities: [
-      "Chrome Agent ON: user can ask for web navigation tasks; Chrome connector is enabled.",
+      "Browser shortcut only. No browser automation tools are available; never claim to navigate, click, or fill forms.",
     ],
   },
   {

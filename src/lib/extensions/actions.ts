@@ -84,7 +84,7 @@ export async function runExtensionAction(
     case "chrome": {
       const { enableChromeAgent } = await import("../glowExtensions");
       await enableChromeAgent();
-      return "Chrome Agent enabled.";
+      return "External browser opened. AI browser control is not connected.";
     }
     case "pdf-viewer":
       return "PDF Viewer ready — attach a .pdf in chat to extract text.";
@@ -98,8 +98,8 @@ export async function runExtensionAction(
     case "unity":
     case "medical-db":
     case "mcp-hub":
-      return `${id} connector flagged On — manage details in Agents & MCP.`;
+      return `${id}: no connected runtime is implemented. Enabling its catalog entry does not grant AI tool access.`;
     default:
-      return "OK";
+      return "No action is implemented for this extension.";
   }
 }

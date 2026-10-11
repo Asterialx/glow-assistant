@@ -4,6 +4,7 @@ import { estimateTokens, uid } from "../utils";
 import { getModel } from "../models";
 import { DESIGN_MODE_SYSTEM } from "../designMode";
 import { isStudyPlanRequest } from "../studyPlan";
+import { betaAuthEnabled, supabase } from "../../auth/client";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -21,12 +22,14 @@ function isTauri(): boolean {
 }
 
 function getBaseUrl(): string {
+  if (betaAuthEnabled && !import.meta.env.DEV) return "/api/ai";
   // Dev (browser or tauri:dev on localhost:1420): Vite proxy → no CORS.
   if (import.meta.env.DEV) return "/smartapi";
   return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1";
 }
 
 function getApiKeys(): string[] {
+  if (betaAuthEnabled && !import.meta.env.DEV) return ["authenticated-server"];
   // In local development, keep the real Xkiro credential in the Vite server.
   // The proxy replaces this placeholder with its server-side Authorization header.
   if (
@@ -41,6 +44,14 @@ function getApiKeys(): string[] {
 
 /** fetch that bypasses CORS inside Tauri WebView via plugin-http */
 async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
+  if (betaAuthEnabled && !import.meta.env.DEV) {
+    const session = await supabase?.auth.getSession();
+    const token = session?.data.session?.access_token;
+    if (!token) throw new Error("Войдите в Glow, чтобы продолжить.");
+    const headers = new Headers(init?.headers);
+    headers.set("Authorization", `Bearer ${token}`);
+    return fetch(input, { ...init, headers });
+  }
   // Dev uses Vite proxy on same origin — browser fetch is fine (and required).
   if (import.meta.env.DEV || !isTauri()) {
     return fetch(input, init);
@@ -207,7 +218,7 @@ export async function streamChatCompletion(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  opts?: { temperature?: number; maxTokens?: number },
+  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string },
 ): Promise<void> {
   const model = getModel(modelId);
   const url = `${getBaseUrl()}/chat/completions`;
@@ -231,6 +242,10 @@ export async function streamChatCompletion(
   try {
     const body = {
       model: xkiroModel,
+      ...(betaAuthEnabled && import.meta.env.VITE_CLOUD_DATA_ENABLED === "true" ? {
+        conversation_id: opts?.conversationId,
+        scope: opts?.scope,
+      } : {}),
       messages,
       stream: true,
       max_tokens: maxTokens,
@@ -358,3 +373,4 @@ function toXkiroModelId(modelId: string): string {
 }
 
 export { uid };
+import { accountStorage as localStorage } from "../../auth/accountStorage";

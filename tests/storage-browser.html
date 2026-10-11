@@ -1,0 +1,26 @@
+<!doctype html><html lang="ru"><meta charset="utf-8"><title>Glow storage test</title>
+<body><h1>Проверка хранения Glow</h1><p id="result" role="status">Проверяем…</p>
+<script type="module">
+import { openBrowserSnapshot } from '/src/db/browserPersistence.ts';
+const result = document.getElementById('result');
+const names = ['glow-test-a-', 'glow-test-b-'].map(name => name + crypto.randomUUID());
+let a, b, reload;
+try {
+  a = await openBrowserSnapshot(names[0]); b = await openBrowserSnapshot(names[1]);
+  await a.save({ conversations: [{ id: 'private-a', title: 'Account A' }], global_memory: [{ id:'memory',fact:'Private fact' }] });
+  if (await b.load() !== undefined) throw Error('Account B received account A data');
+  await b.save({ conversations: [{ id: 'private-b', title: 'Account B' }] });
+  if ((await a.load()).conversations[0].id !== 'private-a') throw Error('Writes cross account boundary');
+  let refused = false;
+  try { await openBrowserSnapshot(names[0]); } catch { refused = true; }
+  if (!refused) throw Error('Second writer was allowed');
+  await a.close();
+  reload = await openBrowserSnapshot(names[0]);
+  if ((await reload.load()).global_memory[0].fact !== 'Private fact') throw Error('Data lost on reopening');
+  result.textContent = 'PASS: аккаунты разделены; чаты и память сохраняются после повторного открытия; второй писатель заблокирован.';
+} catch (error) { result.textContent = 'FAIL: ' + error.message; }
+finally {
+  await a?.close(); await b?.close(); await reload?.close();
+  for (const name of names) indexedDB.deleteDatabase(name);
+}
+</script></body></html>

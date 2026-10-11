@@ -1,0 +1,63 @@
+import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'node:crypto';
+
+// Provider credentials never leave this server. This endpoint is closed by default.
+export default async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  const fail = (status, message) => res.status(status).json({ error: { message } });
+  if (process.env.GLOW_AI_ENABLED !== 'true') return fail(503, 'AI temporarily unavailable');
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const providerKey = process.env.OPENROUTER_API_KEY;
+  if (!url || !key || !providerKey) return fail(503, 'Server configuration incomplete');
+  const authorization = req.headers.authorization || '';
+  if (!/^Bearer \S+$/.test(authorization)) return fail(401, 'Sign in required');
+  const client = createClient(url, key, { auth: { persistSession: false }, global: { headers: { Authorization: authorization } } });
+  const { data: { user }, error } = await client.auth.getUser(authorization.slice(7));
+  if (error || !user?.email_confirmed_at) return fail(401, 'Sign in required');
+  const access = await client.from('glow_access').select('active').eq('user_id', user.id).single();
+  if (access.error || !access.data?.active) return fail(403, 'Access denied');
+  const path = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+  const model = process.env.GLOW_AI_MODEL || 'z-ai/glm-5.3-flash';
+  if (path === 'models' && req.method === 'GET') {
+    return res.status(200).json({ data: [{ id: model, display_name: 'GLM 5.3 Flash', modality: 'chat', access_tier: 'free' }] });
+  }
+  if (path !== 'chat/completions' || req.method !== 'POST') return fail(405, 'Unsupported request');
+  const body = req.body;
+  if (!body || typeof body.conversation_id !== 'string' || !['home','code','med'].includes(body.scope)) return fail(400, 'Conversation required');
+  if (!body || body.model !== model || body.stream !== true || !Array.isArray(body.messages) || body.messages.length > 250 ||
+      body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string') ||
+      JSON.stringify(body.messages).length > 200000) return fail(400, 'Invalid conversation');
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 110000);
+  res.on('close', () => abort.abort());
+  const leaseToken = randomUUID();
+  let leased = false;
+  try {
+    const lease = await client.rpc('glow_acquire_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
+    if (lease.error) return fail(403, 'Conversation access denied');
+    if (!lease.data) return fail(409, 'An answer is already being generated on another device');
+    leased = true;
+    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', signal: abort.signal,
+      headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages: body.messages, stream: true,
+        max_tokens: Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192)),
+        temperature: Math.max(0, Math.min(Number(body.temperature) || 0.7, 2)), reasoning: { effort: 'low' } }),
+    });
+    if (!upstream.ok || !upstream.body) return fail(502, 'Provider unavailable. Try again later.');
+    res.statusCode = 200;
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    for await (const chunk of upstream.body) {
+      if (res.destroyed) break;
+      if (!res.write(chunk)) await new Promise(resolve => res.once('drain', resolve));
+    }
+    res.end();
+  } catch {
+    if (!res.headersSent) fail(502, 'Generation interrupted. Try again.');
+    else res.end();
+  } finally {
+    clearTimeout(timer);
+    if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
+  }
+}

@@ -1,4 +1,4 @@
-import { ArrowLeft, ExternalLink, Menu, X } from "lucide-react";
+import { ArrowLeft, ExternalLink, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { useUiStore } from "../../stores/uiStore";
@@ -21,21 +21,16 @@ export function AppsAndExtensions() {
         <button
           type="button"
           className="rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
-          onClick={() => setOpen(false)}
-        >
-          <Menu size={16} />
-        </button>
-        <button
-          type="button"
-          className="rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          aria-label={ru ? "Назад" : "Back"}
           onClick={() => setOpen(false)}
         >
           <ArrowLeft size={16} />
         </button>
-        <h1 className="text-[15px] font-medium">Apps and extensions</h1>
+        <h1 className="text-[15px] font-medium">{ru ? "Приложения и расширения" : "Apps and extensions"}</h1>
         <button
           type="button"
           className="ml-auto rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+          aria-label={ru ? "Закрыть" : "Close"}
           onClick={() => setOpen(false)}
         >
           <X size={16} />
@@ -48,31 +43,13 @@ export function AppsAndExtensions() {
         </p>
 
         <div className="mx-auto grid max-w-5xl gap-4 md:grid-cols-2">
-          <Card
-            title="Mobile"
-            body={
-              ru
-                ? "Чат с телефона, приложения и задачи на ходу."
-                : "Chat hands-free, connect Glow to your favorite apps, and kick off tasks on the go."
-            }
-            disabled
-            disabledLabel={ru ? "Скоро" : "Coming soon"}
-          >
-            <Row label="iOS" action={ru ? "Скоро" : "Soon"} disabled />
-            <Row label="Android" action={ru ? "Скоро" : "Soon"} disabled />
-            <div className="mt-4 rounded-xl bg-[var(--bg)] p-3 text-[12px] text-[var(--fg-muted)]">
-              {ru
-                ? "Мобильное приложение подключим позже — карточка пока неактивна."
-                : "Mobile app comes later — this card stays inactive for now."}
-            </div>
-          </Card>
 
           <Card
-            title="Chrome"
+            title={ru ? "Браузер" : "Browser"}
             body={
               ru
-                ? "Открывает Chrome, включает агента и новый чат с подтверждением."
-                : "Launches Chrome, enables the agent, and opens a chat confirming it’s live."
+                ? "Открывает сайт в отдельном браузере. Управление браузером через ИИ не подключено."
+                : "Opens a website in an external browser. AI browser control is not connected."
             }
           >
             <button
@@ -87,7 +64,7 @@ export function AppsAndExtensions() {
               }}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--accent)] px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-60"
             >
-              {chromeBusy ? "…" : ru ? "Открыть Chrome" : "Open Chrome"}
+              {chromeBusy ? "…" : ru ? "Открыть браузер" : "Open browser"}
               <ExternalLink size={13} />
             </button>
             {chromeStatus && (
@@ -100,7 +77,7 @@ export function AppsAndExtensions() {
             body={
               ru
                 ? "Чат, файлы и вкладки в одном приложении Glow."
-                : "Chat, cowork, and code in one app. Glow works with your files, apps, and browser tabs."
+                : "Return to your Glow chat and workspace."
             }
           >
             <button
@@ -108,7 +85,7 @@ export function AppsAndExtensions() {
               className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px] hover:bg-[var(--bg-hover)]"
               onClick={() => setOpen(false)}
             >
-              {ru ? "Открыть" : "Open"}
+              {ru ? "Вернуться в Glow" : "Back to Glow"}
             </button>
           </Card>
 
@@ -134,7 +111,6 @@ export function AppsAndExtensions() {
     </div>
   );
 }
-
 function Card({
   title,
   body,
@@ -172,29 +148,6 @@ function Card({
       </div>
       <p className="mb-4 text-[13px] leading-relaxed text-[var(--fg-muted)]">{body}</p>
       {children}
-    </div>
-  );
-}
-
-function Row({
-  label,
-  action,
-  disabled,
-}: {
-  label: string;
-  action: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="mb-2 flex items-center justify-between rounded-xl border border-[var(--border)] px-3 py-2">
-      <span className="text-[13.5px]">{label}</span>
-      <button
-        type="button"
-        disabled={disabled}
-        className="rounded-xl border border-[var(--border)] px-3 py-1 text-[12.5px] disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {action}
-      </button>
     </div>
   );
 }

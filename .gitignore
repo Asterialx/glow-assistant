@@ -12,6 +12,9 @@ tsconfig.tsbuildinfo
 # env / secrets
 .env
 .env.local
+.env.*
+!.env.example
+supabase/.temp/
 *.local
 
 # local QA fixtures

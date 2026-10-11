@@ -368,3 +368,4 @@ export function importSyncPackage(json: string): { ok: true } | { ok: false; err
 export function getAppsPageUrl(): string {
   return "https://glowassistant.local/apps";
 }
+import { accountStorage as localStorage, accountSessionStorage as sessionStorage } from "../auth/accountStorage";

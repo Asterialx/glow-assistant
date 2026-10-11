@@ -226,12 +226,14 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
         <SubPanel>
           <MenuRow
             icon={<Globe size={15} strokeWidth={1.7} />}
-            label="Chrome agent"
+            label={locale === "ru" ? "Открыть браузер" : "Open browser"}
             onClick={async () => {
               if (busy) return;
               setBusy(true);
               try {
                 await enableChromeAgent();
+              } catch (error) {
+                alert(error instanceof Error ? error.message : String(error));
               } finally {
                 setBusy(false);
                 onClose();

@@ -10,6 +10,12 @@ import type {
   UiWidget,
 } from "../lib/types";
 import { nowMs, uid } from "../lib/utils";
+import { accountStorageKey } from "../auth/accountStorage";
+import { betaAuthEnabled } from "../auth/client";
+import { openBrowserSnapshot } from "./browserPersistence";
+import { createCloudDb } from "./cloudDb";
+
+export const cloudDataEnabled = betaAuthEnabled && import.meta.env.VITE_CLOUD_DATA_ENABLED === "true";
 
 const isTauri = () =>
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -218,14 +224,39 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
 `;
 
 let metaDb: DbLike | null = null;
+let metaInit: Promise<DbLike> | null = null;
 const modeDbs: Partial<Record<AppMode, DbLike>> = {};
+const modeInit: Partial<Record<AppMode, Promise<DbLike>>> = {};
 
 async function loadDb(name: string): Promise<DbLike> {
+  if (cloudDataEnabled) return createCloudDb(name.replace(/^glow_/, ""));
   if (!isTauri()) {
-    return new MemoryDb();
+    const db = new MemoryDb();
+    if (!betaAuthEnabled) return db;
+    const snapshot = await openBrowserSnapshot(accountStorageKey(name));
+    db.tables = await snapshot.load() || {};
+    let queue: Promise<unknown> = Promise.resolve();
+    return {
+      execute(query, binds) {
+        const run = queue.then(async () => {
+          const before = structuredClone(db.tables);
+          try {
+            const result = await db.execute(query, binds);
+            await snapshot.save(db.tables);
+            return result;
+          } catch (error) { db.tables = before; throw error; }
+        });
+        queue = run.catch(() => {});
+        return run;
+      },
+      async select<T>(query: string, binds?: unknown[]) {
+        await queue;
+        return structuredClone(await db.select<T>(query, binds));
+      },
+    };
   }
   const { default: Database } = await import("@tauri-apps/plugin-sql");
-  return Database.load(`sqlite:${name}.db`);
+  return Database.load(`sqlite:${accountStorageKey(name)}.db`);
 }
 
 async function execStatements(db: DbLike, sql: string) {
@@ -240,14 +271,22 @@ async function execStatements(db: DbLike, sql: string) {
 
 export async function initMetaDb(): Promise<DbLike> {
   if (metaDb) return metaDb;
-  metaDb = await loadDb("glow_meta");
-  await execStatements(metaDb, META_SQL);
-
-  return metaDb;
+  if (!metaInit) metaInit = (async () => {
+    const db = await loadDb("glow_meta");
+    await execStatements(db, META_SQL);
+    metaDb = db;
+    return db;
+  })().catch(error => { metaInit = null; throw error; });
+  return metaInit;
 }
 
 export async function getModeDb(mode: AppMode): Promise<DbLike> {
   if (modeDbs[mode]) return modeDbs[mode]!;
+  if (!modeInit[mode]) modeInit[mode] = initializeModeDb(mode).catch(error => { delete modeInit[mode]; throw error; });
+  return modeInit[mode]!;
+}
+
+async function initializeModeDb(mode: AppMode): Promise<DbLike> {
   const db = await loadDb(`glow_${mode}`);
   await execStatements(db, MODE_SQL);
   // Soft-migrate older DBs

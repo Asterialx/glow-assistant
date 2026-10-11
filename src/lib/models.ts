@@ -1,4 +1,5 @@
 import type { ModelInfo } from "./types";
+import { betaAuthEnabled, supabase } from "../auth/client";
 
 interface XkiroModel {
   id: string;
@@ -19,11 +20,15 @@ export function loadModelCatalog(): Promise<ModelInfo[]> {
   if (catalogRequest) return catalogRequest;
 
   const isOpenRouter = import.meta.env.VITE_SMARTAPI_BASE_URL?.includes("openrouter.ai");
-  const baseUrl = import.meta.env.DEV
+  const serverMode = betaAuthEnabled && !import.meta.env.DEV;
+  const baseUrl = serverMode ? "/api/ai" : import.meta.env.DEV
     ? "/smartapi"
     : import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.xkiro.com/v1";
 
-  catalogRequest = fetch(`${baseUrl.replace(/\/$/, "")}/models`)
+  catalogRequest = (async () => {
+    const token = serverMode ? (await supabase?.auth.getSession())?.data.session?.access_token : undefined;
+    return fetch(`${baseUrl.replace(/\/$/, "")}/models`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  })()
     .then(async (response) => {
       if (!response.ok) throw new Error(`Model catalog request failed (${response.status})`);
       const payload = (await response.json()) as XkiroModelsResponse;

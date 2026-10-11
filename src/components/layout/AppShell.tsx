@@ -40,6 +40,8 @@ import { PanelLeft, Search, X } from "lucide-react";
 import { feedbackPreferenceHints } from "../../lib/feedbackProfile";
 import { hydrateExtensionMcp, useExtensionsStore } from "../../lib/extensions/registry";
 import { conversationService, type LegacyGenerationOptions } from "../../conversation/conversationService";
+import { cloudDataEnabled } from "../../db";
+import { watchCloudChanges } from "../../db/cloudSync";
 
 export function AppShell() {
   const mode = useModeStore((s) => s.mode);
@@ -81,6 +83,23 @@ export function AppShell() {
   const [widgetsByMessage, setWidgetsByMessage] = useState<Record<string, UiWidget[]>>({});
   const [artifactRevisions, setArtifactRevisions] = useState<Record<string, ArtifactRevision[]>>({});
   const [ready, setReady] = useState(false);
+  const [syncError, setSyncError] = useState("");
+
+  useEffect(() => {
+    if (!ready || !cloudDataEnabled) return;
+    return watchCloudChanges(mode, async () => {
+      if (conversationService.getState().streaming) return false;
+      const active = conversationService.getState().activeConversationId;
+      const conversations = await conversationService.refresh(mode);
+      setProjects(await listProjects(mode));
+      if (active && conversations.some(item => item.id === active)) await loadConversation(active);
+      else if (active) { conversationService.startNew(); setArtifacts([]); setWidgetsByMessage({}); }
+    }, setSyncError);
+  }, [ready, mode]);
+
+  useEffect(() => {
+    if (syncError) console.warn(syncError);
+  }, [syncError]);
 
   const reloadConversations = async () => {
     return conversationService.refresh(mode);
@@ -121,7 +140,7 @@ export function AppShell() {
       await bootstrapDatabases();
       await hydrateExtensionMcp();
       setReady(true);
-    })();
+    })().catch(() => setSyncError("Не удалось открыть хранилище. Проверьте соединение и обновите страницу."));
     onGameMode((s) => setGameModeActive(s.active));
   }, [setGameModeActive]);
 
@@ -615,6 +634,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
+      {syncError && <div role="status" className="fixed left-1/2 top-12 z-[110] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm">{syncError}</div>}
       {sidebarOpen && (
         <>
           <button
@@ -747,3 +767,4 @@ export function AppShell() {
     </div>
   );
 }
+import { accountStorage as localStorage } from "../../auth/accountStorage";

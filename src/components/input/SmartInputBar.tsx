@@ -819,3 +819,4 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
     </div>
   );
 }
+import { accountStorage as localStorage } from "../../auth/accountStorage";

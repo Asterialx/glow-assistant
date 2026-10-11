@@ -1,48 +1,16 @@
 import { useChatStore } from "../stores/chatStore";
 import { useModeStore } from "../stores/modeStore";
 import { useUiStore } from "../stores/uiStore";
-import { openChromeBrowser, setMcpEnabled } from "./tauri";
+import { openChromeBrowser } from "./tauri";
 import { nowMs, uid } from "./utils";
-import type { Artifact, Message } from "./types";
-import { conversationService } from "../conversation/conversationService";
+import type { Artifact } from "./types";
 
-/** Enable Chrome agent + open a confirmation chat. */
+/** Open an external browser. This does not connect browser automation tools. */
 export async function enableChromeAgent(): Promise<void> {
-  const mode = useModeStore.getState().mode;
-  const locale = useUiStore.getState().locale;
-  const ru = locale === "ru";
-  const {
-    activeProjectId,
-  } = useChatStore.getState();
-
-  await setMcpEnabled("chrome", true);
-  useModeStore.getState().setChromeAgentActive(true);
-  try {
-    const { useExtensionsStore } = await import("./extensions/registry");
-    await useExtensionsStore.getState().install("chrome");
-  } catch {
-    /* ignore */
-  }
   const ok = await openChromeBrowser("https://www.google.com");
-
-  const conv = await conversationService.createConversation(mode, activeProjectId, "Chrome Agent");
-  const notice: Message = {
-    id: uid(),
-    conversation_id: conv.id,
-    parent_id: null,
-    role: "assistant",
-    content: ok
-      ? ru
-        ? "✓ **Chrome Agent** открыт и подключён.\n\nБраузер запущен. Могу навигировать по сайтам, кликать кнопки и заполнять формы — опиши задачу."
-        : "✓ **Chrome Agent** is open and connected.\n\nChrome has launched. I can navigate, click, and fill forms — tell me what to do."
-      : ru
-        ? "✓ **Chrome Agent** включён.\n\nНе удалось автозапустить Chrome — открой его вручную, затем опиши задачу для агента."
-        : "✓ **Chrome Agent** is enabled.\n\nCouldn’t auto-launch Chrome — open it manually, then tell me what to do.",
-    model_id: null,
-    status: "done",
-    created_at: nowMs(),
-  };
-  await conversationService.appendMessage(mode, notice);
+  if (!ok) throw new Error(useUiStore.getState().locale === "ru"
+    ? "Не удалось открыть браузер. Проверьте разрешение на всплывающие окна."
+    : "Could not open the browser. Check popup permissions.");
   useUiStore.getState().setAppsOpen(false);
 }
 

@@ -133,3 +133,4 @@ export async function hydrateExtensionMcp() {
     await activate(item.id, true);
   }
 }
+import { accountStorage as localStorage } from "../../auth/accountStorage";

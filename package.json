@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
+    "@supabase/supabase-js": "^2.117.3",
     "@tauri-apps/api": "^2.5.0",
     "@tauri-apps/plugin-dialog": "^2.2.1",
     "@tauri-apps/plugin-fs": "^2.2.1",

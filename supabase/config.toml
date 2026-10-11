@@ -1,0 +1,3 @@
+[functions.glow-invite]
+# Explicit JWT verification is performed with auth.getUser in the function.
+verify_jwt = false
