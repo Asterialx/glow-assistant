@@ -494,7 +494,7 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
 
   return (
     <div
-      className={cn("px-4 pb-5", centered ? "pt-0" : "pt-2")}
+      className={cn("glow-composer px-4 pb-5", centered ? "pt-0" : "pt-2")}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();

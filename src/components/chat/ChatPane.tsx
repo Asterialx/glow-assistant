@@ -244,8 +244,8 @@ export function ChatPane({
 
   if (empty) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-4">
-        <div className="mb-7 max-w-[620px] text-center">
+      <div className="glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+        <div className="glow-empty-intro mb-7 max-w-[620px] text-center">
           <div className="mb-3 flex items-center justify-center gap-3">
             <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
               ✻

@@ -60,7 +60,7 @@ body {
 }
 
 /* Keep the workspace inside the visible mobile viewport and safe-area insets. */
-#root { height: 100dvh; }
+#root { height: var(--glow-viewport-height, 100dvh); }
 .prose-chat { overflow-wrap: anywhere; min-width: 0; }
 @media (max-width: 767px) {
   .glow-artifacts-panel {
@@ -74,6 +74,15 @@ body {
     border-left: 0;
   }
   input, textarea, select { font-size: 16px; }
+  .prose-chat { font-size: 17px !important; }
+  .glow-composer textarea { font-size: 17px; }
+  .glow-composer button { min-height: 42px; }
+  .glow-composer button[aria-label], .glow-composer button[title] { min-width: 42px; }
+  .glow-composer button[aria-haspopup="listbox"] { font-size: 14px; }
+  .glow-composer { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  html[data-glow-keyboard="open"] .glow-empty-chat { justify-content: flex-end; }
+  html[data-glow-keyboard="open"] .glow-empty-intro { margin-top: auto; margin-bottom: auto; padding-block: 12px; }
+  html[data-glow-keyboard="open"] .glow-composer { padding-bottom: 6px; }
 }
 
 ::-webkit-scrollbar {
