@@ -6,6 +6,7 @@ test('Vercel routes resolve from the request URL without query.path', () => {
   assert.equal(resolveAiPath({ url: '/api/ai/models', query: {} }), 'models');
   assert.equal(resolveAiPath({ url: '/api/ai/chat/completions?test=1' }), 'chat/completions');
   assert.equal(resolveAiPath({ query: { path: ['chat', 'completions'] } }), 'chat/completions');
+  assert.equal(resolveAiPath({ url: '/api/ai?path=chat/completions', query: { path: 'chat/completions' } }), 'chat/completions');
 });
 
 function response() {
