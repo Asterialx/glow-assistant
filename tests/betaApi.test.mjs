@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler, { resolveAiPath } from '../api/ai/[...path].js';
+import handler, { resolveAiPath } from '../api/ai.js';
 
 test('Vercel routes resolve from the request URL without query.path', () => {
   assert.equal(resolveAiPath({ url: '/api/ai/models', query: {} }), 'models');

@@ -1,6 +1,9 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": { "api/ai/[...path].js": { "maxDuration": 120 } },
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }]
+  "functions": { "api/ai.js": { "maxDuration": 120 } },
+  "rewrites": [
+    { "source": "/api/ai/:path*", "destination": "/api/ai?path=:path*" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
 }
