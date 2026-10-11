@@ -3,6 +3,11 @@ import assert from 'node:assert/strict';
 import { calculateFormula, extractGenUiBlocks, stripGenUiFences, validateGenUiBlock, recoverInlineArtifacts } from '../src/lib/genUi.ts';
 
 const field = { id: 'angle', label: 'Angle', min: 0, max: 90, step: 1, initial: 30, control: 'range' };
+test('calculator permits an empty optional unit without leaking JSON', () => {
+  const block = { type: 'calculator', title: 'Area', fields: [field], formula: 'angle*2', resultLabel: 'Area', unit: '', precision: 2 };
+  assert.ok(validateGenUiBlock(block));
+  assert.equal(validateGenUiBlock({ ...block, unit: 42 }), null);
+});
 const diagram = {
   type: 'diagram', title: 'Tangent', fields: [field],
   points: [{ id: 'A', x: '0', y: '0' }, { id: 'B', x: 'cos(angle*pi/180)', y: '0' }, { id: 'C', x: 'cos(angle*pi/180)', y: 'sin(angle*pi/180)' }],

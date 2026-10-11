@@ -291,9 +291,10 @@ function parseBlock(value: unknown): GenUiBlock | null {
   if (type === "calculator") {
     const title = shortText(raw.title);
     const resultLabel = shortText(raw.resultLabel);
-    const unit = raw.unit == null ? undefined : shortText(raw.unit, 24);
+    const unitMissing = raw.unit == null || (typeof raw.unit === "string" && !raw.unit.trim());
+    const unit = unitMissing ? undefined : shortText(raw.unit, 24);
     const note = raw.note == null ? undefined : shortText(raw.note, 500);
-    if (!title || !resultLabel || (raw.unit != null && !unit) || (raw.note != null && !note)) return null;
+    if (!title || !resultLabel || (!unitMissing && !unit) || (raw.note != null && !note)) return null;
     if (!Array.isArray(raw.fields) || raw.fields.length < 1 || raw.fields.length > 6) return null;
     const fields: CalculatorField[] = [];
     const ids = new Set<string>();
