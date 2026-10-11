@@ -59,6 +59,23 @@ body {
   box-sizing: border-box;
 }
 
+/* Keep the workspace inside the visible mobile viewport and safe-area insets. */
+#root { height: 100dvh; }
+.prose-chat { overflow-wrap: anywhere; min-width: 0; }
+@media (max-width: 767px) {
+  .glow-artifacts-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    width: 100% !important;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    border-left: 0;
+  }
+  input, textarea, select { font-size: 16px; }
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

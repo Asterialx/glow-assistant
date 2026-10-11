@@ -18,14 +18,17 @@ export default async function handler(req, res) {
   const access = await client.from('glow_access').select('active').eq('user_id', user.id).single();
   if (access.error || !access.data?.active) return fail(403, 'Access denied');
   const path = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
-  const model = process.env.GLOW_AI_MODEL || 'z-ai/glm-5.3-flash';
+  const models = [
+    { id: 'z-ai/glm-5.3-flash', display_name: 'GLM 5.3 Flash', modality: 'chat', access_tier: 'paid' },
+    { id: 'anthropic/claude-haiku-5.5', display_name: 'Claude Haiku 5.5', modality: 'chat', access_tier: 'paid' },
+  ];
   if (path === 'models' && req.method === 'GET') {
-    return res.status(200).json({ data: [{ id: model, display_name: 'GLM 5.3 Flash', modality: 'chat', access_tier: 'free' }] });
+    return res.status(200).json({ data: models });
   }
   if (path !== 'chat/completions' || req.method !== 'POST') return fail(405, 'Unsupported request');
   const body = req.body;
   if (!body || typeof body.conversation_id !== 'string' || !['home','code','med'].includes(body.scope)) return fail(400, 'Conversation required');
-  if (!body || body.model !== model || body.stream !== true || !Array.isArray(body.messages) || body.messages.length > 250 ||
+  if (!body || !models.some(model => model.id === body.model) || body.stream !== true || !Array.isArray(body.messages) || body.messages.length > 250 ||
       body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string') ||
       JSON.stringify(body.messages).length > 200000) return fail(400, 'Invalid conversation');
   const abort = new AbortController();
@@ -41,7 +44,7 @@ export default async function handler(req, res) {
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', signal: abort.signal,
       headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages: body.messages, stream: true,
+      body: JSON.stringify({ model: body.model, messages: body.messages, stream: true,
         max_tokens: Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192)),
         temperature: Math.max(0, Math.min(Number(body.temperature) || 0.7, 2)), reasoning: { effort: 'low' } }),
     });

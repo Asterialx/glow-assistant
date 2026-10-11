@@ -32,20 +32,22 @@ export function loadModelCatalog(): Promise<ModelInfo[]> {
     .then(async (response) => {
       if (!response.ok) throw new Error(`Model catalog request failed (${response.status})`);
       const payload = (await response.json()) as XkiroModelsResponse;
-      if (isOpenRouter) {
-        const glm = (payload.data ?? []).find((model) => model.id === "z-ai/glm-5.3-flash");
-        if (!glm) throw new Error("OpenRouter does not list z-ai/glm-5.3-flash for this account");
-        const model: ModelInfo = {
-          id: glm.id,
-          displayName: glm.display_name || "GLM 5.3 Flash",
-          provider: "z-ai",
+      if (isOpenRouter || serverMode) {
+        const allowed = [
+          { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash", tier: "cheap" as const },
+          { id: "anthropic/claude-haiku-5.5", name: "Claude Haiku 5.5", tier: "balanced" as const },
+        ];
+        activeCatalog = allowed.filter(entry => (payload.data ?? []).some(model => model.id === entry.id)).map((entry, index): ModelInfo => ({
+          id: entry.id,
+          displayName: entry.name,
+          provider: entry.id.split("/")[0],
           costMultiplier: null,
           costPerImage: null,
-          tier: "cheap",
+          tier: entry.tier,
           useCase: "Fast general-purpose chat and coding",
-          sortOrder: 0,
-        };
-        activeCatalog = [model];
+          sortOrder: index,
+        }));
+        if (!activeCatalog.length) throw new Error("Configured OpenRouter models are unavailable");
         return activeCatalog;
       }
       const freeChatModels = (payload.data ?? [])

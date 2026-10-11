@@ -413,7 +413,7 @@ export function ArtifactsPanel({
 
   return (
     <aside
-      className="relative flex h-full shrink-0 flex-col border-l border-[var(--border)] bg-[var(--bg-elevated)]"
+      className="glow-artifacts-panel relative flex h-full shrink-0 flex-col border-l border-[var(--border)] bg-[var(--bg-elevated)]"
       style={{ width }}
     >
       <div
@@ -430,7 +430,7 @@ export function ArtifactsPanel({
           setDragging(true);
         }}
         onDoubleClick={() => setArtifactsWidth(400)}
-        className="group absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize"
+        className="group absolute inset-y-0 -left-1 z-20 hidden w-2 cursor-col-resize md:block"
       >
         <div
           className={

@@ -634,7 +634,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
-      {syncError && <div role="status" className="fixed left-1/2 top-12 z-[110] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm">{syncError}</div>}
+      {syncError && <div role="status" className="fixed left-1/2 top-12 z-[110] w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm break-words">{syncError}</div>}
       {sidebarOpen && (
         <>
           <button
