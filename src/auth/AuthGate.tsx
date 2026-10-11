@@ -101,7 +101,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (loading) return <div className="grid min-h-screen place-items-center bg-[var(--bg)] text-[var(--fg-muted)]" role="status">Проверяем доступ…</div>;
   if (account?.profile.onboarding_completed) return <>
-    <div className="fixed right-4 top-12 z-[100] flex gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs">
+    <div className="fixed right-2 top-12 z-[100] flex max-w-[calc(100%-1rem)] gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs md:right-4 md:gap-2">
       {account.access.role === "admin" && <button className="rounded-lg px-3 py-2 hover:bg-[var(--bg-hover)]" onClick={() => setAdmin(!admin)}>{admin ? "В чат" : "Администрирование"}</button>}
       <button className="rounded-lg px-3 py-2 hover:bg-[var(--bg-hover)]" disabled={busy} onClick={() => void signOut()}>Выйти</button>
     </div>

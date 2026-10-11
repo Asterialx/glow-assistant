@@ -1,11 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import handler from '../api/ai/[...path].js';
+import handler, { resolveAiPath } from '../api/ai/[...path].js';
+
+test('Vercel routes resolve from the request URL without query.path', () => {
+  assert.equal(resolveAiPath({ url: '/api/ai/models', query: {} }), 'models');
+  assert.equal(resolveAiPath({ url: '/api/ai/chat/completions?test=1' }), 'chat/completions');
+  assert.equal(resolveAiPath({ query: { path: ['chat', 'completions'] } }), 'chat/completions');
+});
 
 function response() {
   return { headers: {}, setHeader(k, v) { this.headers[k] = v; },
     status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
 }
+test('authenticated catalog works without a Vercel catch-all query parameter', async () => {
+  const originalFetch = globalThis.fetch;
+  const names = ['GLOW_AI_ENABLED', 'VITE_SUPABASE_URL', 'VITE_SUPABASE_PUBLISHABLE_KEY', 'OPENROUTER_API_KEY'];
+  const originalEnv = Object.fromEntries(names.map(name => [name, process.env[name]]));
+  Object.assign(process.env, { GLOW_AI_ENABLED: 'true', VITE_SUPABASE_URL: 'https://example.supabase.co', VITE_SUPABASE_PUBLISHABLE_KEY: 'test', OPENROUTER_API_KEY: 'server-only-test' });
+  globalThis.fetch = async (url) => {
+    const path = String(url);
+    if (path.includes('/auth/v1/user')) return Response.json({ id: '00000000-0000-0000-0000-000000000001', email_confirmed_at: '2026-10-11' });
+    if (path.includes('/rest/v1/glow_access')) return Response.json({ active: true });
+    throw new Error('Unexpected outbound call');
+  };
+  try {
+    const res = response();
+    await handler({ url: '/api/ai/models', query: {}, method: 'GET', headers: { authorization: 'Bearer test-session' } }, res);
+    assert.equal(res.code, 200);
+    assert.deepEqual(res.body.data.map(model => model.id), ['z-ai/glm-5.3-flash', 'anthropic/claude-haiku-5.5']);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const name of names) {
+      if (originalEnv[name] === undefined) delete process.env[name];
+      else process.env[name] = originalEnv[name];
+    }
+  }
+});
 test('AI server fails closed before release', async () => {
   delete process.env.GLOW_AI_ENABLED;
   const res = response();

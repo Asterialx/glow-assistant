@@ -1,6 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 
+export function resolveAiPath(req) {
+  const pathname = new URL(req.url || '/', 'http://localhost').pathname;
+  if (pathname.startsWith('/api/ai/')) return pathname.slice('/api/ai/'.length).replace(/\/$/, '');
+  const path = req.query?.path;
+  return Array.isArray(path) ? path.join('/') : path;
+}
+
 // Provider credentials never leave this server. This endpoint is closed by default.
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -17,7 +24,7 @@ export default async function handler(req, res) {
   if (error || !user?.email_confirmed_at) return fail(401, 'Sign in required');
   const access = await client.from('glow_access').select('active').eq('user_id', user.id).single();
   if (access.error || !access.data?.active) return fail(403, 'Access denied');
-  const path = Array.isArray(req.query.path) ? req.query.path.join('/') : req.query.path;
+  const path = resolveAiPath(req);
   const models = [
     { id: 'z-ai/glm-5.3-flash', display_name: 'GLM 5.3 Flash', modality: 'chat', access_tier: 'paid' },
     { id: 'anthropic/claude-haiku-5.5', display_name: 'Claude Haiku 5.5', modality: 'chat', access_tier: 'paid' },
