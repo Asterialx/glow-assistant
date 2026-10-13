@@ -402,20 +402,29 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
       if (live) {
         setBusyLabel(locale === "ru" ? "Собираю текст…" : "Finalizing…");
         text = await live.stop();
+        if (text) setLiveHint(text);
       }
       if (rec) {
         const blob = await rec.stop();
+        let timeoutId = 0;
         try {
-          text = await transcribeAudioBlob(blob, lang, (phase) => {
-            if (phase === "loading-model") {
-              setBusyLabel(locale === "ru" ? "Загружаю Whisper (первый раз)…" : "Loading Whisper…");
-            } else {
-              setBusyLabel(locale === "ru" ? "Распознаю всю запись…" : "Transcribing full recording…");
-            }
-          });
+          text = await Promise.race([
+            transcribeAudioBlob(blob, lang, (phase) => {
+              if (phase === "loading-model") {
+                setBusyLabel(locale === "ru" ? "Загружаю Whisper (первый раз)…" : "Loading Whisper…");
+              } else {
+                setBusyLabel(locale === "ru" ? "Распознаю всю запись…" : "Transcribing full recording…");
+              }
+            }),
+            new Promise<string>((_, reject) => {
+              timeoutId = window.setTimeout(() => reject(new Error("Whisper timeout")), 15000);
+            }),
+          ]);
         } catch (error) {
           if (!text) throw error;
-          console.warn("Whisper failed; using live speech transcript", error);
+          console.warn("Whisper unavailable; using live speech transcript", error);
+        } finally {
+          window.clearTimeout(timeoutId);
         }
       }
 
@@ -547,7 +556,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
                   </button>
                 </div>
               )}
-              {liveHint && !busy && (
+              {liveHint && (
                 <div className="rounded-lg bg-[var(--bg)] px-2.5 py-1.5 text-[13px] leading-snug text-[var(--fg)]">
                   {liveHint}
                 </div>
