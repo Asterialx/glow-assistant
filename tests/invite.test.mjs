@@ -32,7 +32,7 @@ test('invite prepares allowance before email and redirects only to current site'
  const res=response();await handler(request(),res);assert.equal(res.code,200);
  const prepared=calls.findIndex(c=>c.path.includes('glow_admin_invite')), mail=calls.findIndex(c=>c.path.includes('/auth/v1/invite'));
  assert.ok(prepared>=0&&mail>prepared);assert.equal(JSON.parse(calls[mail].body).data,undefined);
- assert.ok(calls[mail].path.includes('redirect_to=https%3A%2F%2Fglowai-git-next-kulichevserg2-5183s-projects.vercel.app'));assert.ok(!JSON.stringify(res.body).includes('private-test'));
+ assert.ok(calls[mail].path.includes('redirect_to=https%3A%2F%2Fglowai-ashy.vercel.app'));assert.ok(!JSON.stringify(res.body).includes('private-test'));
 }));
 test('existing account does not trigger an invitation email',async()=>scenario({prepareError:true},async calls=>{
  const res=response();await handler(request(),res);assert.equal(res.code,409);assert.ok(!calls.some(c=>c.path.includes('/auth/v1/invite')));
@@ -51,7 +51,7 @@ test('resend uses existing allowance and public site for unconfirmed invitations
 test('confirmed users receive a login link without creating users or changing limits',async()=>scenario({claimed:true,confirmed:true},async calls=>{
  const res=response();await handler(request({email:'tester@example.com',action:'resend'}),res);assert.equal(res.code,200);
  const otp=calls.find(c=>c.path.includes('/auth/v1/otp'));assert.ok(otp);assert.equal(JSON.parse(otp.body).create_user,false);
- assert.ok(otp.path.includes('glowai-git-next-'));assert.ok(!calls.some(c=>c.path.includes('glow_admin_invite')));
+ assert.ok(otp.path.includes('glowai-ashy.vercel.app'));assert.ok(!calls.some(c=>c.path.includes('glow_admin_invite')));
 }));
 test('resend refuses blocked accounts before sending',async()=>scenario({claimed:true,inactive:true},async calls=>{
  const res=response();await handler(request({email:'tester@example.com',action:'resend'}),res);assert.equal(res.code,403);
