@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { supabase } from "./client";
+import { summarizeCosts } from "./costSummary";
 
 interface Member { user_id: string; email: string; role: string; active: boolean; balance: number }
 interface Invitation { email: string; claimed_by: string | null; expires_at: string }
-interface TokenEntry { id: string; user_id: string; model: string; input_tokens: number | null; output_tokens: number | null; total_tokens: number | null; status: string; reserved: number; created_at: string; finished_at: string | null }
+interface TokenEntry { id: string; user_id: string; model: string; input_tokens: number | null; output_tokens: number | null; total_tokens: number | null; cost_usd: number | null; status: string; reserved: number; created_at: string; finished_at: string | null }
 
 export function AdminPanel() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -23,7 +24,7 @@ export function AdminPanel() {
       supabase.rpc("glow_admin_members"),
       supabase.from("glow_invites").select("email,claimed_by,expires_at").order("created_at", { ascending: false }),
       supabase.from("glow_token_wallets").select("user_id,granted,used"),
-      supabase.from("glow_token_requests").select("id,user_id,model,input_tokens,output_tokens,total_tokens,status,reserved,created_at,finished_at").order("created_at", { ascending: false }).limit(200),
+      supabase.from("glow_token_requests").select("id,user_id,model,input_tokens,output_tokens,total_tokens,cost_usd,status,reserved,created_at,finished_at").order("created_at", { ascending: false }).limit(200),
     ]);
     if (people.error || pending.error || wallets.error || requests.error) throw new Error("Не удалось загрузить админку. Проверьте права и настройку базы токенов.");
     setMembers((people.data ?? []).map((member: Member) => {
@@ -63,6 +64,8 @@ export function AdminPanel() {
   };
   const inputClass = "w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-sm";
   const buttonClass = "rounded-lg border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--bg-hover)] disabled:opacity-50";
+  const costs = summarizeCosts(usage);
+  const usd = (value: number) => `$${value.toFixed(6)}`;
   return <section className="bg-[var(--bg)] text-[var(--fg)]">
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold">Администрирование Glow</h1>
@@ -94,6 +97,11 @@ export function AdminPanel() {
         </div>)}
       </section>
       <section className="space-y-3"><h2 className="font-medium">Расход токенов · последние 200 запросов</h2>
+        <div className="space-y-2 rounded-xl border border-[var(--border)] p-4 text-sm">
+          <p>Подтверждённая стоимость API: <strong className="tabular-nums">{costs.pricedRequests ? usd(costs.dollars) : "Нет данных"}</strong></p>
+          <p>Оценка API за 100 000 токенов: {costs.per100k === null ? "Недостаточно данных" : usd(costs.per100k)}</p>
+          <p className="text-xs text-[var(--fg-muted)]">По {costs.pricedRequests} запросам с известной стоимостью среди последних 200. Для {costs.unknownRequests} запросов стоимость неизвестна. Оценка зависит от моделей, доли входа/выхода и кэша; не включает хостинг, налоги и поддержку.</p>
+        </div>
         <p className="text-xs text-[var(--fg-muted)]">Дата и время указаны в часовом поясе вашего устройства. Резерв не считается подтверждённым расходом.</p>
         {usage.length === 0 && <p className="text-sm text-[var(--fg-muted)]">Запросов пока нет.</p>}
         {usage.map(entry => <div key={entry.id} className="space-y-1 rounded-xl border border-[var(--border)] p-3 text-sm">
@@ -101,6 +109,7 @@ export function AdminPanel() {
           <p className="text-[var(--fg-muted)]">{entry.model} · <time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString("ru-RU",{timeZoneName:"short"})}</time></p>
           <p>{entry.status === "settled" ? `${entry.input_tokens?.toLocaleString("ru-RU")} вход + ${entry.output_tokens?.toLocaleString("ru-RU")} выход = ${entry.total_tokens?.toLocaleString("ru-RU")} токенов`
             : entry.status === "failed" ? "Запрос не принят провайдером · списания нет" : `${entry.reserved.toLocaleString("ru-RU")} в резерве · usage ожидается`}</p>
+          <p>Стоимость API: {entry.cost_usd == null ? "Неизвестна" : usd(entry.cost_usd)}</p>
           {entry.finished_at && <p className="text-xs text-[var(--fg-muted)]">Завершён: {new Date(entry.finished_at).toLocaleString("ru-RU",{timeZoneName:"short"})}</p>}
         </div>)}
       </section>

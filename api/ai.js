@@ -84,8 +84,9 @@ export default async function handler(req, res) {
     clearTimeout(timer);
     if (admitted) {
       const usage = usageCollector.finish();
-      await budgetClient.rpc('glow_settle_tokens', { p_request:leaseToken, p_input:usage?.input ?? null,
-        p_output:usage?.output ?? null, p_total:usage?.total ?? null, p_failed:rejectedByProvider });
+      await budgetClient.rpc('glow_settle_token_usage', { p_request:leaseToken, p_input:usage?.input ?? null,
+        p_output:usage?.output ?? null, p_total:usage?.total ?? null, p_failed:rejectedByProvider,
+        p_cost:usage?.costUsd ?? null });
     }
     if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
   }

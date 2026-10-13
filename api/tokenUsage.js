@@ -10,7 +10,8 @@ export function createUsageCollector() {
       const u = record.usage;
       if (u && [u.prompt_tokens,u.completion_tokens,u.total_tokens].every(n => Number.isSafeInteger(n) && n >= 0)
           && u.total_tokens === u.prompt_tokens + u.completion_tokens) {
-        usage = { input:u.prompt_tokens, output:u.completion_tokens, total:u.total_tokens };
+        usage = { input:u.prompt_tokens, output:u.completion_tokens, total:u.total_tokens,
+          costUsd: typeof u.cost === 'number' && Number.isFinite(u.cost) && u.cost >= 0 ? u.cost : null };
       }
     } catch { /* DONE and malformed events are not usage. */ }
   };
