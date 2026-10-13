@@ -1,5 +1,4 @@
 import { useEffect, useState, type ReactNode, type FormEvent } from "react";
-import { Sparkles } from "lucide-react";
 import { betaAuthEnabled, loadAccount, supabase, type Access, type Profile } from "./client";
 import { emailCooldown, beginEmailCooldown } from "./emailCooldown";
 import { validateProfile } from "./profile";
@@ -117,9 +116,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (loading) return <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[var(--bg)] px-6 text-[var(--fg)]" role="status" aria-live="polite">
     <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/2 size-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--accent)] opacity-[0.07] blur-[100px]" />
     <div className="relative flex w-full max-w-sm flex-col items-center text-center">
-      <div className="relative mb-8 grid size-[4.5rem] place-items-center rounded-[1.6rem] border border-[var(--accent)]/25 bg-[var(--bg-elevated)] shadow-[0_12px_60px_var(--shadow)]">
-        <img src="/glow-mark.png" alt="" className="size-10 object-contain" />
-        <span className="absolute -right-1 -top-1 grid size-6 place-items-center rounded-full border-2 border-[var(--bg)] bg-[var(--accent)] text-white"><Sparkles size={12} /></span>
+      <div className="relative mb-8 grid size-20 place-items-center">
+        <div aria-hidden="true" className="absolute inset-0 rounded-full bg-[var(--accent)] opacity-25 blur-2xl" />
+        <img src="/glow-mark.png" alt="" className="relative size-14 object-contain drop-shadow-[0_0_18px_rgba(217,119,87,0.6)]" />
       </div>
       <h1 className="font-display text-3xl tracking-tight">Glow <span className="text-[var(--accent)]">просыпается</span></h1>
       <p className="mt-3 max-w-xs text-sm leading-6 text-[var(--fg-muted)]">Подготавливаем ваше пространство и загружаем данные. Это займёт всего несколько секунд.</p>
