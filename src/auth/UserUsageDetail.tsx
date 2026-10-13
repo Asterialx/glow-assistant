@@ -20,7 +20,7 @@ interface Member { user_id: string; email: string; role: string; active: boolean
 interface Props { member: Member; onAccessChange: (active: boolean) => void; busy: boolean }
 
 const COLORS = ["#e77755", "#f3b64c", "#63b9a5", "#78a9fa", "#b897e8", "#e68ca8", "#77c6d0", "#c5a478"];
-const usd = (value: number) => `$${value.toFixed(4)}`;
+const usd = (value: number) => `$${value.toFixed(value < 0.01 ? 6 : value < 1 ? 4 : 2)}`;
 const number = (value: number) => value.toLocaleString("ru-RU");
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 
@@ -28,19 +28,19 @@ function ChartPanel({ title, value, unit, data, models, metric }: {
   title: string; value: string; unit: string; data: Array<Record<string, string | number>>; models: string[]; metric: "cost" | "requests" | "tokens";
 }) {
   const formatter = metric === "cost" ? (n: number) => usd(n) : (n: number) => number(n);
-  return <section className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:p-5">
+  return <section className="flex h-full min-w-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 sm:p-5">
     <div className="flex items-start justify-between gap-2"><div><p className="text-xs text-[var(--fg-muted)]">{title}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p></div><span className="mt-1 rounded-lg border border-[var(--border)] px-2 py-1 text-[10px] text-[var(--fg-muted)]">{unit}</span></div>
     <div className="mt-4 h-36 min-w-0 sm:h-40">
-      {data.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{ top: 4, right: 2, left: -19, bottom: 0 }}>
+      {data.length ? <ResponsiveContainer width="100%" height="100%"><BarChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
         <CartesianGrid vertical={false} stroke="var(--border)" strokeDasharray="3 4" />
         <XAxis dataKey="label" axisLine={false} tickLine={false} tick={{ fill: "var(--fg-muted)", fontSize: 10 }} />
-        <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--fg-muted)", fontSize: 10 }} tickFormatter={n => metric === "cost" ? `$${Number(n).toFixed(2)}` : Number(n) >= 1000 ? `${(Number(n) / 1000).toFixed(0)}k` : String(n)} width={42} />
+        <YAxis axisLine={false} tickLine={false} tick={{ fill: "var(--fg-muted)", fontSize: 9 }} tickFormatter={n => metric === "cost" ? usd(Number(n)) : Number(n) >= 1000 ? `${(Number(n) / 1000).toFixed(0)}k` : String(n)} width={54} />
         <Tooltip cursor={{ fill: "var(--bg-hover)", opacity: 0.45 }} contentStyle={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 12, color: "var(--fg)", fontSize: 12 }} formatter={n => [formatter(Number(n)), title]} labelStyle={{ color: "var(--fg-muted)" }} />
         {models.map((model, index) => <Bar key={model} dataKey={model} stackId="usage" fill={COLORS[index % COLORS.length]} radius={index === models.length - 1 ? [3, 3, 0, 0] : 0} maxBarSize={28} />)}
       </BarChart></ResponsiveContainer> : <div className="grid h-full place-items-center text-xs text-[var(--fg-muted)]">Пока нет данных за неделю</div>}
     </div>
-    {models.length > 0 && <div className="mt-3 space-y-2">
-      {models.slice(0, 3).map((model, index) => <div key={model} className="flex items-center gap-2 text-[11px]"><span className="size-2 shrink-0 rounded-full" style={{ background: COLORS[index % COLORS.length] }} /><span className="min-w-0 flex-1 truncate">{model}</span><span className="tabular-nums text-[var(--fg-muted)]">{formatter(data.reduce((sum, day) => sum + Number(day[model] ?? 0), 0))}</span></div>)}
+    {models.length > 0 && <div className="mt-auto min-h-[72px] space-y-2 pt-3">
+      {models.slice(0, 3).map((model, index) => <div key={model} className="flex items-center gap-2 text-[11px]" title={model}><span className="size-2 shrink-0 rounded-full" style={{ background: COLORS[index % COLORS.length] }} /><span className="min-w-0 flex-1 truncate">{model.split("/").at(-1)}</span><span className="shrink-0 tabular-nums text-[var(--fg-muted)]">{formatter(data.reduce((sum, day) => sum + Number(day[model] ?? 0), 0))}</span></div>)}
       {models.length > 3 && <p className="pl-4 text-[10px] text-[var(--fg-muted)]">и ещё {models.length - 3} моделей · см. таблицу ниже</p>}
     </div>}
   </section>;
