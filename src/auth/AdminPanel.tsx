@@ -76,7 +76,7 @@ export function AdminPanel() {
   const filteredMembers = members.filter(member => member.email.toLowerCase().includes(search.trim().toLowerCase()));
   const initials = (value: string) => value.split("@")[0].split(/[._-]/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "U";
 
-  return <section className="-mr-4 bg-[var(--bg)] text-[var(--fg)]">
+  return <section className="-mr-4 text-[var(--fg)]">
     <div className="mx-auto max-w-5xl space-y-6">
       {selected ? <>
         <button type="button" onClick={() => setSelectedId(null)} className={`${buttonClass} -ml-2 border-transparent`}><ArrowLeft size={16} /> Все пользователи</button>
