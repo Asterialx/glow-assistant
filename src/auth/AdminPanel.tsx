@@ -11,6 +11,9 @@ export function AdminPanel() {
   const [invites, setInvites] = useState<Invitation[]>([]);
   const [usage, setUsage] = useState<TokenEntry[]>([]);
   const [busy, setBusy] = useState(false);
+  const [resendAfter, setResendAfter] = useState<Record<string, number>>({});
+  const [clock, setClock] = useState(Date.now());
+  useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 1000); return () => clearInterval(timer); }, []);
   const [status, setStatus] = useState("");
   const [email, setEmail] = useState("");
   const [credits, setCredits] = useState("0");
@@ -57,6 +60,7 @@ export function AdminPanel() {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ email: address, action: "resend" }),
     });
+    setResendAfter(previous => ({ ...previous, [address]: Date.now() + 60000 }));
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.message || "Не удалось отправить письмо повторно.");
     setStatus(result.message);
@@ -157,7 +161,7 @@ export function AdminPanel() {
           <div><h2 className="text-lg font-semibold">Приглашения</h2><p className="mt-0.5 text-xs text-[var(--fg-muted)]">Повторная отправка сохраняет лимит. Если аккаунт подтверждён, приходит ссылка входа.</p></div>
           <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]">
             {invites.length === 0 && <p className="p-4 text-sm text-[var(--fg-muted)]">Приглашений пока нет.</p>}
-            {invites.map(i => <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="break-all">{i.email}</span><span className="text-xs text-[var(--fg-muted)]">{i.accepted ? "Приглашение принято" : i.claimed_by ? "Ожидает принятия" : new Date(i.expires_at).getTime() > Date.now() ? "Ожидает входа" : "Истекло"}</span><button type="button" disabled={busy} onClick={() => resendInvite(i.email)} className={buttonClass} aria-label={`Отправить снова ${i.email}`}>Отправить снова <ArrowUpRight size={15} /></button></div>)}
+            {invites.map(i => <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="break-all">{i.email}</span><span className="text-xs text-[var(--fg-muted)]">{i.accepted ? "Приглашение принято" : i.claimed_by ? "Ожидает принятия" : new Date(i.expires_at).getTime() > Date.now() ? "Ожидает входа" : "Истекло"}</span><button type="button" disabled={busy || (resendAfter[i.email] || 0) > clock} onClick={() => resendInvite(i.email)} className={buttonClass} aria-label={`Отправить снова ${i.email}`}>{(resendAfter[i.email] || 0) > clock ? `Повтор через ${Math.ceil((resendAfter[i.email] - clock) / 1000)} с` : "Отправить снова"} <ArrowUpRight size={15} /></button></div>)}
           </div>
         </section>
       </>}
