@@ -1,13 +1,9 @@
 import {
   Archive,
-  BookOpen,
   Briefcase,
   ChevronRight,
   Globe,
-  Grid2X2,
-  MoreHorizontal,
   Paperclip,
-  Plug,
   Plus,
   ScrollText,
 } from "lucide-react";
@@ -17,25 +13,13 @@ import { useModeStore } from "../../stores/modeStore";
 import { useUiStore } from "../../stores/uiStore";
 import { createProject } from "../../db";
 import { cn } from "../../lib/utils";
-import { enableChromeAgent, enableGlowDesign } from "../../lib/glowExtensions";
 import { conversationService } from "../../conversation/conversationService";
 import { cloudDataEnabled } from "../../db";
+import { BUILTIN_SKILLS } from "../../lib/skills";
+import { useSkillsStore } from "../../stores/skillsStore";
 
-type SubKey = "project" | "skills" | "connector" | null;
+type SubKey = "project" | "skills" | null;
 
-const SKILLS = [
-  { id: "morning", label: "morning", prompt: "/skill morning\nPlan my morning: top 3 priorities and a short focus block." },
-  {
-    id: "skill-creator",
-    label: "skill-creator",
-    prompt: "/skill skill-creator\nHelp me draft a new reusable skill with name, trigger, and steps.",
-  },
-  {
-    id: "design-reflect",
-    label: "design-reflect",
-    prompt: "/skill design-reflect\nReflect on this UI and propose a clickable HTML prototype.",
-  },
-];
 
 interface Props {
   fileRef: React.RefObject<HTMLInputElement | null>;
@@ -54,11 +38,11 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const setDraft = useChatStore((s) => s.setDraft);
   const draft = useChatStore((s) => s.draft);
-  const setAppsOpen = useUiStore((s) => s.setAppsOpen);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const setSettingsTab = useUiStore((s) => s.setSettingsTab);
+  const customSkills = useSkillsStore(s => s.custom);
+  const skills = [...BUILTIN_SKILLS, ...customSkills];
   const [sub, setSub] = useState<SubKey>(null);
-  const [busy, setBusy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,16 +65,10 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
     onClose();
   };
 
-  const applySkill = (prompt: string, alsoDesign = false) => {
-    if (alsoDesign) enableGlowDesign();
-    setDraft(draft ? `${draft}\n${prompt}` : prompt);
-    onClose();
-  };
-
   return (
     <div ref={rootRef} className="absolute bottom-full left-0 z-50 mb-2 flex items-end gap-1.5">
-      <div className="w-[280px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
-        {!cloudDataEnabled && <MenuRow
+      <div className="w-[min(280px,44vw)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
+        {<MenuRow
           icon={<Paperclip size={16} strokeWidth={1.7} />}
           label="Add files or photos"
           trailing={<span className="text-[12px] text-[var(--fg-faint)]">Ctrl+U</span>}
@@ -115,29 +93,11 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
           onMouseEnter={() => setSub("skills")}
           onClick={() => setSub("skills")}
         />
-        <MenuRow
-          icon={<Grid2X2 size={16} strokeWidth={1.7} />}
-          label="Add connector"
-          trailing={<ChevronRight size={15} className="text-[var(--fg-faint)]" />}
-          active={sub === "connector"}
-          onMouseEnter={() => setSub("connector")}
-          onClick={() => setSub("connector")}
-        />
-        <MenuRow
-          icon={<Plug size={16} strokeWidth={1.7} />}
-          label="Add plugins…"
-          onMouseEnter={() => setSub(null)}
-          onClick={() => {
-            setAppsOpen(true);
-            onClose();
-          }}
-        />
-
         <div className="my-1.5 border-t border-[var(--border)]" />
 
         <MenuRow
           icon={<Globe size={16} strokeWidth={1.7} />}
-          label="Web search"
+          label={ru ? "Веб-поиск в каждом запросе" : "Always search the web"}
           trailing={
             webSearch ? (
               <span className="text-[11px] font-medium text-[var(--accent)]">ON</span>
@@ -193,12 +153,12 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
 
       {sub === "skills" && (
         <SubPanel>
-          {SKILLS.map((s) => (
+          {skills.map((s) => (
             <MenuRow
               key={s.id}
               icon={<ScrollText size={15} strokeWidth={1.7} />}
-              label={s.label}
-              onClick={() => applySkill(s.prompt, s.id === "design-reflect")}
+              label={s.name}
+              onClick={() => { setDraft(`/skill ${s.id}\n${draft.replace(/^\/skill[^\n]*\n?/, "")}`); onClose(); }}
             />
           ))}
           <div className="my-1 border-t border-[var(--border)]" />
@@ -213,7 +173,7 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
           />
           <MenuRow
             icon={<Plus size={15} strokeWidth={1.7} />}
-            label="Browse skills"
+            label={ru ? "Импортировать SKILL.md" : "Import SKILL.md"}
             onClick={() => {
               setSettingsTab("skills");
               setSettingsOpen(true);
@@ -223,59 +183,14 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
         </SubPanel>
       )}
 
-      {sub === "connector" && (
-        <SubPanel>
-          <MenuRow
-            icon={<Globe size={15} strokeWidth={1.7} />}
-            label={locale === "ru" ? "Открыть браузер" : "Open browser"}
-            onClick={async () => {
-              if (busy) return;
-              setBusy(true);
-              try {
-                await enableChromeAgent();
-              } catch (error) {
-                alert(error instanceof Error ? error.message : String(error));
-              } finally {
-                setBusy(false);
-                onClose();
-              }
-            }}
-          />
-          <MenuRow
-            icon={<ScrollText size={15} strokeWidth={1.7} />}
-            label="Glow Design"
-            onClick={() => {
-              enableGlowDesign();
-              onClose();
-            }}
-          />
-          <div className="my-1 border-t border-[var(--border)]" />
-          <MenuRow
-            icon={<BookOpen size={15} strokeWidth={1.7} />}
-            label="Browse connectors"
-            onClick={() => {
-              setAppsOpen(true);
-              onClose();
-            }}
-          />
-          <MenuRow
-            icon={<MoreHorizontal size={15} strokeWidth={1.7} />}
-            label="Add custom connector"
-            onClick={() => {
-              setSettingsTab("connectors");
-              setSettingsOpen(true);
-              onClose();
-            }}
-          />
-        </SubPanel>
-      )}
+
     </div>
   );
 }
 
 function SubPanel({ children }: { children: ReactNode }) {
   return (
-    <div className="min-w-[220px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
+    <div className="max-h-[60vh] w-[min(220px,44vw)] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
       {children}
     </div>
   );

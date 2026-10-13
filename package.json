@@ -11,6 +11,14 @@
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
+  "overrides": {
+    "pptxgenjs": {
+      "image-size": "^2.0.4"
+    },
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
     "@supabase/supabase-js": "^2.117.3",
@@ -22,9 +30,18 @@
     "@tauri-apps/plugin-sql": "^2.2.0",
     "clsx": "^2.1.1",
     "dcmjs": "^0.43.1",
+    "docx": "^9.10.0",
+    "docx-preview": "^0.4.1",
+    "exceljs": "^4.4.0",
+    "fast-xml-parser": "^5.11.2",
+    "fflate": "^0.8.3",
+    "heic2any": "^0.0.4",
     "katex": "^0.16.22",
     "lucide-react": "^0.511.0",
+    "marked": "^18.1.1",
     "pdfjs-dist": "^6.2.108",
+    "pdfmake": "^0.3.11",
+    "pptxgenjs": "^4.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
@@ -41,6 +58,7 @@
     "@tailwindcss/vite": "^4.1.7",
     "@tauri-apps/cli": "^2.5.0",
     "@types/node": "^22.15.21",
+    "@types/pdfmake": "^0.3.3",
     "@types/react": "^18.3.20",
     "@types/react-dom": "^18.3.6",
     "@types/three": "^0.176.0",

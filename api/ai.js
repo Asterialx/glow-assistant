@@ -2,6 +2,9 @@ import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { admitRequest, waitForDrain } from './admission.js';
 import { createUsageCollector, reservationFor } from './tokenUsage.js';
+import { webSearchOptions } from './webSearch.js';
+import { researchPolicy } from './researchPolicy.js';
+import { validMessages } from './messageValidation.js';
 
 export function resolveAiPath(req) {
   const pathname = new URL(req.url || '/', 'http://localhost').pathname;
@@ -36,10 +39,9 @@ export default async function handler(req, res) {
   }
   if (path !== 'chat/completions' || req.method !== 'POST') return fail(405, 'Unsupported request');
   const body = req.body;
+  if (body?.web_search !== undefined && typeof body.web_search !== 'boolean') return fail(400, 'Invalid web search option');
   if (!body || typeof body.conversation_id !== 'string' || !['home','code','med'].includes(body.scope)) return fail(400, 'Conversation required');
-  if (!body || !models.some(model => model.id === body.model) || body.stream !== true || !Array.isArray(body.messages) || body.messages.length > 250 ||
-      body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string') ||
-      JSON.stringify(body.messages).length > 200000) return fail(400, 'Invalid conversation');
+  if (!body || !models.some(model => model.id === body.model) || body.stream !== true || !validMessages(body.messages)) return fail(400, 'Invalid conversation or attachments');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!serviceKey) return fail(503, 'Request limits not configured');
   const budgetClient = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -57,13 +59,21 @@ export default async function handler(req, res) {
     if (lease.error) return fail(403, 'Conversation access denied');
     if (!lease.data) return fail(409, 'An answer is already being generated on another device');
     leased = true;
-    const rejection = await admitRequest(budgetClient, user.id, leaseToken, reservationFor(body.messages,maxOutput),body.model);
+    // Search adds retrieved context beyond the submitted conversation.
+    const searchContextReserve = body.web_search === true ? 80000 : 0;
+    const rejection = await admitRequest(budgetClient, user.id, leaseToken, reservationFor(body.messages,maxOutput) + searchContextReserve,body.model);
     if (rejection) return fail(rejection.status, rejection.message);
     admitted = true;
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', signal: abort.signal,
       headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: body.model, messages: body.messages, stream: true,
+      body: JSON.stringify({ model: body.model, messages: body.web_search === true ? [
+        // The client adds this policy for direct development calls; avoid paying
+        // for the same long instructions twice on authenticated cloud requests.
+        ...(body.messages.some(message => message.role === 'system' && typeof message.content === 'string' && message.content.includes('Current research timestamp:')) ? [] : [{ role:'system', content:researchPolicy() }]),
+        ...body.messages,
+      ] : body.messages, stream: true,
+        ...webSearchOptions(body.web_search),
         max_tokens: maxOutput,
         temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
     });

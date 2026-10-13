@@ -7,7 +7,10 @@ const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const apiBaseUrl = new URL(env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1");
+  // A key must be sent to its own provider, not a legacy gateway default.
+  const apiBaseUrl = new URL(env.OPENROUTER_API_KEY
+    ? "https://openrouter.ai/api/v1"
+    : env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1");
   const apiPath = apiBaseUrl.pathname.replace(/\/$/, "");
 
   return ({
@@ -35,6 +38,17 @@ export default defineConfig(({ mode }) => {
       ignored: ["**/src-tauri/**", "**/dist-installers/**"],
     },
     proxy: {
+      "/openrouter": {
+        target: "https://openrouter.ai",
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path) => path.replace(/^\/openrouter/, "/api/v1"),
+        configure: (proxy) => {
+          proxy.on("proxyReq", request => {
+            request.setHeader("Authorization", `Bearer ${env.OPENROUTER_API_KEY || "not-configured"}`);
+          });
+        },
+      },
       "/smartapi": {
         // Keep provider traffic same-origin in the browser during development.
         target: apiBaseUrl.origin,

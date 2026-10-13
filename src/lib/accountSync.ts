@@ -329,7 +329,17 @@ export function importSyncPackage(json: string): { ok: true } | { ok: false; err
       feedbackProfile?: string | null;
       devices?: LinkedDevice[];
     };
-    if (pkg.v !== 1 || !pkg.account?.syncKey) {
+    if (pkg.v !== 1 || !pkg.account ||
+        typeof pkg.account.syncKey !== "string" || !pkg.account.syncKey ||
+        typeof pkg.account.accountId !== "string" ||
+        typeof pkg.account.displayName !== "string" || pkg.account.displayName.length > 60 ||
+        typeof pkg.account.preferredName !== "string" ||
+        typeof pkg.account.work !== "string" ||
+        (pkg.locale != null && !["en", "ru"].includes(pkg.locale)) ||
+        (pkg.theme != null && !["claude-dark", "claude-light", "graphite", "midnight", "paper", "sand"].includes(pkg.theme)) ||
+        (pkg.instructions != null && (typeof pkg.instructions !== "string" || pkg.instructions.length > 50000)) ||
+        (pkg.feedbackProfile != null && typeof pkg.feedbackProfile !== "string") ||
+        (pkg.devices != null && (!Array.isArray(pkg.devices) || pkg.devices.some(d => !d || typeof d.id !== "string" || typeof d.name !== "string" || typeof d.platform !== "string" || typeof d.linkedAt !== "number")))) {
       return { ok: false, error: "Invalid sync package" };
     }
     saveAccount(pkg.account);

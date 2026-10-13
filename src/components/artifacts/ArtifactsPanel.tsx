@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { NotebookPanel } from "./NotebookPanel";
 import type { Artifact, ArtifactRevision } from "../../lib/types";
 import { Box, Check, Code2, Copy, FileText, Layers, Monitor, Smartphone, X } from "lucide-react";
 import * as THREE from "three";
@@ -11,6 +12,8 @@ import type { DesignFrame } from "../../lib/designMode";
 import { cn } from "../../lib/utils";
 import { GenUiArtifact } from "../widgets/GenUiArtifact";
 import { HtmlArtifactFrame } from "./HtmlArtifactFrame";
+import { GeneratedFilePreview } from "./GeneratedFilePreview";
+import { generatedFileFromArtifact } from "../../lib/generatedFile";
 
 interface Props {
   artifacts: Artifact[];
@@ -298,32 +301,6 @@ function DicomViewer({ text }: { text: string }) {
   );
 }
 
-let pyodidePromise: Promise<unknown> | null = null;
-
-async function getPyodide(): Promise<{
-  runPythonAsync: (code: string) => Promise<unknown>;
-  setStdout: (opts: { batched: (s: string) => void }) => void;
-}> {
-  if (!pyodidePromise) {
-    pyodidePromise = (async () => {
-      const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.js";
-      document.head.appendChild(s);
-      await new Promise<void>((resolve, reject) => {
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error("Failed to load Pyodide"));
-      });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const loadPyodide = (window as any).loadPyodide as (opts: { indexURL: string }) => Promise<any>;
-      return loadPyodide({ indexURL: "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/" });
-    })();
-  }
-  return pyodidePromise as Promise<{
-    runPythonAsync: (code: string) => Promise<unknown>;
-    setStdout: (opts: { batched: (s: string) => void }) => void;
-  }>;
-}
-
 export function ArtifactsPanel({
   artifacts,
   revisionsByArtifact,
@@ -333,13 +310,6 @@ export function ArtifactsPanel({
   onRestoreRevision,
 }: Props) {
   const active = artifacts.find((a) => a.id === activeId) || artifacts[0];
-  const [jupyterCode, setJupyterCode] = useState(
-    active?.kind === "jupyter" && active.content_text
-      ? active.content_text
-      : "print('Glow Jupyter')\nprint(2 + 2)\n",
-  );
-  const [jupyterOut, setJupyterOut] = useState("");
-  const [jupyterBusy, setJupyterBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const closeArtifacts = useUiStore((s) => s.closeArtifacts);
@@ -348,12 +318,6 @@ export function ArtifactsPanel({
   const setArtifactsWidth = useUiStore((s) => s.setArtifactsWidth);
   const dragStartX = useRef(0);
   const dragStartW = useRef(width);
-
-  useEffect(() => {
-    if (active?.kind === "jupyter" && active.content_text) {
-      setJupyterCode(active.content_text);
-    }
-  }, [active?.id, active?.kind, active?.content_text]);
 
   useEffect(() => {
     if (!dragging) return;
@@ -378,27 +342,6 @@ export function ArtifactsPanel({
       document.body.style.userSelect = "";
     };
   }, [dragging, setArtifactsWidth]);
-
-  const runPython = async () => {
-    setJupyterBusy(true);
-    setJupyterOut(locale === "ru" ? "Загрузка Pyodide…" : "Loading Pyodide…");
-    try {
-      const py = await getPyodide();
-      let captured = "";
-      py.setStdout({
-        batched: (s: string) => {
-          captured += s + "\n";
-        },
-      });
-      const result = await py.runPythonAsync(jupyterCode);
-      const extra = result != null ? String(result) : "";
-      setJupyterOut((captured + (extra ? `\n=> ${extra}` : "")).trim() || "(ok)");
-    } catch (e) {
-      setJupyterOut(e instanceof Error ? e.message : String(e));
-    } finally {
-      setJupyterBusy(false);
-    }
-  };
 
   const copyCode = async () => {
     if (!active?.content_text) return;
@@ -515,7 +458,8 @@ export function ArtifactsPanel({
             <GenUiArtifact artifact={active} surface="workspace" onSend={onSend} />
           </div>
         )}
-        {active?.kind === "code" && (
+        {active && generatedFileFromArtifact(active) && <GeneratedFilePreview key={active.id} artifact={active} locale={locale} />}
+        {active?.kind === "code" && !generatedFileFromArtifact(active) && (
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex shrink-0 items-center gap-2 border-b border-[var(--border)] px-3 py-2">
               <Code2 size={14} className="text-[var(--accent)]" />
@@ -570,24 +514,7 @@ export function ArtifactsPanel({
             )}
           </div>
         )}
-        {active?.kind === "jupyter" && (
-          <div className="flex h-full flex-col p-3">
-            <textarea
-              className="min-h-[140px] flex-1 rounded border border-[var(--border)] bg-[var(--bg)] p-2 font-[family-name:var(--font-mono)] text-xs"
-              value={jupyterCode}
-              onChange={(e) => setJupyterCode(e.target.value)}
-            />
-            <button
-              type="button"
-              disabled={jupyterBusy}
-              className="mt-2 rounded-xl bg-[var(--accent)] px-3 py-1.5 text-sm text-white disabled:opacity-60"
-              onClick={() => void runPython()}
-            >
-              {jupyterBusy ? "Running…" : "Run cell (Pyodide)"}
-            </button>
-            <pre className="mt-2 max-h-40 overflow-auto rounded bg-[var(--bg)] p-2 text-xs">{jupyterOut}</pre>
-          </div>
-        )}
+        {active?.kind === "jupyter" && <NotebookPanel key={active.id} id={active.id} source={active.content_text || ""} filename={active.title || "notebook"} />}
       </div>
     </aside>
   );

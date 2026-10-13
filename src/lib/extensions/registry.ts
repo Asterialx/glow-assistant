@@ -24,6 +24,8 @@ interface ExtensionsState {
 }
 
 const KEY = "glow.extensions.installed";
+// Preserve saved catalog entries, but do not activate experimental integrations in v1.
+const EXPERIMENTAL_EXTENSIONS_ENABLED = false;
 
 function loadInstalled(): InstalledExtension[] {
   try {
@@ -41,6 +43,7 @@ function save(list: InstalledExtension[]) {
 }
 
 async function activate(id: ExtensionId, enabled: boolean) {
+  if (!EXPERIMENTAL_EXTENSIONS_ENABLED) return;
   const def = EXTENSION_CATALOG.find((e) => e.id === id);
   if (!def) return;
 
@@ -101,7 +104,7 @@ export const useExtensionsStore = create<ExtensionsState>((set, get) => ({
 
   isInstalled: (id) => get().installed.some((x) => x.id === id),
 
-  isEnabled: (id) => get().installed.some((x) => x.id === id && x.enabled),
+  isEnabled: (id) => EXPERIMENTAL_EXTENSIONS_ENABLED && get().installed.some((x) => x.id === id && x.enabled),
 
   getConfig: (id, key, fallback = "") => {
     const item = get().installed.find((x) => x.id === id);
@@ -117,6 +120,7 @@ export const useExtensionsStore = create<ExtensionsState>((set, get) => ({
   },
 
   capabilityHints: () => {
+    if (!EXPERIMENTAL_EXTENSIONS_ENABLED) return "";
     const lines = EXTENSION_CATALOG.filter((d) => get().isEnabled(d.id)).flatMap(
       (d) => d.capabilities,
     );

@@ -27,5 +27,5 @@ export function createUsageCollector() {
 
 /** A conservative reservation, NOT a final token count. */
 export function reservationFor(messages, maxOutput) {
-  return messages.reduce((total,message)=>total+Buffer.byteLength(message.content,'utf8')+64,256)+maxOutput;
+  return messages.reduce((total,message)=>total+(typeof message.content === 'string' ? Buffer.byteLength(message.content,'utf8') : message.content.reduce((sum,part)=>sum+(part.type === 'text' ? Buffer.byteLength(part.text,'utf8') : 10000),0))+64,256)+maxOutput;
 }

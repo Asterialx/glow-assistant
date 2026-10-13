@@ -7,6 +7,10 @@ import { validateStudyCompletion } from "../lib/studyPlan";
 interface UiState {
   locale: Locale;
   themeId: ThemeId;
+  appearanceMode: "system" | "manual";
+  reducedMotion: boolean;
+  setAppearanceMode: (value: "system" | "manual") => void;
+  setReducedMotion: (value: boolean) => void;
   sidebarOpen: boolean;
   settingsOpen: boolean;
   settingsTab: string;
@@ -48,7 +52,9 @@ const ARTIFACTS_MAX = 900;
 const ARTIFACTS_DEFAULT = 400;
 
 function loadArtifactsWidth(): number {
-  const raw = Number(localStorage.getItem("glow.artifactsWidth"));
+  const saved = localStorage.getItem("glow.artifactsWidth");
+  if (!saved) return ARTIFACTS_DEFAULT;
+  const raw = Number(saved);
   if (!Number.isFinite(raw)) return ARTIFACTS_DEFAULT;
   return Math.min(ARTIFACTS_MAX, Math.max(ARTIFACTS_MIN, raw));
 }
@@ -140,6 +146,22 @@ export function clampArtifactsWidth(w: number): number {
 export const useUiStore = create<UiState>((set) => ({
   locale: loadLocale(),
   themeId: loadTheme(),
+  appearanceMode: localStorage.getItem("glow.appearanceMode") === "system" ? "system" : "manual",
+  reducedMotion: localStorage.getItem("glow.motion") === "reduced",
+  setAppearanceMode: (appearanceMode) => {
+    localStorage.setItem("glow.appearanceMode", appearanceMode);
+    if (appearanceMode === "manual") localStorage.setItem("glow.theme", useUiStore.getState().themeId);
+    set({ appearanceMode });
+    if (appearanceMode === "system") {
+      const themeId = window.matchMedia("(prefers-color-scheme: dark)").matches ? "claude-dark" : "claude-light";
+      applyTheme(themeId); set({ themeId });
+    }
+  },
+  setReducedMotion: (reducedMotion) => {
+    localStorage.setItem("glow.motion", reducedMotion ? "reduced" : "system");
+    document.documentElement.dataset.motion = reducedMotion ? "reduced" : "system";
+    set({ reducedMotion });
+  },
   sidebarOpen: true,
   settingsOpen: false,
   settingsTab: "general",
@@ -153,9 +175,10 @@ export const useUiStore = create<UiState>((set) => ({
     set({ locale });
   },
   setThemeId: (themeId) => {
+    localStorage.setItem("glow.appearanceMode", "manual");
     localStorage.setItem("glow.theme", themeId);
     applyTheme(themeId);
-    set({ themeId });
+    set({ themeId, appearanceMode: "manual" });
   },
   setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
@@ -188,6 +211,15 @@ export const useUiStore = create<UiState>((set) => ({
 }));
 
 export function initUiTheme() {
-  applyTheme(loadTheme());
+  const ui = useUiStore.getState();
+  document.documentElement.dataset.motion = ui.reducedMotion ? "reduced" : "system";
+  const system = window.matchMedia("(prefers-color-scheme: dark)");
+  const followSystem = () => {
+    if (useUiStore.getState().appearanceMode !== "system") return;
+    const themeId = system.matches ? "claude-dark" : "claude-light";
+    applyTheme(themeId); useUiStore.setState({ themeId });
+  };
+  applyTheme(loadTheme()); followSystem();
+  system.addEventListener("change", followSystem);
 }
 import { accountStorage as localStorage } from "../auth/accountStorage";

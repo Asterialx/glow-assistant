@@ -1,6 +1,21 @@
 @import "tailwindcss";
 @import "katex/dist/katex.min.css";
 
+html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @theme {
   --font-display: "Source Serif 4", Georgia, "Times New Roman", serif;
   --font-sans: "Manrope", "Segoe UI", system-ui, sans-serif;
@@ -106,8 +121,29 @@ body {
   color: var(--fg);
 }
 .prose-chat p {
-  margin: 0.55em 0;
+  margin: 0.8em 0;
 }
+.prose-chat h1, .prose-chat h2, .prose-chat h3 { font-weight: 650; line-height: 1.35; letter-spacing: -0.015em; margin: 1.6em 0 0.65em; text-wrap: balance; }
+.prose-chat h1 { font-size: 1.3em; }
+.prose-chat h2 { font-size: 1.16em; }
+.prose-chat h3 { font-size: 1.06em; }
+.prose-chat strong { font-weight: 650; }
+.prose-chat ul, .prose-chat ol { margin: 0.9em 0; padding-inline-start: 1.55em; }
+.prose-chat ul { list-style-type: disc; }
+.prose-chat ol { list-style-type: decimal; }
+.prose-chat li { padding-inline-start: 0.3em; margin: 0.45em 0; }
+.prose-chat li::marker { color: var(--accent); font-weight: 600; }
+.prose-chat li > p { margin: 0.35em 0; }
+.prose-chat li ul { list-style-type: circle; margin: 0.4em 0; }
+.prose-chat a { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); text-underline-offset: 3px; }
+.prose-chat a:hover { text-decoration-color: var(--accent); }
+.prose-chat a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.prose-chat blockquote { margin: 1em 0; border-inline-start: 3px solid var(--accent); padding: 0.25em 1em; background: var(--bg-elevated); border-radius: 0 10px 10px 0; color: var(--fg-muted); }
+.prose-chat hr { border: 0; border-top: 1px solid var(--border); margin: 1.5em 0; }
+.chat-table-scroll { max-width: 100%; overflow-x: auto; margin: 1em 0; border: 1px solid var(--border); border-radius: 12px; }
+.chat-table-scroll table { margin: 0; min-width: 100%; }
+.prose-chat th { background: var(--bg-elevated); font-weight: 600; text-align: start; }
+.prose-chat tbody tr:nth-child(even) { background: var(--bg-input); }
 .prose-chat > :first-child {
   margin-top: 0;
 }

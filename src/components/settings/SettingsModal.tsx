@@ -1,1151 +1,135 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  X,
-  Search,
-  Settings as Gear,
-  User,
-  Shield,
-  CreditCard,
-  Briefcase,
-  Lightbulb,
-  Moon,
-  Code2,
-  Monitor,
-  Sparkles,
-  Wrench,
-  FileText,
-  LayoutGrid,
-  Puzzle,
-  History,
-  Sun,
-  ExternalLink,
-  ChevronDown,
-  Bot,
-  BookOpen,
-} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { X } from "lucide-react";
 import { useUiStore } from "../../stores/uiStore";
-import { THEMES, type ThemeId } from "../../lib/themes";
-import { t, type Locale } from "../../lib/i18n";
-import { DevicesSection } from "./DevicesSection";
-import { AgentsPanel } from "../panels/AgentsPanel";
-import { StudyPanel } from "../panels/StudyPanel";
-import {
-  getOrCreateAccount,
-  getDeviceName,
-  listDevices,
-  saveAccount,
-} from "../../lib/accountSync";
-import { listMcp } from "../../lib/tauri";
-import { cn } from "../../lib/utils";
-import { BillingDashboard } from "../panels/BillingDashboard";
-import { ExtensionsPanel } from "./ExtensionsPanel";
+import { THEMES } from "../../lib/themes";
+import { accountStorage as storage } from "../../auth/accountStorage";
+import { supabase } from "../../auth/client";
 import { useAccount } from "../../auth/AccountContext";
 import { AdminPanel } from "../../auth/AdminPanel";
+import { cloudDataEnabled, listMemory, deleteMemory } from "../../db";
+import { exportSyncPackage, importSyncPackage, getOrCreateAccount, saveAccount } from "../../lib/accountSync";
+import type { GlobalMemory } from "../../lib/types";
 import { TokenLimitsPanel } from "./TokenLimitsPanel";
+import { BillingDashboard } from "../panels/BillingDashboard";
+import { SkillsPanel } from "./SkillsPanel";
+import { cn } from "../../lib/utils";
+import { enableReplyNotifications } from "../../lib/notifications";
 
-type TabId =
-  | "general"
-  | "account"
-  | "privacy"
-  | "billing"
-  | "admin"
-  | "capabilities"
-  | "reflect"
-  | "focus"
-  | "glow-code"
-  | "desktop-general"
-  | "extensions"
-  | "developer"
-  | "skills"
-  | "connectors"
-  | "plugins"
-  | "memory"
-  | "agents"
-  | "study"
-  | "med";
-
-type NavItem = { id: TabId; label: string; icon: typeof Gear };
-type NavGroup = { title: string; items: NavItem[] };
-
-function Toggle({
-  on,
-  onChange,
-}: {
-  on: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      onClick={() => onChange(!on)}
-      className={cn(
-        "relative h-[22px] w-[40px] shrink-0 rounded-full transition-colors",
-        on ? "bg-[#5b8def]" : "bg-[var(--bg-active)]",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-[2px] h-[18px] w-[18px] rounded-full bg-white shadow transition-transform",
-          on ? "left-[20px]" : "left-[2px]",
-        )}
-      />
-    </button>
-  );
+const field = "max-w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-sm";
+const button = "rounded-xl border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--bg-hover)] disabled:opacity-50";
+function Row({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] py-4"><div className="min-w-0 basis-full sm:basis-auto sm:flex-1"><p className="text-sm">{title}</p>{description && <p className="mt-1 text-xs text-[var(--fg-muted)]">{description}</p>}</div>{children}</div>;
 }
-
-function SettingRow({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-6 border-b border-[var(--border)] py-4 last:border-0">
-      <div className="min-w-0 flex-1 pr-4">
-        <div className="text-[14px] text-[var(--fg)]">{title}</div>
-        {description && (
-          <p className="mt-1 text-[12.5px] leading-relaxed text-[var(--fg-muted)]">{description}</p>
-        )}
-      </div>
-      <div className="shrink-0 pt-0.5">{children}</div>
-    </div>
-  );
-}
-
-function Segmented({
-  value,
-  options,
-  onChange,
-}: {
-  value: string;
-  options: { id: string; label?: string; icon?: ReactNode }[];
-  onChange: (id: string) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-full border border-[var(--border)] bg-[var(--bg)] p-0.5">
-      {options.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          onClick={() => onChange(o.id)}
-          className={cn(
-            "rounded-full px-2.5 py-1.5 text-[12px]",
-            value === o.id
-              ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm"
-              : "text-[var(--fg-muted)]",
-          )}
-          title={o.label || o.id}
-        >
-          {o.icon || o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function EmptyArt({
-  title,
-  subtitle,
-  action,
-}: {
-  title: string;
-  subtitle?: string;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-      <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-[var(--border)] bg-[var(--bg)] text-[28px] text-[var(--fg-faint)]">
-        ✦
-      </div>
-      <p className="max-w-sm text-[14px] text-[var(--fg)]">{title}</p>
-      {subtitle && <p className="mt-2 max-w-sm text-[13px] text-[var(--fg-muted)]">{subtitle}</p>}
-      {action && <div className="mt-4">{action}</div>}
-    </div>
-  );
-}
-
-function loadFlag(key: string, fallback = false) {
-  const v = localStorage.getItem(key);
-  if (v == null) return fallback;
-  return v === "1";
-}
-function saveFlag(key: string, v: boolean) {
-  localStorage.setItem(key, v ? "1" : "0");
+function Toggle({ label, on, change }: { label: string; on: boolean; change: (value: boolean) => void }) {
+  return <button role="switch" aria-label={label} aria-checked={on} onClick={() => change(!on)} className={cn("relative h-[22px] w-10 shrink-0 rounded-full", on ? "bg-[var(--accent)]" : "bg-[var(--bg-active)]")}><span className={cn("absolute top-0.5 size-[18px] rounded-full bg-white", on ? "left-5" : "left-0.5")} /></button>;
 }
 
 export function SettingsModal() {
+  const ui = useUiStore();
   const account = useAccount();
-  const open = useUiStore((s) => s.settingsOpen);
-  const setOpen = useUiStore((s) => s.setSettingsOpen);
-  const tab = useUiStore((s) => s.settingsTab) as TabId;
-  const setTab = useUiStore((s) => s.setSettingsTab);
-  const locale = useUiStore((s) => s.locale);
-  const setLocale = useUiStore((s) => s.setLocale);
-  const themeId = useUiStore((s) => s.themeId);
-  const setThemeId = useUiStore((s) => s.setThemeId);
-  const userName = useUiStore((s) => s.userName);
-  const setUserName = useUiStore((s) => s.setUserName);
-
-  /** RU: only explainers — keep titles / product terms in English. */
-  const hint = (en: string, ruText: string) => (locale === "ru" ? ruText : en);
-
-  const [q, setQ] = useState("");
-  const [preferredName, setPreferredName] = useState(userName);
-  const [work, setWork] = useState("Other");
-  const [instructions, setInstructions] = useState(
-    localStorage.getItem("glow.instructions") || "",
-  );
-  const [chatFont, setChatFont] = useState(localStorage.getItem("glow.chatFont") || "serif");
-  const [motion, setMotion] = useState(localStorage.getItem("glow.motion") || "system");
-  const [voiceLang, setVoiceLang] = useState(
-    localStorage.getItem("glow.voiceLang") ||
-      (localStorage.getItem("glow.locale") === "en" ? "en" : "ru"),
-  );
-  const [voiceStyle, setVoiceStyle] = useState(localStorage.getItem("glow.voiceStyle") || "Glassy");
-  const [voiceSpeed, setVoiceSpeed] = useState(localStorage.getItem("glow.voiceSpeed") || "Normal");
-
-  // Capabilities
-  const [toolMode, setToolMode] = useState(
-    localStorage.getItem("glow.toolMode") || "Load tools when needed",
-  );
-  const [switchModels, setSwitchModels] = useState(() => loadFlag("glow.switchModels", true));
-  const [artifactsOn, setArtifactsOn] = useState(() => loadFlag("glow.capArtifacts", true));
-  const [aiArtifacts, setAiArtifacts] = useState(() => loadFlag("glow.aiArtifacts"));
-
-  // Memory / desktop
-  const [memoryOn, setMemoryOn] = useState(() => loadFlag("glow.memoryFromChats"));
-  const [shortcut] = useState("Control+Alt+Space");
-  const [quietDays, setQuietDays] = useState<boolean[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem("glow.quietDays") || "[false,false,false,false,false,false,false]");
-    } catch {
-      return [false, false, false, false, false, false, false];
-    }
-  });
-  const [mcpServers, setMcpServers] = useState<
-    Array<{ id: string; name: string; enabled: boolean; category: string }>
-  >([]);
-  const kind = THEMES.find((th) => th.id === themeId)?.kind || "dark";
-  const appearanceMode =
-    themeId === "claude-light" || themeId === "paper" || themeId === "sand"
-      ? "light"
-      : themeId === "claude-dark" || themeId === "graphite" || themeId === "midnight"
-        ? "dark"
-        : "system";
-
-  const nav: NavGroup[] = useMemo(
-    () => [
-      {
-        title: "Settings",
-        items: [
-          { id: "general", label: "General", icon: Gear },
-          { id: "account", label: "Account", icon: User },
-          { id: "privacy", label: "Privacy", icon: Shield },
-          { id: "billing", label: account ? "Лимиты" : "Billing", icon: CreditCard },
-          ...(account?.access.role === "admin" ? [{ id: "admin" as const, label: "Администрирование", icon: Shield }] : []),
-          { id: "capabilities", label: "Capabilities", icon: Briefcase },
-          { id: "reflect", label: "Reflect", icon: Lightbulb },
-          { id: "focus", label: "Time and focus", icon: Moon },
-          { id: "glow-code", label: "Glow Code", icon: Code2 },
-        ],
-      },
-      {
-        title: "Desktop app",
-        items: [
-          { id: "desktop-general", label: "General", icon: Monitor },
-          { id: "extensions", label: "Extensions", icon: Sparkles },
-          { id: "agents", label: "Agents & MCP", icon: Bot },
-          { id: "developer", label: "Developer", icon: Wrench },
-          { id: "study", label: "Study & Focus", icon: BookOpen },
-        ],
-      },
-      {
-        title: "Customize",
-        items: [
-          { id: "skills", label: "Skills", icon: FileText },
-          { id: "connectors", label: "Connectors", icon: LayoutGrid },
-          { id: "plugins", label: "Plugins", icon: Puzzle },
-          { id: "memory", label: "Memory", icon: History },
-        ],
-      },
-    ],
-    [account?.access.role],
-  );
-
+  const text = (en: string, ru: string) => ui.locale === "ru" ? ru : en;
+  const [query, setQuery] = useState("");
+  const [name, setName] = useState(ui.userName);
+  const [instructions, setInstructions] = useState(storage.getItem("glow.instructions") || "");
+  const [speed, setSpeed] = useState(storage.getItem("glow.voiceSpeed") || "Normal");
+  const [artifacts, setArtifacts] = useState(storage.getItem("glow.capArtifacts") !== "0");
+  const [memoryOn, setMemoryOn] = useState(storage.getItem("glow.memoryFromChats") === "1");
+  const [facts, setFacts] = useState<GlobalMemory[]>([]);
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notifications, setNotifications] = useState(storage.getItem("glow.replyNotifications") === "1" && "Notification" in window && Notification.permission === "granted");
+  const tabs = [
+    { id: "general", label: text("General", "Основные") }, { id: "account", label: text("Account", "Аккаунт") },
+    { id: "privacy", label: text("Data and privacy", "Данные и приватность") }, { id: "billing", label: text("Limits / usage", "Лимиты / расход") },
+    { id: "capabilities", label: "Artifacts" }, { id: "memory", label: text("Memory", "Память") }, { id: "skills", label: "Skills" },
+    ...(account?.access.role === "admin" ? [{ id: "admin", label: text("Administration", "Администрирование") }] : []),
+  ];
+  const tab = tabs.some(item => item.id === ui.settingsTab) ? ui.settingsTab : "general";
   useEffect(() => {
-    if (!open) return;
-    const acc = getOrCreateAccount(userName);
-    setPreferredName(acc.preferredName || userName);
-    setWork(acc.work || "Other");
-    listMcp().then((list) => setMcpServers(list));
-  }, [open, userName]);
-
-  if (!open) return null;
-
-  const filteredNav = nav
-    .map((g) => ({
-      ...g,
-      items: g.items.filter(
-        (i) =>
-          !q ||
-          i.label.toLowerCase().includes(q.toLowerCase()) ||
-          i.id.includes(q.toLowerCase()),
-      ),
-    }))
-    .filter((g) => g.items.length);
-
-  const persistProfile = (name: string, preferred: string, w: string) => {
-    const acc = getOrCreateAccount(name);
-    acc.displayName = name;
-    acc.preferredName = preferred;
-    acc.work = w;
-    saveAccount(acc);
-    setUserName(name);
+    if (!ui.settingsOpen) return;
+    setStatus(""); setName(ui.userName);
+    if (ui.settingsTab !== tab) ui.setSettingsTab(tab);
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") ui.setSettingsOpen(false); };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [ui.settingsOpen, ui.settingsTab, tab]);
+  useEffect(() => {
+    if (!ui.settingsOpen || tab !== "memory") return;
+    let alive = true;
+    listMemory().then(items => { if (alive) setFacts(items); }).catch(() => { if (alive) setStatus(text("Could not load memory.", "Не удалось загрузить память.")); });
+    return () => { alive = false; };
+  }, [ui.settingsOpen, tab]);
+  if (!ui.settingsOpen) return null;
+  const saveName = async () => {
+    const value = name.trim();
+    if (!value || value.length > 60) { setStatus(text("Enter 1–60 characters.", "Введите имя длиной 1–60 символов.")); return; }
+    setBusy(true);
+    try {
+      if (account) {
+        if (!supabase) throw new Error("No account service");
+        const result = await supabase.from("glow_profiles").update({ display_name: value }).eq("user_id", account.access.user_id).select("user_id").single();
+        if (result.error || !result.data) throw new Error("Save failed");
+      }
+      ui.setUserName(value);
+      const localProfile = getOrCreateAccount(value); localProfile.displayName = value; saveAccount(localProfile);
+      setStatus(text("Name saved.", "Имя сохранено."));
+    } catch { setStatus(text("Could not save name.", "Не удалось сохранить имя.")); }
+    finally { setBusy(false); }
   };
-
-
-
-  const devices = listDevices();
-  const thisDevice = devices.find((d) => d.isThis);
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-5 backdrop-blur-[1px]">
-      <div className="flex h-[min(780px,92vh)] w-[min(980px,96vw)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
-        {/* Sidebar */}
-        <aside className="flex w-[248px] shrink-0 flex-col border-r border-[var(--border)] bg-[var(--bg-sidebar)] p-3">
-          <div className="relative mb-3">
-            <Search
-              size={14}
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--fg-faint)]"
-            />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search"
-              className="w-full rounded-xl bg-[var(--bg)] py-2 pl-8 pr-2 text-[13px] outline-none placeholder:text-[var(--fg-faint)]"
-            />
-          </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            {filteredNav.map((group) => (
-              <div key={group.title} className="mb-3">
-                <p className="mb-1 px-2 text-[11px] font-medium text-[var(--fg-faint)]">
-                  {group.title}
-                </p>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  const active = tab === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setTab(item.id)}
-                      className={cn(
-                        "mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13.5px]",
-                        active
-                          ? "bg-[var(--bg-active)] font-medium text-[var(--fg)]"
-                          : "text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]",
-                      )}
-                    >
-                      <Icon size={15} strokeWidth={1.7} />
-                      {item.label}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        {/* Content */}
-        <div className="relative flex min-w-0 flex-1 flex-col bg-[var(--bg-elevated)]">
-          <button
-            type="button"
-            className="absolute right-3 top-3 z-10 rounded-lg p-1.5 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
-            onClick={() => setOpen(false)}
-          >
-            <X size={16} />
-          </button>
-
-          <div className="min-h-0 flex-1 overflow-y-auto px-10 py-8 pr-14">
-            {/* GENERAL */}
-            {tab === "general" && (
-              <div className="space-y-10">
-                <section>
-                  <div className="mb-5 flex items-start justify-between">
-                    <h2 className="text-[18px] font-semibold tracking-tight">Profile</h2>
-                    <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[var(--bg-hover)] text-[15px] font-semibold text-[var(--fg-muted)]">
-                      {(userName || "G").slice(0, 1).toUpperCase()}
-                    </div>
-                  </div>
-                  <SettingRow title="Full name">
-                    <input
-                      value={userName}
-                      onChange={(e) => {
-                        setUserName(e.target.value);
-                        persistProfile(e.target.value, preferredName, work);
-                      }}
-                      className="w-56 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none"
-                    />
-                  </SettingRow>
-                  <SettingRow title="What should Glow call you?">
-                    <input
-                      value={preferredName}
-                      onChange={(e) => {
-                        setPreferredName(e.target.value);
-                        persistProfile(userName, e.target.value, work);
-                      }}
-                      className="w-56 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none"
-                    />
-                  </SettingRow>
-                  <SettingRow title="What best describes your work?">
-                    <select
-                      value={work}
-                      onChange={(e) => {
-                        setWork(e.target.value);
-                        persistProfile(userName, preferredName, e.target.value);
-                      }}
-                      className="w-56 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13.5px] outline-none"
-                    >
-                      <option>Student</option>
-                      <option>Engineer</option>
-                      <option>Doctor</option>
-                      <option>Other</option>
-                    </select>
-                  </SettingRow>
-                  <div className="border-b border-[var(--border)] py-4">
-                    <div className="text-[14px]">Instructions for Glow</div>
-                    <p className="mt-1 text-[12.5px] text-[var(--fg-muted)]">
-                      {hint(
-                        "How would you like Glow to respond? Think of it like customizing Glow's personality.",
-                        "Как Glow должен отвечать — тон, длина, стиль. Как «характер» ассистента.",
-                      )}
-                    </p>
-                    <textarea
-                      value={instructions}
-                      onChange={(e) => {
-                        setInstructions(e.target.value);
-                        localStorage.setItem("glow.instructions", e.target.value);
-                      }}
-                      placeholder={hint(
-                        "e.g. keep explanations brief and to the point",
-                        "например: кратко и по делу…",
-                      )}
-                      className="mt-3 h-28 w-full rounded-xl border border-[var(--border)] bg-[var(--bg)] p-3 text-[13.5px] outline-none placeholder:text-[var(--fg-faint)]"
-                    />
-                  </div>
-                </section>
-
-                <section>
-                  <h2 className="mb-2 text-[18px] font-semibold tracking-tight">Preferences</h2>
-                  <SettingRow
-                    title="Appearance"
-                    description={hint("Light / dark look of the app.", "Светлая или тёмная тема интерфейса.")}
-                  >
-                    <Segmented
-                      value={appearanceMode}
-                      onChange={(id) => {
-                        if (id === "system") {
-                          setThemeId(
-                            window.matchMedia("(prefers-color-scheme: dark)").matches
-                              ? "claude-dark"
-                              : "claude-light",
-                          );
-                        } else if (id === "light") setThemeId("claude-light");
-                        else setThemeId("claude-dark");
-                      }}
-                      options={[
-                        { id: "system", icon: <Monitor size={14} />, label: "System" },
-                        { id: "light", icon: <Sun size={14} />, label: "Light" },
-                        { id: "dark", icon: <Moon size={14} />, label: "Dark" },
-                      ]}
-                    />
-                  </SettingRow>
-                  <div className="border-b border-[var(--border)] py-3">
-                    <div className="mb-2 text-[13px] text-[var(--fg-muted)]">
-                      {hint("Theme variants", "Варианты оформления")}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                      {THEMES.map((th) => (
-                        <button
-                          key={th.id}
-                          type="button"
-                          onClick={() => setThemeId(th.id as ThemeId)}
-                          className={cn(
-                            "rounded-xl border px-3 py-2 text-left text-[12.5px]",
-                            themeId === th.id
-                              ? "border-[var(--accent)] bg-[var(--accent-soft)]"
-                              : "border-[var(--border)] hover:bg-[var(--bg-hover)]",
-                          )}
-                        >
-                          <div className="font-medium">{th.label}</div>
-                          <div className="capitalize text-[var(--fg-faint)]">{th.kind}</div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <SettingRow
-                    title="Chat font"
-                    description={hint("Font used in the chat transcript.", "Шрифт текста в чате.")}
-                  >
-                    <select
-                      value={chatFont}
-                      onChange={(e) => {
-                        setChatFont(e.target.value);
-                        localStorage.setItem("glow.chatFont", e.target.value);
-                      }}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
-                    >
-                      <option value="serif">Glow Serif</option>
-                      <option value="sans">Glow Sans</option>
-                      <option value="mono">Mono</option>
-                    </select>
-                  </SettingRow>
-                  <SettingRow
-                    title="Motion"
-                    description={hint(
-                      "Reduce animation in streaming responses and other interface elements.",
-                      "Меньше анимации при стриминге ответов и в интерфейсе.",
-                    )}
-                  >
-                    <Segmented
-                      value={motion}
-                      onChange={(id) => {
-                        setMotion(id);
-                        localStorage.setItem("glow.motion", id);
-                      }}
-                      options={[
-                        { id: "system", label: "System" },
-                        { id: "reduced", label: "Reduced" },
-                      ]}
-                    />
-                  </SettingRow>
-                </section>
-
-                <section>
-                  <h2 className="mb-2 text-[18px] font-semibold tracking-tight">Voice</h2>
-                  <SettingRow
-                    title="Language"
-                    description={hint("UI + voice language.", "Язык интерфейса и голоса.")}
-                  >
-                    <select
-                      value={voiceLang}
-                      onChange={(e) => {
-                        setVoiceLang(e.target.value);
-                        localStorage.setItem("glow.voiceLang", e.target.value);
-                        if (e.target.value === "ru" || e.target.value === "en") {
-                          setLocale(e.target.value as Locale);
-                        }
-                      }}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
-                    >
-                      <option value="en">English</option>
-                      <option value="ru">Русский</option>
-                    </select>
-                  </SettingRow>
-                  <SettingRow title="Style">
-                    <select
-                      value={voiceStyle}
-                      onChange={(e) => {
-                        setVoiceStyle(e.target.value);
-                        localStorage.setItem("glow.voiceStyle", e.target.value);
-                      }}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
-                    >
-                      <option>Glassy</option>
-                      <option>Warm</option>
-                      <option>Calm</option>
-                    </select>
-                  </SettingRow>
-                  <SettingRow title="Speed">
-                    <select
-                      value={voiceSpeed}
-                      onChange={(e) => {
-                        setVoiceSpeed(e.target.value);
-                        localStorage.setItem("glow.voiceSpeed", e.target.value);
-                      }}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
-                    >
-                      <option>Slow</option>
-                      <option>Normal</option>
-                      <option>Fast</option>
-                    </select>
-                  </SettingRow>
-                </section>
-
-                <section>
-                  <h2 className="mb-2 text-[18px] font-semibold tracking-tight">Notifications</h2>
-                  <SettingRow
-                    title="Response completions"
-                    description={hint(
-                      "Get notified when Glow has finished a response. Useful for long-running tasks.",
-                      "Уведомление, когда длинный ответ готов.",
-                    )}
-                  >
-                    <span className="text-[12px] text-[var(--fg-muted)]">
-                      {hint("Not available in this version", "Недоступно в этой версии")}
-                    </span>
-                  </SettingRow>
-                </section>
-
-                <section>
-                  <h2 className="mb-2 text-[18px] font-semibold tracking-tight">API</h2>
-                  <SettingRow
-                    title="Base URL"
-                    description={hint("Provider endpoint (read-only).", "Адрес провайдера (только чтение).")}
-                  >
-                    <input
-                      readOnly
-                      value={import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.xkiro.com/v1"}
-                      className="w-64 rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 font-[family-name:var(--font-mono)] text-[11.5px]"
-                    />
-                  </SettingRow>
-                  <p className="text-[12.5px] text-[var(--fg-muted)]">
-                    {hint(
-                      "The provider credential is kept on the local development server and is never entered or stored in the app.",
-                      "Ключ провайдера хранится только на локальном сервере разработки и не вводится и не сохраняется в приложении.",
-                    )}
-                  </p>
-                </section>
-              </div>
-            )}
-
-            {/* ACCOUNT */}
-            {tab === "account" && (
-              <div className="space-y-10">
-                <div>
-                  <h2 className="mb-5 text-[18px] font-semibold tracking-tight">Account</h2>
-                  <SettingRow title={hint("Clear local device list", "Очистить локальный список устройств")}>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-[13px] hover:bg-[var(--bg-hover)]"
-                      onClick={() => {
-                        localStorage.removeItem("glow.devices");
-                        alert(locale === "ru" ? "Локальный список устройств очищен. Это не завершает сессии на других устройствах." : "Local device list cleared. Other device sessions are unchanged.");
-                      }}
-                    >
-                      {hint("Clear list", "Очистить список")}
-                    </button>
-                  </SettingRow>
-                  <SettingRow title={hint("Reset local profile", "Сбросить локальный профиль")}>
-                    <button
-                      type="button"
-                      className="rounded-xl bg-[var(--fg)] px-3 py-1.5 text-[13px] text-[var(--bg)]"
-                      onClick={() => {
-                        if (
-                          !confirm(
-                            locale === "ru"
-                              ? "Удалить локальный аккаунт Glow на этом устройстве?"
-                              : "Delete local Glow account on this device?",
-                          )
-                        )
-                          return;
-                        [
-                          "glow.account",
-                          "glow.devices",
-                          "glow.sync",
-                          "glow.userName",
-                          "glow.instructions",
-                        ].forEach((k) => localStorage.removeItem(k));
-                        setUserName(locale === "ru" ? "Гость" : "Guest");
-                      }}
-                    >
-                      {hint("Reset profile", "Сбросить профиль")}
-                    </button>
-                  </SettingRow>
-                  <SettingRow title="Organization ID">
-                    <span className="rounded-full bg-[var(--bg)] px-3 py-1 font-[family-name:var(--font-mono)] text-[12px] text-[var(--fg-muted)]">
-                      {getOrCreateAccount().accountId.slice(0, 8)}
-                    </span>
-                  </SettingRow>
-                </div>
-
-                <section>
-                  <h3 className="text-[15px] font-semibold">Trusted devices</h3>
-                  <p className="mt-1 text-[12.5px] text-[var(--fg-muted)]">
-                    {hint(
-                      "Devices that can control your local machine through remote sessions.",
-                      "Устройства, которым можно доверить удалённый доступ к этому ПК.",
-                    )}
-                  </p>
-                  <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)]">
-                    <div className="grid grid-cols-2 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                      <span>Device</span>
-                      <span>Added</span>
-                    </div>
-                    {devices.filter((d) => !d.isThis).length === 0 ? (
-                      <div className="px-3 py-6 text-[13px] text-[var(--fg-faint)]">
-                        {hint("No trusted devices.", "Пока нет доверенных устройств.")}
-                      </div>
-                    ) : (
-                      devices
-                        .filter((d) => !d.isThis)
-                        .map((d) => (
-                          <div
-                            key={d.id}
-                            className="grid grid-cols-2 border-b border-[var(--border)] px-3 py-2.5 text-[13px] last:border-0"
-                          >
-                            <span>{d.name}</span>
-                            <span className="text-[var(--fg-muted)]">
-                              {new Date(d.linkedAt).toLocaleDateString()}
-                            </span>
-                          </div>
-                        ))
-                    )}
-                  </div>
-                </section>
-
-                <section>
-                  <h3 className="text-[15px] font-semibold">Active sessions</h3>
-                  <div className="mt-3 overflow-hidden rounded-xl border border-[var(--border)]">
-                    <div className="grid grid-cols-4 gap-2 border-b border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12px] text-[var(--fg-faint)]">
-                      <span>Device</span>
-                      <span>Location</span>
-                      <span>Created</span>
-                      <span>Updated</span>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2 px-3 py-3 text-[13px]">
-                      <span className="flex items-center gap-2">
-                        {(thisDevice?.name || getDeviceName()).slice(0, 12)}
-                        <span className="rounded-full bg-[#dbeafe] px-2 py-0.5 text-[10px] font-medium text-[#1d4ed8]">
-                          Current
-                        </span>
-                      </span>
-                      <span className="text-[var(--fg-muted)]">Local</span>
-                      <span className="text-[var(--fg-muted)]">
-                        {new Date(thisDevice?.linkedAt || Date.now()).toLocaleString()}
-                      </span>
-                      <span className="text-[var(--fg-muted)]">
-                        {new Date(thisDevice?.lastSeenAt || Date.now()).toLocaleString()}
-                      </span>
-                    </div>
-                  </div>
-                </section>
-
-                <DevicesSection />
-              </div>
-            )}
-
-            {/* PRIVACY */}
-            {tab === "privacy" && (
-              <div>
-                <h2 className="mb-4 text-[18px] font-semibold">Privacy</h2>
-                <SettingRow
-                  title="Local-first data"
-                  description={hint(
-                    "Chats stay in mode-isolated SQLite on this device. Med mode redacts PII before cloud calls.",
-                    "Чаты хранятся локально в SQLite (отдельно по режимам). В Med перед облаком маскируются персональные данные.",
-                  )}
-                >
-                  <span className="text-[12px] text-[var(--fg-faint)]">On</span>
-                </SettingRow>
-                <SettingRow
-                  title="Telemetry"
-                  description={hint(
-                    "Glow does not send usage analytics by default.",
-                    "По умолчанию Glow не отправляет аналитику использования.",
-                  )}
-                >
-                  <span className="text-[12px] text-[var(--fg-muted)]">{hint("Off", "Выключено")}</span>
-                </SettingRow>
-                <p className="mt-4 text-[13px] text-[var(--fg-muted)]">{t(locale, "medDisclaimer")}</p>
-              </div>
-            )}
-
-            {tab === "billing" && (
-              <div>
-                {account ? <TokenLimitsPanel /> : <><h2 className="mb-4 text-[18px] font-semibold">Billing</h2><BillingDashboard /></>}
-              </div>
-            )}
-            {tab === "admin" && account?.access.role === "admin" && <AdminPanel />}
-            {tab === "account" && account && <button disabled={account.busy} onClick={() => void account.signOut()} className="mt-6 rounded-xl border border-[var(--border)] px-4 py-2 text-sm">Выйти из аккаунта</button>}
-
-            {/* CAPABILITIES */}
-            {tab === "capabilities" && (
-              <div className="space-y-8">
-                <h2 className="text-[18px] font-semibold">Capabilities</h2>
-                <section>
-                  <h3 className="mb-1 text-[14px] font-semibold">General</h3>
-                  <SettingRow
-                    title="Tool access mode"
-                    description={hint(
-                      "Controls how connector tools are loaded in new conversations.",
-                      "Когда подключать tools / connectors в новых чатах.",
-                    )}
-                  >
-                    <select
-                      value={toolMode}
-                      onChange={(e) => {
-                        setToolMode(e.target.value);
-                        localStorage.setItem("glow.toolMode", e.target.value);
-                      }}
-                      className="max-w-[200px] rounded-xl border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[12.5px]"
-                    >
-                      <option>Load tools when needed</option>
-                      <option>Always load tools</option>
-                      <option>Disable tools</option>
-                    </select>
-                  </SettingRow>
-                  <SettingRow
-                    title="Connector search"
-                    description={hint(
-                      "Let Glow search the connector directory and surface ones relevant to your conversation.",
-                      "Glow может подсказывать релевантные connectors по ходу разговора.",
-                    )}
-                  >
-                    <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
-                  </SettingRow>
-                  <SettingRow
-                    title="Switch models when a message is flagged"
-                    description={hint(
-                      "When safety measures flag a message, automatically switch to a different model to keep chatting.",
-                      "Если safety отфильтровал сообщение — автоматически сменить model и продолжить чат.",
-                    )}
-                  >
-                    <Toggle
-                      on={switchModels}
-                      onChange={(v) => {
-                        setSwitchModels(v);
-                        saveFlag("glow.switchModels", v);
-                      }}
-                    />
-                  </SettingRow>
-                </section>
-                <section>
-                  <h3 className="mb-1 text-[14px] font-semibold">Visuals</h3>
-                  <SettingRow
-                    title="Artifacts"
-                    description={hint(
-                      "Generate code, documents, and designs in a dedicated window alongside your conversation. Opens only when needed.",
-                      "Код, документы и макеты — в отдельной панели рядом с чатом. Открывается по необходимости.",
-                    )}
-                  >
-                    <Toggle
-                      on={artifactsOn}
-                      onChange={(v) => {
-                        setArtifactsOn(v);
-                        saveFlag("glow.capArtifacts", v);
-                        useUiStore.setState({ artifactsOpen: false });
-                      }}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="AI-powered artifacts"
-                    description={hint(
-                      "Build apps and interactive documents that use Glow inside the artifact.",
-                      "Интерактивные приложения и документы внутри Artifacts с доступом к Glow.",
-                    )}
-                  >
-                    <Toggle
-                      on={aiArtifacts}
-                      onChange={(v) => {
-                        setAiArtifacts(v);
-                        saveFlag("glow.aiArtifacts", v);
-                      }}
-                    />
-                  </SettingRow>
-                  <SettingRow
-                    title="Inline visualizations"
-                    description={hint(
-                      "Allow Glow to generate interactive visualizations, charts, and diagrams directly in the conversation.",
-                      "Графики и диаграммы прямо в чате, без отдельной панели.",
-                    )}
-                  >
-                    <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
-                  </SettingRow>
-                </section>
-                <section>
-                  <h3 className="mb-1 text-[14px] font-semibold">Code execution and file creation</h3>
-                  <SettingRow
-                    title="Code execution and file creation"
-                    description={hint(
-                      "Glow can execute code and create and edit docs, spreadsheets, presentations, PDFs, and data reports. Required for skills.",
-                      "Запуск кода и создание docs / PDF / таблиц. Нужно для Skills.",
-                    )}
-                  >
-                    <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
-                  </SettingRow>
-                  <div className="mt-2 rounded-xl border border-[var(--border)] bg-[var(--bg)] p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-[14px]">Allow network egress</div>
-                        <p className="mt-1 text-[12.5px] text-[var(--fg-muted)]">
-                          {hint(
-                            "Allow Glow to access common package managers to install packages and libraries for data analysis, visualizations, and file processing.",
-                            "Доступ к package managers (npm, pip и т.п.) для установки библиотек.",
-                          )}
-                        </p>
-                        <div className="mt-2 flex gap-3 text-[12.5px] text-[#5b8def]">
-                          <span className="text-[var(--fg-muted)]">{hint("Package installation is not connected.", "Установка пакетов не подключена.")}</span>
-                        </div>
-                      </div>
-                      <span className="text-[12px] text-[var(--fg-muted)]">{hint("Not configurable in this version", "Не настраивается в этой версии")}</span>
-                    </div>
-                  </div>
-                  <p className="mt-4 text-[13px] text-[var(--fg-muted)]">
-                    {hint("Skills have moved to", "Skills переехали в")}{" "}
-                    <button
-                      type="button"
-                      className="text-[#5b8def] hover:underline"
-                      onClick={() => setTab("skills")}
-                    >
-                      Customize
-                    </button>
-                    .
-                  </p>
-                </section>
-              </div>
-            )}
-
-            {/* REFLECT */}
-            {tab === "reflect" && (
-              <div>
-                <h2 className="text-[18px] font-semibold">Reflect</h2>
-                <p className="mt-1 text-[13px] text-[var(--fg-muted)]">
-                  {hint(
-                    "Based on your conversations in Glow chat.",
-                    "На основе ваших разговоров в чате Glow.",
-                  )}
-                </p>
-                <EmptyArt
-                  title={hint(
-                    "For this reflection to work, you'll need to enable memory in memory settings.",
-                    "Чтобы Reflect работал, включите Memory в настройках Memory.",
-                  )}
-                  action={
-                    <button
-                      type="button"
-                      className="text-[13.5px] text-[#5b8def] hover:underline"
-                      onClick={() => setTab("memory")}
-                    >
-                      memory settings
-                    </button>
-                  }
-                />
-              </div>
-            )}
-
-            {/* TIME AND FOCUS */}
-            {tab === "focus" && (
-              <div>
-                <h2 className="mb-6 text-[18px] font-semibold">Time and focus</h2>
-                <SettingRow
-                  title="Break reminders"
-                  description={hint(
-                    "Get a nudge to take a break from Glow. You can snooze or adjust anytime.",
-                    "Напоминание сделать перерыв. Можно отложить или поменять.",
-                  )}
-                >
-                  <div className="flex gap-2">
-                    <select className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[12.5px]">
-                      <option>—</option>
-                      <option>25 min</option>
-                      <option>50 min</option>
-                    </select>
-                    <select className="rounded-xl border border-[var(--border)] bg-[var(--bg)] px-2 py-1.5 text-[12.5px]">
-                      <option>—</option>
-                      <option>5 min break</option>
-                      <option>10 min break</option>
-                    </select>
-                  </div>
-                </SettingRow>
-                <div className="py-4">
-                  <div className="text-[14px]">Quiet hours</div>
-                  <p className="mt-1 text-[12.5px] text-[var(--fg-muted)]">
-                    {hint(
-                      "Set time limits for Glow. You can dismiss or adjust anytime.",
-                      "Ограничение времени работы с Glow. Можно отключить в любой момент.",
-                    )}
-                  </p>
-                  <div className="mt-3 flex gap-2">
-                    {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
-                      <button
-                        key={`${d}-${i}`}
-                        type="button"
-                        onClick={() => {
-                          const next = [...quietDays];
-                          next[i] = !next[i];
-                          setQuietDays(next);
-                          localStorage.setItem("glow.quietDays", JSON.stringify(next));
-                        }}
-                        className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-full text-[12px]",
-                          quietDays[i]
-                            ? "bg-[var(--fg)] text-[var(--bg)]"
-                            : "bg-[var(--bg)] text-[var(--fg-muted)]",
-                        )}
-                      >
-                        {d}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {tab === "glow-code" && (
-              <p className="text-[13px] text-[var(--fg-muted)]">
-                {hint("Code mode and inline diffs are not available in this version. You can still discuss code in chat.",
-                  "Режим Code и встроенные diff пока недоступны. Обсуждение кода в обычном чате работает.")}
-              </p>
-            )}
-
-            {/* DESKTOP GENERAL */}
-            {tab === "desktop-general" && (
-              <p className="text-[13px] text-[var(--fg-muted)]">
-                {hint("Startup, system tray, and sleep prevention are not configurable in the app. Previously saved switches did not change OS settings.",
-                  "Автозапуск, трей и предотвращение сна не настраиваются в приложении. Прежние переключатели не меняли настройки ОС.")}
-              </p>
-            )}
-
-            {/* EXTENSIONS */}
-            {tab === "extensions" && (
-              <ExtensionsPanel onOpenAgents={() => setTab("agents")} />
-            )}
-
-            {/* DEVELOPER / MCP */}
-            {tab === "developer" && (
-              <div>
-                <h2 className="text-[18px] font-semibold">Developer</h2>
-                <p className="mt-1 text-[13px] text-[var(--fg-muted)]">
-                  {hint(
-                    "Low-level MCP registry. Prefer Agents & MCP for FS, terminal and Game Mode.",
-                    "Низкоуровневый реестр MCP. Удобнее через Agents & MCP (FS, terminal, Game Mode).",
-                  )}
-                </p>
-                {mcpServers.length === 0 ? (
-                  <EmptyArt
-                    title={hint("No servers added", "Серверы MCP пока не добавлены")}
-                    action={
-                      <button
-                        type="button"
-                        className="rounded-xl bg-[var(--fg)] px-3 py-2 text-[13px] text-[var(--bg)]"
-                        onClick={() => setTab("agents")}
-                      >
-                        Open Agents & MCP
-                      </button>
-                    }
-                  />
-                ) : (
-                  <div className="mt-6 space-y-2">
-                    {mcpServers.map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex items-center justify-between rounded-xl border border-[var(--border)] px-3 py-2.5"
-                      >
-                        <div>
-                          <div className="text-[13.5px]">{s.name}</div>
-                          <div className="text-[11.5px] text-[var(--fg-faint)]">{s.category}</div>
-                        </div>
-                        <span className="text-[12px] text-[var(--fg-muted)]">
-                          {s.enabled ? "On" : "Off"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {tab === "agents" && (
-              <div className="-mx-4 max-h-[min(70vh,720px)] overflow-y-auto px-2">
-                <AgentsPanel />
-              </div>
-            )}
-
-            {tab === "study" && (
-              <div className="-mx-4 max-h-[min(70vh,720px)] overflow-y-auto px-2">
-                <StudyPanel />
-              </div>
-            )}
-
-            {/* SKILLS */}
-            {tab === "skills" && (
-              <section className="space-y-3">
-                <h2 className="text-[18px] font-semibold">Skills</h2>
-                <p className="text-[13px] text-[var(--fg-muted)]">
-                  {hint("Built-in prompt presets are available in the chat + menu → Skills. They fill the draft; they do not install tools.",
-                    "Готовые шаблоны запроса доступны в чате: + → Skills. Они заполняют черновик, а не устанавливают инструменты.")}
-                </p>
-                <p className="text-[13px] text-[var(--fg-muted)]">morning · skill-creator · design-reflect</p>
-                <button type="button" onClick={() => setOpen(false)}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px] hover:bg-[var(--bg-hover)]">
-                  {hint("Back to chat", "Вернуться в чат")}
-                </button>
-              </section>
-            )}
-
-            {/* CONNECTORS */}
-            {tab === "connectors" && (
-              <section className="space-y-3">
-                <h2 className="text-[18px] font-semibold">Connectors</h2>
-                <p className="text-[13px] text-[var(--fg-muted)]">
-                  {hint("External account connections are not available. No accounts are connected by this screen.",
-                    "Подключение внешних аккаунтов пока недоступно. Этот экран не подключает Gmail, Drive, Slack или GitHub.")}
-                </p>
-                <button type="button" onClick={() => setTab("extensions")}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px] hover:bg-[var(--bg-hover)]">
-                  {hint("Open extensions", "Открыть расширения")}
-                </button>
-              </section>
-            )}
-
-            {/* PLUGINS */}
-            {tab === "plugins" && (
-              <section className="space-y-3">
-                <h2 className="text-[18px] font-semibold">Plugins</h2>
-                <p className="text-[13px] text-[var(--fg-muted)]">
-                  {hint("Plugin installation is not available in this version.", "Установка плагинов в этой версии недоступна.")}
-                </p>
-                <button type="button" onClick={() => setTab("skills")}
-                  className="rounded-xl border border-[var(--border)] px-3 py-2 text-[13px] hover:bg-[var(--bg-hover)]">
-                  {hint("Open skills", "Открыть навыки")}
-                </button>
-              </section>
-            )}
-
-            {/* MEMORY */}
-            {tab === "memory" && (
-              <div>
-                <h2 className="mb-6 text-[18px] font-semibold">Memory</h2>
-                <SettingRow
-                  title="Generate memory from chats"
-                  description={hint(
-                    "Allow Glow to generate memory from your chats.",
-                    "Glow может запоминать важное из чатов (Memory).",
-                  )}
-                >
-                  <Toggle
-                    on={memoryOn}
-                    onChange={(v) => {
-                      setMemoryOn(v);
-                      saveFlag("glow.memoryFromChats", v);
-                    }}
-                  />
-                </SettingRow>
-              </div>
-            )}
-          </div>
-
-          {/* footer theme quick switch like Claude */}
-          <div className="flex items-center justify-end border-t border-[var(--border)] px-4 py-2.5">
-            <Segmented
-              value={kind === "light" ? "light" : "dark"}
-              onChange={(id) => setThemeId(id === "light" ? "claude-light" : "claude-dark")}
-              options={[
-                { id: "system", icon: <Monitor size={13} /> },
-                { id: "light", icon: <Sun size={13} /> },
-                { id: "dark", icon: <Moon size={13} /> },
-              ]}
-            />
-          </div>
-        </div>
+  const exportSettings = () => {
+    const url = URL.createObjectURL(new Blob([exportSyncPackage()], { type: "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = "glow-sync.json"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/45 p-2 sm:p-5" onMouseDown={e => { if (e.currentTarget === e.target) ui.setSettingsOpen(false); }}>
+    <div role="dialog" aria-modal="true" aria-label={text("Settings", "Настройки")} className="flex h-[min(780px,94dvh)] w-[min(980px,98vw)] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl sm:flex-row">
+      <aside className="shrink-0 border-b border-[var(--border)] bg-[var(--bg-sidebar)] p-3 sm:w-[220px] sm:border-b-0 sm:border-r">
+        <input aria-label={text("Search settings", "Поиск настроек")} placeholder={text("Search", "Поиск")} value={query} onChange={e => setQuery(e.target.value)} className={cn(field, "mb-2 w-full")} />
+        <nav className="flex gap-1 overflow-x-auto sm:flex-col">{tabs.filter(item => item.label.toLowerCase().includes(query.toLowerCase()) || item.id.includes(query.toLowerCase())).map(item => <button key={item.id} aria-current={tab === item.id ? "page" : undefined} onClick={() => ui.setSettingsTab(item.id)} className={cn("shrink-0 whitespace-nowrap rounded-xl px-3 py-2 text-left text-sm", tab === item.id ? "bg-[var(--bg-active)]" : "text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]")}>{item.label}</button>)}</nav>
+      </aside>
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-y-auto p-5 pt-12 sm:p-8 sm:pt-12">
+        <button aria-label={text("Close settings", "Закрыть настройки")} onClick={() => ui.setSettingsOpen(false)} className="absolute right-3 top-3 rounded-lg p-2 hover:bg-[var(--bg-hover)]"><X size={18} /></button>
+        {tab === "general" && <section className="space-y-5"><h2 className="text-lg font-semibold">{text("General", "Основные")}</h2>
+          <Row title={text("Name", "Имя")} description={account ? text("Saved to your account.", "Сохраняется в аккаунте.") : text("Stored on this device.", "Хранится на этом устройстве.")}><div className="flex max-w-full gap-2"><input aria-label={text("Name", "Имя")} value={name} maxLength={60} onChange={e => setName(e.target.value)} className={cn(field, "min-w-0 w-36")} /><button disabled={busy || name.trim() === ui.userName} onClick={() => void saveName()} className={button}>{text("Save", "Сохранить")}</button></div></Row>
+          <label className="block text-sm">{text("Instructions for Glow", "Инструкции для Glow")}<p className="mt-1 text-xs text-[var(--fg-muted)]">{text("Response preferences, saved on this device.", "Тон, длина и стиль ответа. Сохраняются на этом устройстве.")}</p><textarea value={instructions} onChange={e => { setInstructions(e.target.value); storage.setItem("glow.instructions", e.target.value); }} className={cn(field, "mt-2 h-28 w-full")} /></label>
+          <Row title={text("Follow system theme", "Следовать системной теме")}><Toggle label={text("Follow system theme", "Следовать системной теме")} on={ui.appearanceMode === "system"} change={v => ui.setAppearanceMode(v ? "system" : "manual")} /></Row>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">{THEMES.map(theme => <button key={theme.id} aria-pressed={ui.appearanceMode === "manual" && theme.id === ui.themeId} onClick={() => ui.setThemeId(theme.id)} className={cn(button, theme.id === ui.themeId && "border-[var(--accent)]")}>{theme.label}</button>)}</div>
+          <Row title={text("Reduce motion", "Уменьшить анимацию")} description={text("Also follows system accessibility preferences.", "Также учитывается системная настройка уменьшения анимации.")}><Toggle label={text("Reduce motion", "Уменьшить анимацию")} on={ui.reducedMotion} change={ui.setReducedMotion} /></Row>
+          <Row title={text("Interface and voice language", "Язык интерфейса и чтения")}><select aria-label={text("Language", "Язык")} value={ui.locale} onChange={e => { const value = e.target.value === "en" ? "en" : "ru"; ui.setLocale(value); storage.setItem("glow.voiceLang", value); }} className={field}><option value="ru">Русский</option><option value="en">English</option></select></Row>
+          <Row title={text("Read aloud speed", "Скорость чтения")} description={text("Uses voices available in your browser.", "Используются голоса, доступные в браузере.")}><select aria-label={text("Read aloud speed", "Скорость чтения")} value={speed} onChange={e => { setSpeed(e.target.value); storage.setItem("glow.voiceSpeed", e.target.value); }} className={field}><option value="Slow">{text("Slow", "Медленно")}</option><option value="Normal">{text("Normal", "Обычно")}</option><option value="Fast">{text("Fast", "Быстро")}</option></select></Row>
+          <Row title={text("Notify when an answer is ready", "Уведомлять о готовом ответе")} description={text("Only when the page is in the background and the reply completed successfully. Requires browser permission. Closing the page stops generation; notifications do not keep it running.", "Только в фоне и после успешно завершённого ответа. Нужно разрешение браузера. Закрытие страницы останавливает генерацию; уведомления её не поддерживают.")}><Toggle label={text("Reply notifications", "Уведомления о готовом ответе")} on={notifications} change={async value => {
+            if (!value) { storage.setItem("glow.replyNotifications", "0"); setNotifications(false); return; }
+            try { const enabled = await enableReplyNotifications(); setNotifications(enabled); if (!enabled) setStatus(text("Notifications are unavailable or blocked in browser settings.", "Уведомления недоступны или заблокированы в настройках браузера.")); }
+            catch { setStatus(text("Could not enable notifications.", "Не удалось включить уведомления.")); }
+          }} /></Row>
+        </section>}
+        {tab === "account" && <section className="space-y-4"><h2 className="text-lg font-semibold">{text("Account", "Аккаунт")}</h2>{account && <><p className="break-all text-sm">{account.access.email}</p><button disabled={account.busy} onClick={() => void account.signOut()} className={button}>{text("Sign out", "Выйти из аккаунта")}</button></>}
+          <h3 className="pt-4 font-medium">{text("Transfer local preferences", "Перенос локальных настроек")}</h3><p className="text-sm text-[var(--fg-muted)]">{text("glow-sync.json transfers the local profile, theme, language and instructions. Chats, files and sign-in sessions are not included.", "glow-sync.json переносит локальный профиль, тему, язык и инструкции. Чаты, файлы и сессия входа не включены.")}</p>
+          <div className="flex gap-2"><button onClick={exportSettings} className={button}>{text("Export", "Экспорт")}</button><label className={cn(button, "cursor-pointer")}>{text("Import", "Импорт")}<input type="file" accept=".json,application/json" className="hidden" onChange={async e => {
+            const input = e.currentTarget; const file = input.files?.[0]; if (!file) return;
+            try {
+              if (file.size > 200000) throw new Error("Too large");
+              const result = importSyncPackage(await file.text()); if (!result.ok) throw new Error(result.error);
+              const locale = storage.getItem("glow.locale"); if (locale === "en" || locale === "ru") ui.setLocale(locale);
+              const theme = THEMES.find(item => item.id === storage.getItem("glow.theme")); if (theme) ui.setThemeId(theme.id);
+              if (!account) ui.setUserName(storage.getItem("glow.userName") || ui.userName);
+              else { storage.setItem("glow.userName", ui.userName); const profile = getOrCreateAccount(); profile.displayName = ui.userName; saveAccount(profile); }
+              setInstructions(storage.getItem("glow.instructions") || ""); setStatus(text("Preferences imported; signed-in account unchanged.", "Настройки импортированы; аккаунт входа остаётся прежним."));
+            } catch { setStatus(text("Could not import this file.", "Не удалось импортировать файл.")); }
+            input.value = "";
+          }} /></label></div>
+        </section>}
+        {tab === "privacy" && <section className="space-y-4"><h2 className="text-lg font-semibold">{text("Data and privacy", "Данные и приватность")}</h2><p className="text-sm">{cloudDataEnabled ? text("Saved workspace data is stored in your Supabase account. Local preferences stay on this device.", "Сохранённые данные рабочего пространства хранятся в вашем аккаунте Supabase. Локальные настройки остаются на этом устройстве.") : "__TAURI_INTERNALS__" in window ? text("Workspace data is stored locally in SQLite on this device.", "Данные рабочего пространства хранятся локально в SQLite на этом устройстве.") : text("Workspace data is stored in this browser. Clearing browser data may remove it.", "Данные рабочего пространства хранятся в этом браузере. Очистка данных браузера может их удалить.")}</p><p className="text-sm text-[var(--fg-muted)]">{text("Conversation context is sent to the AI provider to generate answers. Provider API keys stay on the server. Web search may send search queries to the search service.", "Контекст разговора передаётся AI-провайдеру для генерации ответа. API-ключи провайдера остаются на сервере. Web search может передавать поисковые запросы поисковому сервису.")}</p><p className="text-sm text-[var(--fg-muted)]">{text("Med masks supported patterns of personal data before sending text. Full anonymization is not guaranteed.", "Med маскирует поддерживаемые шаблоны персональных данных перед отправкой текста. Полная анонимизация не гарантируется.")}</p></section>}
+        {tab === "billing" && (account ? <TokenLimitsPanel /> : <BillingDashboard />)}
+        {tab === "admin" && account?.access.role === "admin" && <AdminPanel />}
+        {tab === "capabilities" && <section><h2 className="text-lg font-semibold">Artifacts</h2><Row title={text("Automatically open the Artifacts panel", "Автоматически открывать панель Artifacts")} description={text("Inline tools and artifact generation remain available when off.", "При отключении встроенные инструменты и генерация артефактов остаются доступны.")}><Toggle label="Artifacts" on={artifacts} change={v => { setArtifacts(v); storage.setItem("glow.capArtifacts", v ? "1" : "0"); if (!v) ui.setArtifactsOpen(false); }} /></Row></section>}
+        {tab === "skills" && <SkillsPanel />}
+        {tab === "memory" && <section className="space-y-4"><h2 className="text-lg font-semibold">{text("Memory", "Память")}</h2><Row title={text("Use and save memory", "Использовать и сохранять память")} description={text("Save facts marked by the assistant and use them in future requests. Off stops both reading and writing without deleting facts. This preference applies to this device.", "Сохранять факты, отмеченные ассистентом, и использовать их в следующих запросах. Отключение останавливает чтение и запись без удаления фактов. Настройка действует на этом устройстве.")}><Toggle label={text("Use and save memory", "Использовать и сохранять память")} on={memoryOn} change={v => { setMemoryOn(v); storage.setItem("glow.memoryFromChats", v ? "1" : "0"); }} /></Row>{facts.length === 0 && <p className="text-sm text-[var(--fg-muted)]">{text("No saved facts.", "Сохранённых фактов нет.")}</p>}{facts.map(item => <div key={item.id} className="rounded-xl border border-[var(--border)] p-3"><p className="text-sm">{item.fact}</p><button className="mt-2 text-xs text-[var(--fg-muted)]" onClick={async () => {
+          if (!confirm(text("Delete this saved fact?", "Удалить этот сохранённый факт?"))) return;
+          try { await deleteMemory(item.id); setFacts(items => items.filter(value => value.id !== item.id)); } catch { setStatus(text("Could not delete fact.", "Не удалось удалить факт.")); }
+        }}>{text("Delete", "Удалить")}</button></div>)}</section>}
+        {status && <p role="status" className="mt-4 text-sm text-[var(--fg-muted)]">{status}</p>}
       </div>
     </div>
-  );
+  </div>;
 }
-import { accountStorage as localStorage } from "../../auth/accountStorage";

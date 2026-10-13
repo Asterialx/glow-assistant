@@ -19,6 +19,7 @@ import {
   X,
   PanelRight,
   ArrowDown,
+  Globe,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -37,6 +38,11 @@ import {
 } from "../../lib/feedbackProfile";
 
 import { VoiceNotePlayer } from "../audio/VoiceNotePlayer";
+import { splitAttachments, preserveAttachments } from "../../lib/attachments";
+import { splitSearchSources } from "../../lib/searchSources";
+import { SearchSources } from "./SearchSources";
+import { FileAttachment, DocumentActivity, attachmentNames } from "./FileAttachment";
+import { generatedFileFromArtifact } from "../../lib/generatedFile";
 
 interface Props {
   messages: Message[];
@@ -46,13 +52,16 @@ interface Props {
   onEditMessage?: (message: Message, editedText: string) => void;
   onRegenerate?: (message: Message) => void;
   onWidgetChange?: (widget: UiWidget) => void;
-  onSend: (text: string, files?: File[]) => void;
+  onSend: (text: string, files?: File[]) => void | boolean | Promise<void | boolean>;
   streaming?: boolean;
+  preparingFiles?: boolean;
   onStop?: () => void;
+  webSearching?: boolean;
 }
 
 /** Themed mini-player for voice notes; hide STT / metadata from the bubble. */
 function UserMessageBody({ content }: { content: string }) {
+  const attachment = splitAttachments(content);
   const blocks: { mime: string; name: string; b64: string }[] = [];
   content.replace(
     /```glow-audio\r?\n([^\n]+)\r?\n([^\n]+)\r?\n([\s\S]*?)```/g,
@@ -80,7 +89,7 @@ function UserMessageBody({ content }: { content: string }) {
     );
   }
 
-  const cleaned = content
+  const cleaned = attachment.text
     .replace(/```glow-stt\r?\n[\s\S]*?```/g, "")
     .replace(/<!--glow-stt:[\s\S]*?-->/g, "")
     .replace(/\[Attached:[^\]]*\]/g, "")
@@ -88,9 +97,7 @@ function UserMessageBody({ content }: { content: string }) {
     .replace(/\[Voice transcript[^\]]*\]:?\s*/gi, "")
     .trim();
 
-  return cleaned ? (
-    <div className="whitespace-pre-wrap break-words">{cleaned}</div>
-  ) : null;
+  return <div>{attachment.files.length > 0 && <div className={cn("flex flex-wrap gap-x-3 gap-y-1", cleaned && "mb-2")}>{attachmentNames(attachment.files).map(name => <FileAttachment key={name} name={name} />)}</div>}{cleaned && <div className="whitespace-pre-wrap break-words">{cleaned}</div>}</div>;
 }
 
 export function ChatPane({
@@ -103,7 +110,9 @@ export function ChatPane({
   onWidgetChange,
   onSend,
   streaming,
+  preparingFiles,
   onStop,
+  webSearching = false,
 }: Props) {
   const locale = useUiStore((s) => s.locale);
   const artifactsOpen = useUiStore((s) => s.artifactsOpen);
@@ -206,7 +215,7 @@ export function ChatPane({
   const startEdit = (m: Message) => {
     if (streaming) return;
     setEditingId(m.id);
-    setEditDraft(m.content);
+    setEditDraft(splitAttachments(m.content).text);
   };
 
   const cancelEdit = () => {
@@ -222,7 +231,7 @@ export function ChatPane({
     }
     setEditingId(null);
     setEditDraft("");
-    onEditMessage?.(m, next);
+    onEditMessage?.(m, preserveAttachments(m.content, next));
   };
 
   const toggleSpeak = (id: string, text: string) => {
@@ -257,7 +266,7 @@ export function ChatPane({
           <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{t(locale, "taskSubtitle")}</p>
         </div>
         <div className="w-full">
-          <SmartInputBar onSend={onSend} disabled={streaming} onStop={onStop} centered />
+          <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} centered />
         </div>
       </div>
     );
@@ -354,18 +363,22 @@ export function ChatPane({
               );
             }
 
-            const display = getAssistantDisplay(m.content, isStreaming);
+            const { text: visibleContent, sources } = splitSearchSources(m.content);
+            const visibleMessage = visibleContent === m.content ? m : { ...m, content: visibleContent };
+            const display = getAssistantDisplay(visibleContent, isStreaming);
             const messageArts = artifacts.filter((a) => a.message_id === m.id);
-            const recoveredArts = isStreaming ? [] : recoverInlineArtifacts(m, messageArts);
+            const recoveredArts = isStreaming ? [] : recoverInlineArtifacts(visibleMessage, messageArts);
             // Only real Artifacts — never inline widgets
             const panelArt = messageArts.find((a) =>
               ["html", "genui", "jupyter", "code", "stl", "obj", "dcm", "pdf"].includes(a.kind),
             );
-            const showBuilding = display.buildingHtml || display.buildingWidget;
+            const showBuilding = display.buildingHtml || display.buildingWidget || display.buildingFile;
             const showResponseStatus = showThinking || showBuilding || isStreaming;
+            const parentMessage = messages.find(message => message.id === m.parent_id && message.role === "user") || [...messages.slice(0, idx)].reverse().find(message => message.role === "user");
+            const hasFiles = !!parentMessage && splitAttachments(parentMessage.content).files.length > 0;
             const widgets = widgetsByMessage[m.id] || [];
             const prose =
-              (m.content.startsWith("Error:") ? "" : display.content) ||
+              (visibleContent.startsWith("Error:") ? "" : display.content) ||
               (showBuilding
                 ? ""
                 : display.hasHtmlArtifact && !isStreaming
@@ -376,11 +389,14 @@ export function ChatPane({
 
             return (
               <div key={m.id} className="group flex flex-col gap-2">
-                {showResponseStatus && (
+                {showResponseStatus && hasFiles && <DocumentActivity phase="analysis" locale={locale} />}
+                {showResponseStatus && !hasFiles && (
                   <div className="flex items-center gap-2 text-[13px] text-[var(--fg-faint)]">
-                    <span className="text-[15px] leading-none text-[var(--accent)]">✻</span>
+                    {webSearching && isLast ? <Globe size={15} className="animate-pulse text-[var(--accent)]" /> : <span className="text-[15px] leading-none text-[var(--accent)]">✻</span>}
                     <span>
-                      {showThinking
+                      {display.buildingFile ? locale === "ru" ? "Создаю файл…" : "Creating file…" : webSearching && isLast
+                        ? locale === "ru" ? "Проверяю свежие сайты…" : "Checking current websites…"
+                        : showThinking
                         ? t(locale, "thinking")
                         : display.buildingHtml
                           ? designMode
@@ -398,17 +414,16 @@ export function ChatPane({
                 <div
                   className={cn(
                     "prose-chat max-w-none font-[family-name:var(--font-display)] text-[16.5px] leading-[1.7] text-[var(--fg)]",
-                    "[&_h1]:mb-2 [&_h1]:mt-5 [&_h1]:text-[1.25em] [&_h1]:font-semibold",
-                    "[&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-[1.1em] [&_h2]:font-semibold",
-                    "[&_h3]:mb-1.5 [&_h3]:mt-3 [&_h3]:text-[1.05em] [&_h3]:font-semibold",
-                    "[&_ul]:my-2 [&_ol]:my-2 [&_li]:my-0.5",
-                    "[&_strong]:font-semibold",
                   )}
                 >
                   {showThinking ? null : prose ? (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeKatex]}
+                      components={{
+                        a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+                        table: ({ node: _node, ...props }) => <div className="chat-table-scroll"><table {...props} /></div>,
+                      }}
                     >
                       {prose}
                     </ReactMarkdown>
@@ -460,6 +475,11 @@ export function ChatPane({
                   )}
                 </div>
 
+                {display.invalidFile && <p role="alert" className="text-sm text-[var(--fg-muted)]">{locale === "ru" ? "Не удалось завершить файл. Повторите ответ." : "File could not be completed. Regenerate the response."}</p>}
+                {!isStreaming && messageArts.filter(artifact => generatedFileFromArtifact(artifact)).map(artifact => <button key={artifact.id} onClick={() => onOpenArtifact?.(artifact.id)} className="my-2 flex w-fit max-w-full items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4 text-left transition-colors hover:bg-[var(--bg-hover)]"><PanelRight size={20} className="shrink-0 text-[var(--accent)]" /><span className="min-w-0"><span className="block truncate text-sm font-medium">{artifact.title}</span><span className="mt-0.5 block text-xs text-[var(--fg-faint)]">{locale === "ru" ? "Открыть файл в Artifacts" : "Open file in Artifacts"}</span></span></button>)}
+                {!isStreaming && sources.length > 0 && <SearchSources sources={sources} locale={locale} />}
+                {!isStreaming && hasFiles && m.status !== "error" && visibleContent && <DocumentActivity phase="done" locale={locale} />}
+
                 {!isStreaming && panelArt && panelArt.kind === "html" && !isInlineHtmlArtifact(panelArt) && onOpenArtifact && (
                   <button
                     type="button"
@@ -476,9 +496,9 @@ export function ChatPane({
                   </button>
                 )}
 
-                {!isStreaming && m.content.startsWith("Error:") && isLast && (
+                {!isStreaming && visibleContent.startsWith("Error:") && isLast && (
                   <div className="mt-1 flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-[13px] text-[var(--fg-muted)]">
-                    <span className="min-w-0 flex-1">{friendlyError(locale, m.content)}</span>
+                    <span className="min-w-0 flex-1">{friendlyError(locale, visibleContent)}</span>
                     <button
                       type="button"
                       onClick={() => onRegenerate?.(m)}
@@ -489,7 +509,7 @@ export function ChatPane({
                   </div>
                 )}
 
-                {!isStreaming && m.content && !m.content.startsWith("Error:") && (
+                {!isStreaming && visibleContent && !visibleContent.startsWith("Error:") && (
                   <div
                     className={cn(
                       "mt-1 flex items-center gap-0.5 text-[var(--fg-faint)]",
@@ -498,28 +518,28 @@ export function ChatPane({
                   >
                     <IconBtn
                       title="Copy"
-                      onClick={() => void copyText(m.id, display.content || m.content)}
+                      onClick={() => void copyText(m.id, display.content || visibleContent)}
                     >
                       {copiedId === m.id ? <Check size={15} /> : <Copy size={15} />}
                     </IconBtn>
                     <IconBtn
                       title={speakingId === m.id ? "Stop" : "Read aloud"}
                       active={speakingId === m.id}
-                      onClick={() => toggleSpeak(m.id, display.content || m.content)}
+                      onClick={() => toggleSpeak(m.id, display.content || visibleContent)}
                     >
                       <Volume2 size={15} />
                     </IconBtn>
                     <IconBtn
                       title="Helpful"
                       active={votes[m.id] === "up"}
-                      onClick={() => vote(m, "up", display.content || m.content)}
+                      onClick={() => vote(m, "up", display.content || visibleContent)}
                     >
                       <ThumbsUp size={15} />
                     </IconBtn>
                     <IconBtn
                       title="Not helpful"
                       active={votes[m.id] === "down"}
-                      onClick={() => vote(m, "down", display.content || m.content)}
+                      onClick={() => vote(m, "down", display.content || visibleContent)}
                     >
                       <ThumbsDown size={15} />
                     </IconBtn>
@@ -549,7 +569,7 @@ export function ChatPane({
           {locale === "ru" ? "Вниз" : "Scroll to bottom"}
         </button>
       )}
-      <SmartInputBar onSend={onSend} disabled={streaming} onStop={onStop} />
+      <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} />
     </div>
   );
 }

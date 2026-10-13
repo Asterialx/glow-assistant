@@ -41,7 +41,6 @@ export function ClaudeSidebar({
   const userName = useUiStore((s) => s.userName);
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const setSettingsTab = useUiStore((s) => s.setSettingsTab);
-  const setAppsOpen = useUiStore((s) => s.setAppsOpen);
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const setActiveConversationId = useChatStore((s) => s.setActiveConversationId);
@@ -410,9 +409,8 @@ export function ClaudeSidebar({
             {[
               { key: "settings", tab: "general" },
               { key: "billing", tab: "billing" },
-              { key: "agents", tab: "agents" },
-              { key: "language", tab: "language" },
-              { key: "appearance", tab: "appearance" },
+              { key: "language", tab: "general" },
+              { key: "appearance", tab: "general" },
             ].map((item) => (
               <button
                 key={item.key}
@@ -424,9 +422,7 @@ export function ClaudeSidebar({
                   setMenuOpen(false);
                 }}
               >
-                {item.key === "agents"
-                  ? "Agents & MCP"
-                  : t(locale, item.key as "settings")}
+                {t(locale, item.key as "settings")}
               </button>
             ))}
             <div className="border-t border-[var(--border)] px-3.5 py-2.5 text-[13px] text-[var(--fg-faint)]">
@@ -451,20 +447,7 @@ export function ClaudeSidebar({
             </div>
             <ChevronDown size={14} className="shrink-0 text-[var(--fg-faint)]" />
           </button>
-          <button
-            type="button"
-            className="group relative shrink-0 rounded-lg p-2 text-[var(--fg-faint)] hover:bg-[var(--bg-hover)]"
-            title="Get apps and extensions"
-            onClick={() => {
-              setMenuOpen(false);
-              setAppsOpen(true);
-            }}
-          >
-            <Download size={15} />
-            <span className="pointer-events-none absolute bottom-full right-0 mb-2 hidden whitespace-nowrap rounded-full bg-[var(--fg)] px-3 py-1.5 text-[11px] font-medium text-[var(--bg)] shadow-lg group-hover:block">
-              Get apps and extensions
-            </span>
-          </button>
+
         </div>
       </div>
     </aside>

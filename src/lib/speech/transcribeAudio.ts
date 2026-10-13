@@ -267,8 +267,12 @@ async function loadAsr(): Promise<AsrPipeline> {
         /* ignore */
       }
 
-      const pipe = await pipeline("automatic-speech-recognition", "Xenova/whisper-tiny", {
+      const pipe = await pipeline("automatic-speech-recognition", "Xenova/whisper-base", {
+        device: "wasm",
         dtype: "q8",
+        // ORT 1.25's extended QDQ rewrite breaks older Whisper q8 exports.
+        // Basic optimizations keep the small cached model compatible on CPU.
+        session_options: { graphOptimizationLevel: "basic" },
       });
       return pipe as unknown as AsrPipeline;
     })().catch((err) => {

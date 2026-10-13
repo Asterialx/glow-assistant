@@ -33,22 +33,20 @@ import {
   type MicAnalyser,
 } from "../../lib/speech/micAnalyser";
 import { setMcpEnabled } from "../../lib/tauri";
-import { useExtensionsStore } from "../../lib/extensions/registry";
-import { cloudDataEnabled } from "../../db";
+import { ATTACHMENT_ACCEPT } from "../../lib/filePolicy";
+import { FileAttachment, DocumentActivity } from "../chat/FileAttachment";
 
 interface Props {
-  onSend: (text: string, files?: File[]) => void;
+  onSend: (text: string, files?: File[]) => void | boolean | Promise<void | boolean>;
   disabled?: boolean;
+  preparing?: boolean;
   centered?: boolean;
   onStop?: () => void;
 }
 
-const BASE_ACCEPT =
-  "image/*,.pdf,.txt,.md,.csv,.json,.stl,.obj,.dcm,.dicom,.ipynb,.py,.ts,.tsx,.js,.jsx,.html,.css";
-
 const DOT_COUNT = 48;
 
-export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
+export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }: Props) {
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const locale = useUiStore((s) => s.locale);
@@ -58,11 +56,16 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
   const setChromeAgentActive = useModeStore((s) => s.setChromeAgentActive);
   const webSearch = useModeStore((s) => s.webSearch);
   const setWebSearch = useModeStore((s) => s.setWebSearch);
-  const extAccept = useExtensionsStore((s) => s.enabledAcceptAttr());
-  const fileAccept = extAccept ? `${BASE_ACCEPT},${extAccept}` : BASE_ACCEPT;
+  const fileAccept = ATTACHMENT_ACCEPT;
   const lang = resolveSttLang(locale);
   const [menuOpen, setMenuOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<Record<number, string>>({});
+  useEffect(() => {
+    const previews = Object.fromEntries(files.flatMap((file, index) => file.type.startsWith("image/") ? [[index, URL.createObjectURL(file)]] : []));
+    setFilePreviews(previews);
+    return () => Object.values(previews).forEach(url => URL.revokeObjectURL(url));
+  }, [files]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -102,9 +105,12 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
   };
 
   const submit = (textOverride?: string) => {
+    if (disabled) return;
     const text = (textOverride ?? draft).trim();
     if (!text && files.length === 0) return;
-    onSend(text, files);
+    const attached = files;
+    const restore = () => { if (!useChatStore.getState().draft) setDraft(text); setFiles(current => current.length ? current : attached); };
+    Promise.resolve(onSend(text, attached)).then(result => { if (result === false) restore(); }).catch(restore);
     setDraft("");
     setFiles([]);
     if (taRef.current) taRef.current.style.height = "auto";
@@ -114,7 +120,7 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
         e.preventDefault();
-        if (!cloudDataEnabled) fileRef.current?.click();
+        fileRef.current?.click();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -499,19 +505,15 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        if (!cloudDataEnabled) setFiles((f) => [...f, ...Array.from(e.dataTransfer.files)]);
+        setFiles((f) => [...f, ...Array.from(e.dataTransfer.files)]);
       }}
     >
       <div className={cn("mx-auto", centered ? "max-w-[720px]" : "max-w-3xl")}>
+        {preparing && <DocumentActivity phase="reading" locale={locale} />}
         {files.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
-            {files.map((f) => (
-              <span
-                key={f.name + f.size}
-                className="rounded-full bg-[var(--bg-hover)] px-3 py-1 text-xs text-[var(--fg-muted)]"
-              >
-                {f.name}
-              </span>
+            {files.map((f, index) => (
+              <FileAttachment key={index} name={f.name} size={f.size} preview={filePreviews[index]} onRemove={() => setFiles(current => current.filter((_, i) => i !== index))} />
             ))}
           </div>
         )}
@@ -577,6 +579,10 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
             </div>
           ) : (
             <textarea
+              onPaste={(event) => {
+                const pasted = Array.from(event.clipboardData.files);
+                if (!disabled && pasted.length) { event.preventDefault(); setFiles(current => [...current, ...pasted]); }
+              }}
               ref={taRef}
               value={draft}
               disabled={disabled}
@@ -634,7 +640,7 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
                   {webSearch && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-[var(--bg-hover)] py-1 pl-2.5 pr-1 text-[11px] font-medium text-[var(--fg-muted)]">
                       <Globe size={11} />
-                      Web search
+                      {locale === "ru" ? "Веб-поиск всегда" : "Web search always"}
                       <button
                         type="button"
                         onClick={() => setWebSearch(false)}
@@ -668,11 +674,11 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
                 <input
                   ref={fileRef}
                   type="file"
-                  disabled={cloudDataEnabled}
+                  disabled={disabled}
                   multiple
                   accept={fileAccept}
                   className="hidden"
-                  onChange={(e) => setFiles((f) => [...f, ...Array.from(e.target.files || [])])}
+                  onChange={(e) => { const selected = Array.from(e.target.files || []); setFiles((f) => [...f, ...selected]); e.target.value = ""; }}
                 />
               </div>
               <ModelSelector />
