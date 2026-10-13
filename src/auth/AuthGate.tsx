@@ -112,13 +112,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
       <div className="flex items-center justify-center gap-3 pb-3"><img src="/glow-mark.png" alt="" className="h-8 w-8 object-contain" /><span className="text-2xl font-semibold">Glow</span></div>
       <h1 className="text-xl font-semibold">{account ? "Давайте познакомимся" : sent ? "Проверьте почту" : "Добро пожаловать"}</h1>
-      <p className="text-sm text-[var(--fg-muted)]">{account ? "Как к вам обращаться? Возраст можно не указывать." : sent ? `Введите код из письма, отправленного на ${email.trim()}.` : "Вход по приглашению. Укажите вашу почту — пароль не нужен."}</p>
+      <p className="text-sm text-[var(--fg-muted)]">{account ? "Как к вам обращаться? Возраст можно не указывать." : sent ? `Введите 6-значный код из письма, отправленного на ${email.trim()}.` : "Вход по приглашению. Укажите вашу почту — пароль не нужен."}</p>
       {account ? <>
         <label className="block text-sm">Как к вам обращаться?<input autoComplete="given-name" required maxLength={60} value={name} onChange={e => setName(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3" /></label>
         <label className="block text-sm">Возраст — необязательно<input type="number" min={1} max={120} step={1} value={age} onChange={e => setAge(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3" /></label>
       </> : <>
         {!sent && <label className="block text-sm">Ваша почта<input autoFocus type="email" autoComplete="email" required maxLength={254} value={email} onChange={e => setEmail(e.target.value)} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3" /></label>}
-        {sent && <label className="block text-sm">Код из письма<input autoFocus autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6,10}" minLength={6} maxLength={10} required value={token} onChange={e => setToken(e.target.value.replace(/\D/g, ""))} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-center text-xl tracking-[0.3em]" /></label>}
+        {sent && <label className="block text-sm">Код из письма<input autoFocus autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} required value={token} onChange={e => setToken(e.target.value.replace(/\D/g, ""))} className="mt-1 w-full rounded-lg border border-[var(--border)] bg-[var(--bg)] p-3 text-center text-xl tracking-[0.3em]" /></label>}
       </>}
       {notice && <p role="status" className="text-sm text-[var(--fg-muted)]">{notice}</p>}
       {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
