@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode, type FormEvent } from "react";
 import { betaAuthEnabled, loadAccount, supabase, type Access, type Profile } from "./client";
+import { emailCooldown, beginEmailCooldown } from "./emailCooldown";
 import { validateProfile } from "./profile";
 import { AccountContext } from "./AccountContext";
 import { accountStorage, setStorageOwner } from "./accountStorage";
@@ -19,10 +20,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
-    if (!sent) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [sent]);
+  }, []);
 
   useEffect(() => {
     if (!betaAuthEnabled || !supabase) { setLoading(false); return; }
@@ -63,10 +63,20 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (!betaAuthEnabled) return children;
   const sendCode = async () => {
     if (!supabase) return;
+    const waiting = emailCooldown(email);
+    if (waiting) {
+      setSent(true); setResendAt(waiting); setNow(Date.now());
+      setNotice("Письмо уже запрошено. Если оно пришло, введите код; повтор будет доступен после паузы.");
+      return;
+    }
+    setResendAt(beginEmailCooldown(email)); setNow(Date.now());
     const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false } });
-    if (error) throw new Error("Не удалось отправить код. Проверьте приглашение и попробуйте позже.");
-    setSent(true); setToken(""); setNow(Date.now()); setResendAt(Date.now() + 60000);
-    setNotice("Письмо отправлено. Если его нет во входящих, проверьте папку «Спам».");
+    if (error) {
+      if (error.status === 429) { setSent(true); throw new Error("Почтовый сервис ограничил частые запросы. Подождите 60 секунд и запросите код ещё раз."); }
+      throw new Error("Почтовый сервис не принял запрос кода. Проверьте приглашение и попробуйте позже.");
+    }
+    setSent(true); setToken(""); setNow(Date.now()); setResendAt(emailCooldown(email));
+    setNotice("Почтовый сервис принял письмо. Доставка может занять несколько минут; проверьте входящие и «Спам».");
   };
   const resend = async () => {
     if (busy || Date.now() < resendAt) return;

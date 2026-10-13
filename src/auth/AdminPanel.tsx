@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, ArrowUpRight, Ban, Check, Search, Shield, UserRound, Users } from "lucide-react";
+import { emailCooldown, beginEmailCooldown } from "./emailCooldown";
 import { supabase } from "./client";
 import { UserUsageDetail, type TokenEntry } from "./UserUsageDetail";
 
@@ -54,13 +55,15 @@ export function AdminPanel() {
     finally { setBusy(false); }
   };
   const resendInvite = (address: string) => void perform(async () => {
+    const waiting = emailCooldown(address);
+    if (waiting) { setResendAfter(previous => ({ ...previous, [address]: waiting })); throw new Error(`Повторная отправка доступна через ${Math.ceil((waiting - Date.now()) / 1000)} с.`); }
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Сессия истекла. Войдите снова.");
+    setResendAfter(previous => ({ ...previous, [address]: beginEmailCooldown(address) }));
     const response = await fetch("/api/invite", {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
       body: JSON.stringify({ email: address, action: "resend" }),
     });
-    setResendAfter(previous => ({ ...previous, [address]: Date.now() + 60000 }));
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.message || "Не удалось отправить письмо повторно.");
     setStatus(result.message);
