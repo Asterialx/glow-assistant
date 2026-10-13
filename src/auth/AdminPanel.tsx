@@ -62,6 +62,7 @@ export function AdminPanel() {
       <p className="text-sm text-[var(--fg-muted)]">Кредиты — внутренний тестовый лимит, не баланс провайдера. Автоматическое списание за AI-запросы пока не подключено.</p>
       {status && <p role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm">{status}</p>}
       <form onSubmit={invite} className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+        <p className="text-sm text-[var(--fg-muted)]">В бете 1 кредит = 1 запрос, не 1 токен. Прерванные запросы также расходуют кредит.</p>
         <h2 className="font-medium">Пригласить пользователя</h2>
         <label className="block text-sm">Email<input type="email" required value={email} onChange={e => setEmail(e.target.value)} className={inputClass} /></label>
         <label className="block text-sm">Начальный лимит<input type="number" min={0} max={1000000} step={1} required value={credits} onChange={e => setCredits(e.target.value)} className={inputClass} /></label>

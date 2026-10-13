@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
+import { admitRequest, waitForDrain } from './admission.js';
 
 export function resolveAiPath(req) {
   const pathname = new URL(req.url || '/', 'http://localhost').pathname;
@@ -38,29 +39,36 @@ export default async function handler(req, res) {
   if (!body || !models.some(model => model.id === body.model) || body.stream !== true || !Array.isArray(body.messages) || body.messages.length > 250 ||
       body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string') ||
       JSON.stringify(body.messages).length > 200000) return fail(400, 'Invalid conversation');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!serviceKey) return fail(503, 'Request limits not configured');
+  const budgetClient = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), 110000);
   res.on('close', () => abort.abort());
   const leaseToken = randomUUID();
   let leased = false;
+  let admitted = false;
   try {
     const lease = await client.rpc('glow_acquire_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
     if (lease.error) return fail(403, 'Conversation access denied');
     if (!lease.data) return fail(409, 'An answer is already being generated on another device');
     leased = true;
+    const rejection = await admitRequest(budgetClient, user.id, leaseToken);
+    if (rejection) return fail(rejection.status, rejection.message);
+    admitted = true;
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', signal: abort.signal,
       headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: body.model, messages: body.messages, stream: true,
         max_tokens: Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192)),
-        temperature: Math.max(0, Math.min(Number(body.temperature) || 0.7, 2)), reasoning: { effort: 'low' } }),
+        temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
     });
     if (!upstream.ok || !upstream.body) return fail(502, 'Provider unavailable. Try again later.');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     for await (const chunk of upstream.body) {
       if (res.destroyed) break;
-      if (!res.write(chunk)) await new Promise(resolve => res.once('drain', resolve));
+      if (!res.write(chunk)) await waitForDrain(res);
     }
     res.end();
   } catch {
@@ -68,6 +76,7 @@ export default async function handler(req, res) {
     else res.end();
   } finally {
     clearTimeout(timer);
+    if (admitted) await budgetClient.rpc('glow_finish_ai_request', { p_request: leaseToken });
     if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
   }
 }

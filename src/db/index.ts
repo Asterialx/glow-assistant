@@ -11,7 +11,7 @@ import type {
 } from "../lib/types";
 import { nowMs, uid } from "../lib/utils";
 import { accountStorageKey } from "../auth/accountStorage";
-import { betaAuthEnabled } from "../auth/client";
+import { betaAuthEnabled, supabase } from "../auth/client";
 import { openBrowserSnapshot } from "./browserPersistence";
 import { createCloudDb } from "./cloudDb";
 
@@ -370,6 +370,11 @@ export async function renameConversation(mode: AppMode, id: string, title: strin
 }
 
 export async function deleteConversation(mode: AppMode, id: string) {
+  if (cloudDataEnabled) {
+    const result = await supabase!.rpc("glow_delete_conversation", { p_scope: mode, p_conversation: id });
+    if (result.error) throw new Error("Не удалось удалить чат. История не изменена.");
+    return;
+  }
   const db = await getModeDb(mode);
   const artifacts = await listArtifacts(mode, id);
   for (const artifact of artifacts) {
@@ -602,6 +607,13 @@ export async function listArtifacts(mode: AppMode, conversationId: string): Prom
 }
 
 export async function upsertWidget(mode: AppMode, widget: UiWidget) {
+  if (cloudDataEnabled) {
+    const { error } = await supabase!.from("glow_data_ui_widgets").upsert(
+      { ...widget, scope: mode }, { onConflict: "user_id,scope,id" },
+    );
+    if (error) throw new Error("Не удалось сохранить интерактивный блок.");
+    return;
+  }
   const db = await getModeDb(mode);
   await db.execute(`DELETE FROM ui_widgets WHERE id = $1`, [widget.id]);
   await db.execute(

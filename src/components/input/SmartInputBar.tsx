@@ -34,6 +34,7 @@ import {
 } from "../../lib/speech/micAnalyser";
 import { setMcpEnabled } from "../../lib/tauri";
 import { useExtensionsStore } from "../../lib/extensions/registry";
+import { cloudDataEnabled } from "../../db";
 
 interface Props {
   onSend: (text: string, files?: File[]) => void;
@@ -113,7 +114,7 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "u") {
         e.preventDefault();
-        fileRef.current?.click();
+        if (!cloudDataEnabled) fileRef.current?.click();
       }
     };
     window.addEventListener("keydown", onKey);
@@ -498,7 +499,7 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
-        setFiles((f) => [...f, ...Array.from(e.dataTransfer.files)]);
+        if (!cloudDataEnabled) setFiles((f) => [...f, ...Array.from(e.dataTransfer.files)]);
       }}
     >
       <div className={cn("mx-auto", centered ? "max-w-[720px]" : "max-w-3xl")}>
@@ -667,6 +668,7 @@ export function SmartInputBar({ onSend, disabled, centered, onStop }: Props) {
                 <input
                   ref={fileRef}
                   type="file"
+                  disabled={cloudDataEnabled}
                   multiple
                   accept={fileAccept}
                   className="hidden"

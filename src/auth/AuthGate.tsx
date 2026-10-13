@@ -46,9 +46,14 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
     void refresh();
     // Do not await Supabase calls inside onAuthStateChange; defer outside its lock.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+    let signedInUser: string | null = null;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === "TOKEN_REFRESHED") return;
       if (event === "SIGNED_OUT") { window.location.reload(); return; }
+      // SIGNED_IN can also fire when the same session regains browser focus.
+      // Keep the workspace mounted: it may have an answer in flight.
+      if (event === "SIGNED_IN" && session?.user.id === signedInUser) return;
+      signedInUser = session?.user.id ?? null;
       setAccount(null);
       setLoading(true);
       setTimeout(() => { if (alive) void refresh(); }, 0);

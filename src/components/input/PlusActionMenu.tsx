@@ -19,6 +19,7 @@ import { createProject } from "../../db";
 import { cn } from "../../lib/utils";
 import { enableChromeAgent, enableGlowDesign } from "../../lib/glowExtensions";
 import { conversationService } from "../../conversation/conversationService";
+import { cloudDataEnabled } from "../../db";
 
 type SubKey = "project" | "skills" | "connector" | null;
 
@@ -89,12 +90,12 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   return (
     <div ref={rootRef} className="absolute bottom-full left-0 z-50 mb-2 flex items-end gap-1.5">
       <div className="w-[280px] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
-        <MenuRow
+        {!cloudDataEnabled && <MenuRow
           icon={<Paperclip size={16} strokeWidth={1.7} />}
           label="Add files or photos"
           trailing={<span className="text-[12px] text-[var(--fg-faint)]">Ctrl+U</span>}
           onClick={openFiles}
-        />
+        />}
         <MenuRow
           icon={<Archive size={16} strokeWidth={1.7} />}
           label="Add to project"

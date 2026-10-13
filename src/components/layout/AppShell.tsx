@@ -91,7 +91,11 @@ export function AppShell() {
       if (conversationService.getState().streaming) return false;
       const active = conversationService.getState().activeConversationId;
       const conversations = await conversationService.refresh(mode);
-      setProjects(await listProjects(mode));
+      const projects = await listProjects(mode);
+      // User selection/generation may have changed while cloud reads were pending.
+      const current = conversationService.getState();
+      if (current.streaming || current.activeConversationId !== active) return false;
+      setProjects(projects);
       if (active && conversations.some(item => item.id === active)) await loadConversation(active);
       else if (active) { conversationService.startNew(); setArtifacts([]); setWidgetsByMessage({}); }
     }, setSyncError);
@@ -563,6 +567,7 @@ export function AppShell() {
       titleSource: text,
     });
     if (!result) return;
+    if (result.error) { setSyncError(result.error.message); return; }
     if (!result.error) {
       await maybeSpawnArtifacts(convId, result.assistantMessage.id, result.assistantMessage.content, text);
       await extractMemory(result.assistantMessage.content);
@@ -582,6 +587,7 @@ export function AppShell() {
       generation: await createGenerationOptions(userMessage?.content || ""),
     });
     if (!result) return;
+    if (result.error) { setSyncError(result.error.message); return; }
     if (!result.error) {
       await maybeSpawnArtifacts(
         result.conversationId,
@@ -608,6 +614,7 @@ export function AppShell() {
       titleSource: editedText,
     });
     if (!result) return;
+    if (result.error) { setSyncError(result.error.message); return; }
     if (!result.error) {
       await maybeSpawnArtifacts(
         result.conversationId,

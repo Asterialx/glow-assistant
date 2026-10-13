@@ -42,6 +42,7 @@ export class ConversationEngine<TGeneration> {
   private state: ConversationState = EMPTY_STATE;
   private listeners = new Set<(state: ConversationState) => void>();
   private activeAbortController: AbortController | null = null;
+  private selectionRevision = 0;
 
   constructor(
     private readonly repository: ConversationRepository,
@@ -67,10 +68,12 @@ export class ConversationEngine<TGeneration> {
   }
 
   async select(scope: AppMode, conversationId: string): Promise<void> {
+    const revision = ++this.selectionRevision;
     const [messages, conversations] = await Promise.all([
       this.repository.listMessages(scope, conversationId),
       this.repository.listConversations(scope),
     ]);
+    if (revision !== this.selectionRevision) return;
     const conversation = conversations.find((item) => item.id === conversationId);
     const leafId = conversation?.active_leaf_id ?? messages.at(-1)?.id ?? null;
     this.setState({
@@ -82,6 +85,7 @@ export class ConversationEngine<TGeneration> {
   }
 
   startNew(): void {
+    this.selectionRevision++;
     this.setState({ activeConversationId: null, messages: [], branchPath: [] });
   }
 
@@ -237,33 +241,48 @@ export class ConversationEngine<TGeneration> {
     const abortController = new AbortController();
     this.activeAbortController = abortController;
     return new Promise<ConversationResult>((resolve) => {
+      let finishing = false;
+      let generatedContent = "";
       const finish = async (usage?: { inputTokens: number; outputTokens: number; costUnits: number }, error?: Error) => {
-        const current = this.findMessage(assistantMessage.id);
-        const content = current?.content ?? "";
+        if (finishing) return;
+        finishing = true;
+        // The selected chat can change during a stream; output belongs to this
+        // generation, not to whichever messages happen to be visible now.
+        const content = generatedContent;
         const stopped = abortController.signal.aborted;
         const status: Message["status"] = error && !stopped ? "error" : "done";
-        const storedContent = error && !stopped ? `Error: ${error.message}` : content;
-        await this.repository.updateMessage(scope, assistantMessage.id, storedContent, status);
-        if (usage) {
-          await this.repository.recordUsage({
-            mode: scope,
-            conversation_id: assistantMessage.conversation_id,
-            message_id: assistantMessage.id,
-            model_id: modelId,
-            input_tokens: usage.inputTokens,
-            output_tokens: usage.outputTokens,
-            cost_units: usage.costUnits,
-          });
+        const storedContent = error && !stopped && !content ? `Error: ${error.message}` : content;
+        let completionError = error && !stopped ? error : undefined;
+        try {
+          await this.repository.updateMessage(scope, assistantMessage.id, storedContent, status);
+          if (usage) {
+            await this.repository.recordUsage({
+              mode: scope,
+              conversation_id: assistantMessage.conversation_id,
+              message_id: assistantMessage.id,
+              model_id: modelId,
+              input_tokens: usage.inputTokens,
+              output_tokens: usage.outputTokens,
+              cost_units: usage.costUnits,
+            });
+          }
+          if (this.state.activeConversationId === assistantMessage.conversation_id) {
+            await this.select(scope, assistantMessage.conversation_id);
+          }
+          await this.refresh(scope);
+        } catch (saveError) {
+          completionError = new Error(`Не удалось сохранить ответ. Скопируйте его перед перезагрузкой. ${toError(saveError).message}`);
+        } finally {
+          this.activeAbortController = null;
+          const update = (items: Message[]) => items.map(item => item.id === assistantMessage.id
+            ? { ...item, content: storedContent, status: completionError ? "error" as const : status } : item);
+          this.setState({ streaming: false, messages: update(this.state.messages), branchPath: update(this.state.branchPath) });
         }
-        this.activeAbortController = null;
-        this.setState({ streaming: false });
-        await this.select(scope, assistantMessage.conversation_id);
-        await this.refresh(scope);
         resolve({
           conversationId: assistantMessage.conversation_id,
           assistantMessage: { ...assistantMessage, content: storedContent, status },
           usage,
-          error: error && !stopped ? error : undefined,
+          error: completionError,
         });
       };
 
@@ -271,7 +290,11 @@ export class ConversationEngine<TGeneration> {
         .stream(
           { history, generation },
           {
-            onToken: (token) => this.appendToken(assistantMessage.id, token),
+            onToken: (token) => {
+              if (finishing) return;
+              generatedContent += token;
+              this.appendToken(assistantMessage.id, token);
+            },
             onDone: (usage) => void finish(usage),
             onError: (error) => void finish(undefined, error),
           },
@@ -293,10 +316,6 @@ export class ConversationEngine<TGeneration> {
     const update = (messages: Message[]) =>
       messages.map((message) => (message.id === messageId ? { ...message, content: message.content + token } : message));
     this.setState({ messages: update(this.state.messages), branchPath: update(this.state.branchPath) });
-  }
-
-  private findMessage(messageId: string): Message | undefined {
-    return this.state.branchPath.find((message) => message.id === messageId);
   }
 
   private setState(change: Partial<ConversationState>): void {
