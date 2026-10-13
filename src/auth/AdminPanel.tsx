@@ -53,9 +53,15 @@ export function AdminPanel() {
     void perform(async () => {
       const value = Number(credits);
       if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) throw new Error("Лимит должен быть целым числом от 0 до 1 000 000.");
-      const { error } = await supabase!.functions.invoke("glow-invite", { body: { email: email.trim().toLowerCase(), credits: value } });
-      if (error) throw new Error("Приглашение не подтверждено. Проверьте журнал приглашений: серверная функция и SMTP должны быть настроены. Повтор не увеличивает лимит.");
-      setStatus("Приглашение отправлено."); setEmail("");
+      const { data: { session } } = await supabase!.auth.getSession();
+      if (!session) throw new Error("Сессия истекла. Войдите снова.");
+      const response = await fetch("/api/invite", {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: email.trim().toLowerCase(), credits: value }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || "Сервер приглашений не ответил. Попробуйте ещё раз.");
+      setStatus(result?.message || "Приглашение отправлено."); setEmail("");
     });
   };
   const credit = (event: FormEvent) => {
