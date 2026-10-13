@@ -555,6 +555,18 @@ export function ChatPane({
 }
 
 function friendlyError(locale: "en" | "ru", content: string): string {
+  if (/Your request allowance is exhausted/i.test(content)) {
+    return locale === "ru" ? "Лимит запросов Glow исчерпан. Обратитесь к администратору для пополнения."
+      : "Your Glow request allowance is exhausted. Contact the administrator to replenish it.";
+  }
+  if (/Daily beta request limit reached/i.test(content)) {
+    return locale === "ru" ? "Дневной лимит Glow исчерпан. Попробуйте завтра."
+      : "Glow's daily request limit has been reached. Try again tomorrow.";
+  }
+  if (/Too many requests\. Please wait a minute/i.test(content)) {
+    return locale === "ru" ? "Слишком много запросов. Подождите минуту и повторите."
+      : "Too many requests. Wait a minute and try again.";
+  }
   if (/API key missing/i.test(content)) {
     return locale === "ru"
       ? "Добавьте API key в настройках, затем повторите попытку."

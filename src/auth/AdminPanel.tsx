@@ -59,7 +59,7 @@ export function AdminPanel() {
   return <main className="min-h-screen bg-[var(--bg)] px-4 py-24 text-[var(--fg)]">
     <div className="mx-auto max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold">Администрирование Glow</h1>
-      <p className="text-sm text-[var(--fg-muted)]">Кредиты — внутренний тестовый лимит, не баланс провайдера. Автоматическое списание за AI-запросы пока не подключено.</p>
+      <p className="text-sm text-[var(--fg-muted)]">Кредиты — внутренний лимит запросов Glow, не баланс провайдера. Сервер списывает один кредит за допущенный запрос.</p>
       {status && <p role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm">{status}</p>}
       <form onSubmit={invite} className="space-y-3 rounded-xl border border-[var(--border)] p-4">
         <p className="text-sm text-[var(--fg-muted)]">В бете 1 кредит = 1 запрос, не 1 токен. Прерванные запросы также расходуют кредит.</p>
