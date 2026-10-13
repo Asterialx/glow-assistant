@@ -291,6 +291,7 @@ export async function streamChatCompletion(
     let buffer = "";
     let output = "";
     let inputTokens = estimateTokens(messages.map((m) => m.content).join("\n"));
+    let providerOutputTokens: number | undefined;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -316,6 +317,7 @@ export async function streamChatCompletion(
           }
           if (json.usage) {
             inputTokens = json.usage.prompt_tokens ?? inputTokens;
+            if (Number.isSafeInteger(json.usage.completion_tokens) && json.usage.completion_tokens >= 0) providerOutputTokens = json.usage.completion_tokens;
           }
         } catch {
           // ignore partial JSON
@@ -330,7 +332,10 @@ export async function streamChatCompletion(
         const json = JSON.parse(lastLine.slice(5).trim());
         const token = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.text ?? "";
         if (token) { output += token; callbacks.onToken(token); }
-        if (json.usage) inputTokens = json.usage.prompt_tokens ?? inputTokens;
+        if (json.usage) {
+          inputTokens = json.usage.prompt_tokens ?? inputTokens;
+          if (Number.isSafeInteger(json.usage.completion_tokens) && json.usage.completion_tokens >= 0) providerOutputTokens = json.usage.completion_tokens;
+        }
       } catch {
         // An incomplete trailing event is not a usable response.
       }
@@ -339,7 +344,7 @@ export async function streamChatCompletion(
       throw new Error("Модель вернула пустой ответ. Повторите запрос вручную; автоматический повтор отключён.");
     }
 
-    const outputTokens = estimateTokens(output);
+    const outputTokens = providerOutputTokens ?? estimateTokens(output);
     const mult = model?.costMultiplier ?? 1;
     callbacks.onDone({
       inputTokens,

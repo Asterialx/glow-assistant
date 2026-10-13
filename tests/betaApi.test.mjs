@@ -69,7 +69,7 @@ test('chat rejects missing quota configuration or exhausted allowance before pro
     if(path.includes('/auth/v1/user')) return Response.json({id:'00000000-0000-0000-0000-000000000001',email_confirmed_at:'2026-10-11'});
     if(path.includes('/rest/v1/glow_access')) return Response.json({active:true});
     if(path.includes('/rpc/glow_acquire_generation')) return Response.json(true);
-    if(path.includes('/rpc/glow_admit_ai_request')) return Response.json('credits');
+    if(path.includes('/rpc/glow_reserve_tokens')) return Response.json('credits');
     if(path.includes('/rpc/glow_release_generation')) { released++; return new Response(null,{status:204}); }
     providerCalls++; throw new Error('Unexpected provider request');
   };

@@ -39,12 +39,16 @@ import { listMcp } from "../../lib/tauri";
 import { cn } from "../../lib/utils";
 import { BillingDashboard } from "../panels/BillingDashboard";
 import { ExtensionsPanel } from "./ExtensionsPanel";
+import { useAccount } from "../../auth/AccountContext";
+import { AdminPanel } from "../../auth/AdminPanel";
+import { TokenLimitsPanel } from "./TokenLimitsPanel";
 
 type TabId =
   | "general"
   | "account"
   | "privacy"
   | "billing"
+  | "admin"
   | "capabilities"
   | "reflect"
   | "focus"
@@ -175,6 +179,7 @@ function saveFlag(key: string, v: boolean) {
 }
 
 export function SettingsModal() {
+  const account = useAccount();
   const open = useUiStore((s) => s.settingsOpen);
   const setOpen = useUiStore((s) => s.setSettingsOpen);
   const tab = useUiStore((s) => s.settingsTab) as TabId;
@@ -241,7 +246,8 @@ export function SettingsModal() {
           { id: "general", label: "General", icon: Gear },
           { id: "account", label: "Account", icon: User },
           { id: "privacy", label: "Privacy", icon: Shield },
-          { id: "billing", label: "Billing", icon: CreditCard },
+          { id: "billing", label: account ? "Лимиты" : "Billing", icon: CreditCard },
+          ...(account?.access.role === "admin" ? [{ id: "admin" as const, label: "Администрирование", icon: Shield }] : []),
           { id: "capabilities", label: "Capabilities", icon: Briefcase },
           { id: "reflect", label: "Reflect", icon: Lightbulb },
           { id: "focus", label: "Time and focus", icon: Moon },
@@ -268,7 +274,7 @@ export function SettingsModal() {
         ],
       },
     ],
-    [],
+    [account?.access.role],
   );
 
   useEffect(() => {
@@ -752,10 +758,11 @@ export function SettingsModal() {
 
             {tab === "billing" && (
               <div>
-                <h2 className="mb-4 text-[18px] font-semibold">Billing</h2>
-                <BillingDashboard />
+                {account ? <TokenLimitsPanel /> : <><h2 className="mb-4 text-[18px] font-semibold">Billing</h2><BillingDashboard /></>}
               </div>
             )}
+            {tab === "admin" && account?.access.role === "admin" && <AdminPanel />}
+            {tab === "account" && account && <button disabled={account.busy} onClick={() => void account.signOut()} className="mt-6 rounded-xl border border-[var(--border)] px-4 py-2 text-sm">Выйти из аккаунта</button>}
 
             {/* CAPABILITIES */}
             {tab === "capabilities" && (

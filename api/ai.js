@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'node:crypto';
 import { admitRequest, waitForDrain } from './admission.js';
+import { createUsageCollector, reservationFor } from './tokenUsage.js';
 
 export function resolveAiPath(req) {
   const pathname = new URL(req.url || '/', 'http://localhost').pathname;
@@ -48,25 +49,30 @@ export default async function handler(req, res) {
   const leaseToken = randomUUID();
   let leased = false;
   let admitted = false;
+  let rejectedByProvider = false;
+  const usageCollector = createUsageCollector();
+  const maxOutput = Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192));
   try {
     const lease = await client.rpc('glow_acquire_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
     if (lease.error) return fail(403, 'Conversation access denied');
     if (!lease.data) return fail(409, 'An answer is already being generated on another device');
     leased = true;
-    const rejection = await admitRequest(budgetClient, user.id, leaseToken);
+    const rejection = await admitRequest(budgetClient, user.id, leaseToken, reservationFor(body.messages,maxOutput),body.model);
     if (rejection) return fail(rejection.status, rejection.message);
     admitted = true;
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', signal: abort.signal,
       headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: body.model, messages: body.messages, stream: true,
-        max_tokens: Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192)),
+        max_tokens: maxOutput,
         temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
     });
-    if (!upstream.ok || !upstream.body) return fail(502, 'Provider unavailable. Try again later.');
+    if (!upstream.ok) { rejectedByProvider = true; return fail(502, 'Provider unavailable. Try again later.'); }
+    if (!upstream.body) return fail(502, 'Provider unavailable. Try again later.');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     for await (const chunk of upstream.body) {
+      usageCollector.push(chunk);
       if (res.destroyed) break;
       if (!res.write(chunk)) await waitForDrain(res);
     }
@@ -76,7 +82,11 @@ export default async function handler(req, res) {
     else res.end();
   } finally {
     clearTimeout(timer);
-    if (admitted) await budgetClient.rpc('glow_finish_ai_request', { p_request: leaseToken });
+    if (admitted) {
+      const usage = usageCollector.finish();
+      await budgetClient.rpc('glow_settle_tokens', { p_request:leaseToken, p_input:usage?.input ?? null,
+        p_output:usage?.output ?? null, p_total:usage?.total ?? null, p_failed:rejectedByProvider });
+    }
     if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
   }
 }

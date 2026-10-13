@@ -1,12 +1,12 @@
 /** Budget admission is server-only; browser credentials cannot spend/refund credits. */
-export async function admitRequest(client, userId, requestId) {
-  const { data, error } = await client.rpc('glow_admit_ai_request', {
-    p_user: userId, p_request: requestId,
+export async function admitRequest(client, userId, requestId, reservation, model) {
+  const { data, error } = await client.rpc('glow_reserve_tokens', {
+    p_user: userId, p_request: requestId, p_reserve: reservation, p_model: model,
   });
   if (error) return { status: 503, message: 'Request limits unavailable. Try again later.' };
   const failures = {
     inactive: [403, 'Access denied'],
-    credits: [429, 'Your request allowance is exhausted'],
+    credits: [429, 'Insufficient token allowance for this request'],
     rate: [429, 'Too many requests. Please wait a minute'],
     concurrent: [409, 'An answer is already being generated on another device'],
     budget: [429, 'Daily beta request limit reached. Try again tomorrow'],

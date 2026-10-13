@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode, type FormEvent } from "react";
 import { betaAuthEnabled, loadAccount, supabase, type Access, type Profile } from "./client";
 import { validateProfile } from "./profile";
-import { AdminPanel } from "./AdminPanel";
+import { AccountContext } from "./AccountContext";
 import { accountStorage, setStorageOwner } from "./accountStorage";
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -14,7 +14,6 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
-  const [admin, setAdmin] = useState(false);
   const [notice, setNotice] = useState("");
   const [resendAt, setResendAt] = useState(0);
   const [now, setNow] = useState(Date.now());
@@ -105,14 +104,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
   };
 
   if (loading) return <div className="grid min-h-screen place-items-center bg-[var(--bg)] text-[var(--fg-muted)]" role="status">Проверяем доступ…</div>;
-  if (account?.profile.onboarding_completed) return <div className="flex h-full min-h-0 flex-col">
-    <div className="z-[100] m-2 flex shrink-0 self-end gap-1 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1 text-xs md:fixed md:right-4 md:top-12 md:m-0 md:gap-2">
-      {account.access.role === "admin" && <button className="rounded-lg px-3 py-2 hover:bg-[var(--bg-hover)]" onClick={() => setAdmin(!admin)}>{admin ? "В чат" : "Администрирование"}</button>}
-      <button className="rounded-lg px-3 py-2 hover:bg-[var(--bg-hover)]" disabled={busy} onClick={() => void signOut()}>Выйти</button>
-    </div>
+  if (account?.profile.onboarding_completed) return <AccountContext.Provider value={{ access: account.access, signOut, busy }}><div className="flex h-full min-h-0 flex-col">
     {error && <p role="alert" className="fixed right-4 top-24 z-[101] bg-[var(--bg-elevated)] p-3">{error}</p>}
-    <div className="min-h-0 flex-1">{admin ? <AdminPanel /> : children}</div>
-  </div>;
+    <div className="min-h-0 flex-1">{children}</div>
+  </div></AccountContext.Provider>;
   return <main className="grid min-h-screen place-items-center bg-[var(--bg)] px-4 text-[var(--fg)]">
     <form onSubmit={submit} className="w-full max-w-sm space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-6">
       <div className="flex items-center justify-center gap-3 pb-3"><img src="/glow-mark.png" alt="" className="h-8 w-8 object-contain" /><span className="text-2xl font-semibold">Glow</span></div>

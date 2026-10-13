@@ -555,6 +555,10 @@ export function ChatPane({
 }
 
 function friendlyError(locale: "en" | "ru", content: string): string {
+  if (/Insufficient token allowance/i.test(content)) {
+    return locale === "ru" ? "Недостаточно доступных токенов для этого запроса. Учтены история чата и резерв ответа. Проверьте лимит в настройках."
+      : "Not enough available tokens for this request, including chat history and response reserve. Check your allowance in Settings.";
+  }
   if (/Your request allowance is exhausted/i.test(content)) {
     return locale === "ru" ? "Лимит запросов Glow исчерпан. Обратитесь к администратору для пополнения."
       : "Your Glow request allowance is exhausted. Contact the administrator to replenish it.";
