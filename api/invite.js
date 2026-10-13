@@ -40,7 +40,7 @@ export default async function handler(req, res) {
         const { data, error } = await admin.auth.admin.getUserById(invitation.claimed_by);
         if (error || !data?.user || data.user.email?.toLowerCase() !== email) return respond(409, 'account', 'Не удалось проверить аккаунт приглашённого пользователя.');
         if (data.user.email_confirmed_at) {
-          ({ error: sendError } = await admin.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectTo } }));
+          ({ error: sendError } = await admin.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: redirectTo, data: { glow_invitation: true } } }));
         } else ({ error: sendError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo }));
       } else {
         ({ error: sendError } = await admin.auth.admin.inviteUserByEmail(email, { redirectTo }));

@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, LoaderCircle, RefreshCw } from "lucide-react";
 import { loadModelCatalog } from "../../lib/models";
 import { cn } from "../../lib/utils";
-import { betaAuthEnabled } from "../../auth/client";
 import { useChatStore } from "../../stores/chatStore";
 
 export function ModelSelector() {
@@ -60,11 +59,6 @@ export function ModelSelector() {
           aria-label="Доступные модели"
           className="absolute bottom-full left-0 z-50 mb-2 max-h-[min(60vh,480px)] w-[min(280px,calc(100vw-48px))] overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-1 shadow-2xl"
         >
-          <div className="px-3 py-2 text-[11px] text-[var(--fg-faint)]">
-            {betaAuthEnabled || import.meta.env.VITE_SMARTAPI_BASE_URL?.includes("openrouter.ai")
-              ? "OpenRouter"
-              : "Бесплатные модели xKiro"}
-          </div>
           {loading && (
             <div className="flex items-center gap-2 px-3 py-3 text-[12px] text-[var(--fg-muted)]">
               <LoaderCircle size={14} className="animate-spin" /> Загружаю список моделей…
@@ -100,7 +94,7 @@ export function ModelSelector() {
                     {model.displayName}
                   </span>
                   <span className="mt-0.5 block truncate text-[11px] text-[var(--fg-faint)]">
-                    {model.id}
+                    {model.id.includes("glm") ? "Быстрые ответы и повседневные задачи" : model.id.includes("haiku") ? "Тексты, объяснения и работа с файлами" : "Универсальный помощник"}
                   </span>
                 </span>
                 {active && <Check size={15} className="shrink-0 text-[var(--accent)]" />}

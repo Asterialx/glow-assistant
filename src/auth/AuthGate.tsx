@@ -63,7 +63,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
   if (!betaAuthEnabled) return children;
   const sendCode = async () => {
     if (!supabase) return;
-    const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false } });
+    const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { shouldCreateUser: false, data: { glow_invitation: false } } });
     if (error) throw new Error("Не удалось отправить код. Проверьте приглашение и попробуйте позже.");
     setSent(true); setToken(""); setNow(Date.now()); setResendAt(Date.now() + 60000);
     setNotice("Письмо отправлено. Если его нет во входящих, проверьте папку «Спам».");
