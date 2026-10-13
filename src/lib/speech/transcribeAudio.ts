@@ -42,6 +42,56 @@ export function resolveSttLang(localeHint?: string): "ru" | "en" {
   return ui.startsWith("ru") ? "ru" : "en";
 }
 
+/** Remove clear ASR echoes such as "hello hello" or "приветпривет". */
+export function cleanSpeechTranscript(input: string): string {
+  const collapseWord = (word: string) => {
+    const match = word.match(/^(.*?)([\p{L}\p{N}]+)([^\p{L}\p{N}]*)$/u);
+    if (!match) return word;
+    const [, prefix, core, suffix] = match;
+    for (let size = 4; size <= Math.min(24, Math.floor(core.length / 2)); size++) {
+      const unit = core.slice(0, size);
+      let count = 1;
+      while (core.slice(size * count, size * (count + 1)) === unit) count++;
+      if (count < 2) continue;
+      const tail = core.slice(size * count);
+      if (!tail || (tail.length >= size - 1 && tail.length <= size + 1 && (editDistanceAtMostOne(tail, unit) || oneTranspositionAway(tail, unit)))) {
+        return `${prefix}${unit}${suffix}`;
+      }
+      return `${prefix}${unit.repeat(count)}${tail}${suffix}`;
+    }
+    return word;
+  };
+  const words = input.split(/\s+/).filter(Boolean).map(collapseWord);
+  const result: string[] = [];
+  const key = (value: string) => value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  for (const word of words) {
+    if (result.length && key(result[result.length - 1]!) && key(result[result.length - 1]!) === key(word)) continue;
+    result.push(word);
+  }
+  return result.join(" ").trim();
+}
+
+function editDistanceAtMostOne(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return edits + (i < a.length || j < b.length ? 1 : 0) <= 1;
+}
+
+function oneTranspositionAway(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  const mismatches: number[] = [];
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) mismatches.push(i);
+  return mismatches.length === 2 && mismatches[1] === mismatches[0]! + 1 &&
+    a[mismatches[0]!] === b[mismatches[1]!] && a[mismatches[1]!] === b[mismatches[0]!];
+}
+
 export function isWebSpeechAvailable(): boolean {
   const w = window as unknown as {
     SpeechRecognition?: new () => SpeechRec;
@@ -359,7 +409,7 @@ export async function transcribeAudioBlob(
           : "Empty transcript. Speak clearly for 2–3 seconds.",
       );
     }
-    return text;
+    return cleanSpeechTranscript(text);
   } catch (e) {
     console.error("Local Whisper failed", e);
     const detail = e instanceof Error ? e.message : String(e);
@@ -433,7 +483,7 @@ export function startLiveSpeech(
     sessionFinals = finals;
     interim = interimParts.join(" ");
     finalText = joinRecognitionText(committedText, sessionFinals.join(" "));
-    onUpdate?.(finalText.trim(), interim.trim());
+    onUpdate?.(cleanSpeechTranscript(finalText), cleanSpeechTranscript(interim));
   };
 
   rec.onerror = (ev) => {
@@ -449,7 +499,7 @@ export function startLiveSpeech(
       sessionFinals = [];
       interim = "";
       finalText = committedText;
-      onUpdate?.(finalText.trim(), "");
+      onUpdate?.(cleanSpeechTranscript(finalText), "");
       try {
         rec.start();
       } catch {
@@ -457,7 +507,7 @@ export function startLiveSpeech(
       }
       return;
     }
-    endResolve?.(finalText.trim() || interim.trim());
+    endResolve?.(cleanSpeechTranscript(finalText) || cleanSpeechTranscript(interim));
     endResolve = null;
   };
 
@@ -488,11 +538,11 @@ function joinRecognitionText(previous: string, next: string): string {
   }
 
   return {
-    getText: () => finalText.trim() || interim.trim(),
+    getText: () => cleanSpeechTranscript(finalText) || cleanSpeechTranscript(interim),
     stop: () =>
       new Promise((resolve) => {
         if (fatal) {
-          resolve(finalText.trim() || interim.trim());
+          resolve(cleanSpeechTranscript(finalText) || cleanSpeechTranscript(interim));
           return;
         }
         stopped = true;
@@ -500,10 +550,10 @@ function joinRecognitionText(previous: string, next: string): string {
         try {
           rec.stop();
         } catch {
-          resolve(finalText.trim() || interim.trim());
+          resolve(cleanSpeechTranscript(finalText) || cleanSpeechTranscript(interim));
         }
         window.setTimeout(() => {
-          resolve(finalText.trim() || interim.trim());
+          resolve(cleanSpeechTranscript(finalText) || cleanSpeechTranscript(interim));
         }, 1200);
       }),
     abort: () => {
