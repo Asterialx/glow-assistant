@@ -4,7 +4,7 @@ import { supabase } from "./client";
 import { UserUsageDetail, type TokenEntry } from "./UserUsageDetail";
 
 interface Member { user_id: string; email: string; role: string; active: boolean; balance: number; granted: number; used: number }
-interface Invitation { email: string; claimed_by: string | null; expires_at: string }
+interface Invitation { email: string; claimed_by: string | null; expires_at: string; accepted?: boolean }
 
 export function AdminPanel() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -23,13 +23,14 @@ export function AdminPanel() {
 
   const refresh = async () => {
     if (!supabase) throw new Error("Supabase не настроен");
-    const [people, pending, wallets, requests] = await Promise.all([
+    const [people, pending, wallets, requests, profiles] = await Promise.all([
       supabase.rpc("glow_admin_members"),
       supabase.from("glow_invites").select("email,claimed_by,expires_at").order("created_at", { ascending: false }),
       supabase.from("glow_token_wallets").select("user_id,granted,used"),
       supabase.from("glow_token_requests").select("id,user_id,model,input_tokens,output_tokens,total_tokens,cost_usd,status,reserved,created_at,finished_at").order("created_at", { ascending: false }).limit(200),
+      supabase.from("glow_profiles").select("user_id,onboarding_completed"),
     ]);
-    if (people.error || pending.error || wallets.error || requests.error) throw new Error("Не удалось загрузить админку. Проверьте права и настройку базы токенов.");
+    if (people.error || pending.error || wallets.error || requests.error || profiles.error) throw new Error("Не удалось загрузить админку. Проверьте права и настройку базы токенов.");
     const walletByUser = new Map((wallets.data ?? []).map(w => [w.user_id, w]));
     setMembers((people.data ?? []).map((member: Member) => {
       const wallet = walletByUser.get(member.user_id);
@@ -37,7 +38,8 @@ export function AdminPanel() {
       const used = Number(wallet?.used ?? 0);
       return { ...member, granted, used, balance: Math.max(0, granted - used) };
     }));
-    setInvites(pending.data ?? []);
+    const completedProfiles = new Set((profiles.data ?? []).filter(p => p.onboarding_completed).map(p => p.user_id));
+    setInvites((pending.data ?? []).map(i => ({ ...i, accepted: !!i.claimed_by && completedProfiles.has(i.claimed_by) })));
     setUsage((requests.data ?? []) as TokenEntry[]);
   };
   useEffect(() => { void refresh().catch(e => setStatus(e.message)); }, []);
@@ -155,7 +157,7 @@ export function AdminPanel() {
           <div><h2 className="text-lg font-semibold">Приглашения</h2><p className="mt-0.5 text-xs text-[var(--fg-muted)]">Повторная отправка сохраняет лимит. Если аккаунт подтверждён, приходит ссылка входа.</p></div>
           <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]">
             {invites.length === 0 && <p className="p-4 text-sm text-[var(--fg-muted)]">Приглашений пока нет.</p>}
-            {invites.map(i => <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="break-all">{i.email}</span><span className="text-xs text-[var(--fg-muted)]">{i.claimed_by ? "Аккаунт создан" : new Date(i.expires_at).getTime() > Date.now() ? "Ожидает входа" : "Истекло"}</span><button type="button" disabled={busy} onClick={() => resendInvite(i.email)} className={buttonClass} aria-label={`Отправить снова ${i.email}`}>Отправить снова <ArrowUpRight size={15} /></button></div>)}
+            {invites.map(i => <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="break-all">{i.email}</span><span className="text-xs text-[var(--fg-muted)]">{i.accepted ? "Приглашение принято" : i.claimed_by ? "Ожидает принятия" : new Date(i.expires_at).getTime() > Date.now() ? "Ожидает входа" : "Истекло"}</span><button type="button" disabled={busy} onClick={() => resendInvite(i.email)} className={buttonClass} aria-label={`Отправить снова ${i.email}`}>Отправить снова <ArrowUpRight size={15} /></button></div>)}
           </div>
         </section>
       </>}
