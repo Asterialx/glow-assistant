@@ -405,6 +405,8 @@ export function startLiveSpeech(
   if (!rec) return null;
 
   let finalText = "";
+  let committedText = "";
+  let sessionFinals: string[] = [];
   let interim = "";
   let stopped = false;
   let fatal: string | null = null;
@@ -416,17 +418,21 @@ export function startLiveSpeech(
   rec.lang = lang === "ru" ? "ru-RU" : "en-US";
 
   rec.onresult = (ev) => {
-    let f = finalText;
-    let i = "";
-    for (let idx = ev.resultIndex; idx < ev.results.length; idx++) {
+    const finals: string[] = [];
+    const interimParts: string[] = [];
+    // Rebuild from the browser's complete result snapshot. Appending only from
+    // resultIndex can repeat a final segment when Chromium restarts recognition.
+    for (let idx = 0; idx < ev.results.length; idx++) {
       const row = ev.results[idx];
       if (!row) continue;
       const piece = row[0]?.transcript || "";
-      if (row.isFinal) f += piece;
-      else i += piece;
+      if (!piece) continue;
+      if (row.isFinal) finals.push(piece.trim());
+      else interimParts.push(piece.trim());
     }
-    finalText = f;
-    interim = i;
+    sessionFinals = finals;
+    interim = interimParts.join(" ");
+    finalText = joinRecognitionText(committedText, sessionFinals.join(" "));
     onUpdate?.(finalText.trim(), interim.trim());
   };
 
@@ -439,6 +445,11 @@ export function startLiveSpeech(
 
   rec.onend = () => {
     if (!stopped) {
+      committedText = joinRecognitionText(committedText, [...sessionFinals, interim].filter(Boolean).join(" "));
+      sessionFinals = [];
+      interim = "";
+      finalText = committedText;
+      onUpdate?.(finalText.trim(), "");
       try {
         rec.start();
       } catch {
@@ -449,6 +460,25 @@ export function startLiveSpeech(
     endResolve?.(finalText.trim() || interim.trim());
     endResolve = null;
   };
+
+/** Join browser recognition sessions without repeating an echoed overlap. */
+function joinRecognitionText(previous: string, next: string): string {
+  const left = previous.trim();
+  const right = next.trim();
+  if (!left) return right;
+  if (!right) return left;
+  const clean = (word: string) => word.toLocaleLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
+  const a = left.split(/\s+/);
+  const b = right.split(/\s+/);
+  if (right.toLocaleLowerCase() === left.toLocaleLowerCase()) return left;
+  let overlap = 0;
+  const max = Math.min(a.length, b.length, 12);
+  for (let count = max; count > 0; count--) {
+    const same = a.slice(-count).every((word, i) => clean(word) === clean(b[i] ?? ""));
+    if (same) { overlap = count; break; }
+  }
+  return [left, b.slice(overlap).join(" ")].filter(Boolean).join(" ");
+}
 
   try {
     rec.start();

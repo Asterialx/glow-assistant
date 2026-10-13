@@ -310,22 +310,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
         },
         (code) => {
           console.warn("Web Speech fatal", code);
-          if (recordingRef.current && !recorderRef.current) {
-            liveRef.current?.abort();
-            liveRef.current = null;
-            void startVoiceRecorder(deviceId || undefined, (n) => pushLevel(n))
-              .then((rec) => {
-                recorderRef.current = rec;
-                setEngine("whisper");
-                prefetchSpeechModel();
-                setLiveHint(
-                  locale === "ru"
-                    ? "Web Speech недоступен → Whisper…"
-                    : "Web Speech unavailable → Whisper…",
-                );
-              })
-              .catch(console.error);
-          }
+          if (recordingRef.current && recorderRef.current) setEngine("whisper");
         },
       );
       if (live) {
@@ -334,6 +319,13 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
         startFakeMeter();
         started = true;
         setLiveHint(locale === "ru" ? "Слушаю… говорите" : "Listening… speak");
+        // Keep the whole take: Chromium's live transcript can skip words.
+        try {
+          recorderRef.current = await startVoiceRecorder(deviceId || undefined, (n) => pushLevel(n));
+          prefetchSpeechModel();
+        } catch (error) {
+          console.warn("Voice backup recording unavailable", error);
+        }
       }
       if (!started) {
         const rec = await startVoiceRecorder(deviceId || undefined, (n) => pushLevel(n));
@@ -411,24 +403,19 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
         setBusyLabel(locale === "ru" ? "Собираю текст…" : "Finalizing…");
         text = await live.stop();
       }
-      if (!text && rec) {
+      if (rec) {
         const blob = await rec.stop();
-        text = await transcribeAudioBlob(blob, lang, (phase) => {
-          if (phase === "loading-model") {
-            setBusyLabel(
-              locale === "ru"
-                ? "Загружаю Whisper (первый раз)…"
-                : "Loading Whisper…",
-            );
-          } else {
-            setBusyLabel(locale === "ru" ? "Распознаю…" : "Transcribing…");
-          }
-        });
-      } else if (rec) {
         try {
-          rec.abort();
-        } catch {
-          /* ignore */
+          text = await transcribeAudioBlob(blob, lang, (phase) => {
+            if (phase === "loading-model") {
+              setBusyLabel(locale === "ru" ? "Загружаю Whisper (первый раз)…" : "Loading Whisper…");
+            } else {
+              setBusyLabel(locale === "ru" ? "Распознаю всю запись…" : "Transcribing full recording…");
+            }
+          });
+        } catch (error) {
+          if (!text) throw error;
+          console.warn("Whisper failed; using live speech transcript", error);
         }
       }
 
