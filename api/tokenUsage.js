@@ -10,8 +10,13 @@ export function createUsageCollector() {
       const u = record.usage;
       if (u && [u.prompt_tokens,u.completion_tokens,u.total_tokens].every(n => Number.isSafeInteger(n) && n >= 0)
           && u.total_tokens === u.prompt_tokens + u.completion_tokens) {
+        const details = u.prompt_tokens_details || u.input_tokens_details || {};
+        const cacheRead = details.cached_tokens ?? details.cache_read_tokens ?? u.cache_read_input_tokens;
+        const cacheWrite = details.cache_write_tokens ?? u.cache_creation_input_tokens;
         usage = { input:u.prompt_tokens, output:u.completion_tokens, total:u.total_tokens,
-          costUsd: typeof u.cost === 'number' && Number.isFinite(u.cost) && u.cost >= 0 ? u.cost : null };
+          costUsd: typeof u.cost === 'number' && Number.isFinite(u.cost) && u.cost >= 0 ? u.cost : null,
+          cacheReadTokens: Number.isSafeInteger(cacheRead) && cacheRead >= 0 ? cacheRead : null,
+          cacheWriteTokens: Number.isSafeInteger(cacheWrite) && cacheWrite >= 0 ? cacheWrite : null };
       }
     } catch { /* DONE and malformed events are not usage. */ }
   };

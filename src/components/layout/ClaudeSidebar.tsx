@@ -22,6 +22,8 @@ import { cn } from "../../lib/utils";
 import type { Conversation } from "../../lib/types";
 import { createProject } from "../../db";
 import { conversationService } from "../../conversation/conversationService";
+import { useAccount } from "../../auth/AccountContext";
+import { betaAuthEnabled, supabase } from "../../auth/client";
 
 interface Props {
   onNewChat: () => void;
@@ -39,6 +41,7 @@ export function ClaudeSidebar({
   const mode = useModeStore((s) => s.mode);
   const locale = useUiStore((s) => s.locale);
   const userName = useUiStore((s) => s.userName);
+  const account = useAccount();
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const setSettingsTab = useUiStore((s) => s.setSettingsTab);
   const conversations = useChatStore((s) => s.conversations);
@@ -52,6 +55,7 @@ export function ClaudeSidebar({
   const [q, setQ] = useState("");
   const [ctxId, setCtxId] = useState<string | null>(null);
   const [projectSubOpen, setProjectSubOpen] = useState(false);
+  const [tokenSummary, setTokenSummary] = useState<{ granted: number; used: number; reserved: number; remaining: number } | null>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(
@@ -65,6 +69,24 @@ export function ClaudeSidebar({
   );
 
   const ctxConv = conversations.find((c) => c.id === ctxId) || null;
+  const usedPercent = tokenSummary && tokenSummary.granted > 0
+    ? Math.min(100, tokenSummary.used / tokenSummary.granted * 100)
+    : null;
+  const remainingPercent = tokenSummary && tokenSummary.granted > 0
+    ? Math.max(0, Math.min(100, tokenSummary.remaining / tokenSummary.granted * 100))
+    : null;
+
+  useEffect(() => {
+    if (!betaAuthEnabled || !account || !supabase) { setTokenSummary(null); return; }
+    let alive = true;
+    const refresh = async () => {
+      const { data, error } = await supabase!.rpc("glow_token_summary");
+      if (alive && !error && data) setTokenSummary(data as typeof tokenSummary);
+    };
+    void refresh();
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh(); }, 15000);
+    return () => { alive = false; window.clearInterval(timer); };
+  }, [account, menuOpen]);
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -422,7 +444,19 @@ export function ClaudeSidebar({
                   setMenuOpen(false);
                 }}
               >
-                {t(locale, item.key as "settings")}
+                {item.key === "billing" && betaAuthEnabled && account ? (
+                  <span className="flex w-full items-center gap-3 text-[var(--fg)]">
+                    <span className="min-w-0 flex-1">{t(locale, "billing")}</span>
+                    <span className="flex w-[92px] shrink-0 items-center gap-2">
+                      <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[var(--bg)]">
+                        <span className="block h-full rounded-full bg-[var(--accent)]" style={{ width: `${usedPercent ?? 0}%` }} />
+                      </span>
+                      <span className="w-8 text-right text-[11px] tabular-nums text-[var(--fg-muted)]">
+                        {remainingPercent === null ? "—" : `${remainingPercent.toLocaleString(locale === "ru" ? "ru-RU" : "en-US", { maximumFractionDigits: 0 })}%`}
+                      </span>
+                    </span>
+                  </span>
+                ) : t(locale, item.key as "settings")}
               </button>
             ))}
             <div className="border-t border-[var(--border)] px-3.5 py-2.5 text-[13px] text-[var(--fg-faint)]">

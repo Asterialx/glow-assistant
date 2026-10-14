@@ -5,6 +5,7 @@ import { createUsageCollector, reservationFor } from './tokenUsage.js';
 import { webSearchOptions } from './webSearch.js';
 import { researchPolicy } from './researchPolicy.js';
 import { validMessages } from './messageValidation.js';
+import { withPromptCache } from './promptCache.js';
 
 export function resolveAiPath(req) {
   const pathname = new URL(req.url || '/', 'http://localhost').pathname;
@@ -64,15 +65,18 @@ export default async function handler(req, res) {
     const rejection = await admitRequest(budgetClient, user.id, leaseToken, reservationFor(body.messages,maxOutput) + searchContextReserve,body.model);
     if (rejection) return fail(rejection.status, rejection.message);
     admitted = true;
+    const cacheHaiku = body.model === 'anthropic/claude-haiku-5.5';
+    const providerMessages = body.web_search === true ? [
+      // The client adds this policy for direct development calls; avoid paying
+      // for the same long instructions twice on authenticated cloud requests.
+      ...(body.messages.some(message => message.role === 'system' && typeof message.content === 'string' && message.content.includes('Current research timestamp:')) ? [] : [{ role:'system', content:researchPolicy() }]),
+      ...body.messages,
+    ] : body.messages;
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', signal: abort.signal,
       headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: body.model, messages: body.web_search === true ? [
-        // The client adds this policy for direct development calls; avoid paying
-        // for the same long instructions twice on authenticated cloud requests.
-        ...(body.messages.some(message => message.role === 'system' && typeof message.content === 'string' && message.content.includes('Current research timestamp:')) ? [] : [{ role:'system', content:researchPolicy() }]),
-        ...body.messages,
-      ] : body.messages, stream: true,
+      body: JSON.stringify({ model: body.model, messages: cacheHaiku ? withPromptCache(providerMessages) : providerMessages, stream: true,
+        ...(cacheHaiku ? { session_id: body.conversation_id, stream_options: { include_usage: true } } : {}),
         ...webSearchOptions(body.web_search),
         max_tokens: maxOutput,
         temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
@@ -96,7 +100,8 @@ export default async function handler(req, res) {
       const usage = usageCollector.finish();
       await budgetClient.rpc('glow_settle_token_usage', { p_request:leaseToken, p_input:usage?.input ?? null,
         p_output:usage?.output ?? null, p_total:usage?.total ?? null, p_failed:rejectedByProvider,
-        p_cost:usage?.costUsd ?? null });
+        p_cost:usage?.costUsd ?? null, p_cache_read:usage?.cacheReadTokens ?? null,
+        p_cache_write:usage?.cacheWriteTokens ?? null });
     }
     if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
   }

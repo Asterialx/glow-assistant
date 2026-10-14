@@ -11,6 +11,8 @@ export interface TokenEntry {
   output_tokens: number | null;
   total_tokens: number | null;
   cost_usd: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
   status: string;
   reserved: number;
   created_at: string;
@@ -59,7 +61,7 @@ export function UserUsageDetail({ member, onAccessChange, busy }: Props) {
     setLoading(true); setError("");
     const since = new Date(); since.setDate(since.getDate() - 30);
     const [result, reserves] = await Promise.all([supabase.from("glow_token_requests")
-      .select("id,user_id,model,input_tokens,output_tokens,total_tokens,cost_usd,status,reserved,created_at,finished_at")
+      .select("id,user_id,model,input_tokens,output_tokens,total_tokens,cost_usd,cache_read_tokens,cache_write_tokens,status,reserved,created_at,finished_at")
       .eq("user_id", member.user_id).gte("created_at", since.toISOString()).order("created_at", { ascending: false }).limit(1001),
       supabase.from("glow_token_requests").select("reserved").eq("user_id", member.user_id).in("status", ["reserved", "pending"])]);
     if (result.error || reserves.error) { setError("Не удалось загрузить активность пользователя."); setEntries([]); }
@@ -151,7 +153,7 @@ export function UserUsageDetail({ member, onAccessChange, busy }: Props) {
         <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]">
           {dashboard.selected.length === 0 ? <p className="p-5 text-sm text-[var(--fg-muted)]">За выбранный период запросов нет.</p> : dashboard.selected.slice(0, 30).map((entry, index) => <div key={entry.id} className={`grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 p-3.5 sm:grid-cols-[minmax(0,1fr)_auto_auto_auto] sm:items-center sm:gap-4 ${index ? "border-t border-[var(--border)]" : ""}`}>
             <div className="min-w-0"><p className="truncate text-xs font-medium">{entry.model}</p><p className="mt-1 flex items-center gap-1 text-[10px] text-[var(--fg-muted)]"><CalendarClock size={11} /><time dateTime={entry.created_at}>{new Date(entry.created_at).toLocaleString("ru-RU", { dateStyle: "medium", timeStyle: "short" })}</time></p></div>
-            <div className="text-right text-[11px] tabular-nums"><p>{entry.status === "settled" ? `${number(Number(entry.total_tokens ?? 0))} ток.` : entry.status === "failed" ? "Ошибка" : `${number(Number(entry.reserved))} резерв`}</p><p className="mt-1 text-[10px] text-[var(--fg-muted)]">{entry.status === "settled" ? "вход + ответ" : entry.status === "failed" ? "без списания" : "ожидает usage"}</p></div>
+            <div className="text-right text-[11px] tabular-nums"><p>{entry.status === "settled" ? `${number(Number(entry.total_tokens ?? 0))} ток.` : entry.status === "failed" ? "Ошибка" : `${number(Number(entry.reserved))} резерв`}</p><p className="mt-1 text-[10px] text-[var(--fg-muted)]">{entry.status === "settled" ? "вход + ответ" : entry.status === "failed" ? "без списания" : "ожидает usage"}</p>{(entry.cache_read_tokens != null || entry.cache_write_tokens != null) && <p className="mt-1 text-[10px] text-[var(--fg-muted)]">Кэш: −{number(Number(entry.cache_read_tokens ?? 0))} / +{number(Number(entry.cache_write_tokens ?? 0))}</p>}</div>
             <p className="col-start-2 row-start-2 text-right text-[11px] tabular-nums sm:col-auto sm:row-auto">{entry.status === "settled" ? entry.cost_usd == null ? "Цена неизвестна" : money(Number(entry.cost_usd)) : "—"}</p>
             <p className="col-start-1 row-start-2 flex items-center gap-1 text-[10px] text-[var(--fg-muted)] sm:col-auto sm:row-auto sm:justify-end"><Clock3 size={11} />{entry.finished_at ? new Date(entry.finished_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }) : "В процессе"}</p>
           </div>)}
