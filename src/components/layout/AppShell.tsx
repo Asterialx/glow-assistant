@@ -50,6 +50,9 @@ import { extractGeneratedFiles, generatedFileFromArtifact, stripGeneratedFileFen
 
 export function AppShell() {
   const locale = useUiStore((s) => s.locale);
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
   const mode = useModeStore((s) => s.mode);
   const gameModeActive = useModeStore((s) => s.gameModeActive);
   const setGameModeActive = useModeStore((s) => s.setGameModeActive);
