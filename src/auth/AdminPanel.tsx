@@ -110,7 +110,7 @@ export function AdminPanel() {
   const filteredMembers = members.filter(member => member.email.toLowerCase().includes(search.trim().toLowerCase()));
   const initials = (value: string) => value.split("@")[0].split(/[._-]/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join("") || "U";
 
-  return <section className="-mr-4 text-[var(--fg)]">
+  return <section className="min-w-0 text-[var(--fg)]">
     <div className="mx-auto max-w-5xl space-y-6">
       {selected ? <>
         <button type="button" onClick={() => setSelectedId(null)} className={`${buttonClass} -ml-2 border-transparent`}><ArrowLeft size={16} /> Все пользователи</button>
@@ -153,16 +153,16 @@ export function AdminPanel() {
           <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]">
             {filteredMembers.length === 0 ? <p className="p-6 text-center text-sm text-[var(--fg-muted)]">{members.length ? "Совпадений не найдено." : "Пользователей пока нет."}</p> : filteredMembers.map((member, index) => {
               const percent = member.granted > 0 ? Math.min(100, member.used / member.granted * 100) : 0;
-              return <div key={member.user_id} className={`flex flex-wrap items-center gap-3 p-3.5 sm:p-4 ${index ? "border-t border-[var(--border)]" : ""}`}>
-                <div className="grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent)]/10 text-sm font-semibold text-[var(--accent)]">{initials(member.email)}</div>
-                <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{member.email}</p><p className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">{member.role === "admin" ? <Shield size={12} /> : <UserRound size={12} />}{member.role === "admin" ? "Администратор" : "Участник"}<span>·</span><span className={member.active ? "text-emerald-500" : "text-rose-400"}>{member.active ? "Активен" : "Доступ закрыт"}</span></p></div>
-                <div className="w-36 shrink-0 sm:w-48"><div className="flex justify-between text-[11px]"><span className="text-[var(--fg-muted)]">Лимит</span><span className="tabular-nums">{member.granted ? `${percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%` : "Не назначен"}</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div></div>
-                <button type="button" onClick={() => { setSelectedId(member.user_id); setStatus(""); }} className={`${buttonClass} ml-auto`} aria-label={`Открыть профиль ${member.email}`}><span className="hidden sm:inline">Открыть</span><ArrowUpRight size={15} /></button>
+              return <div key={member.user_id} className={`grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2 p-3.5 sm:flex sm:flex-wrap sm:gap-3 sm:p-4 ${index ? "border-t border-[var(--border)]" : ""}`}>
+                <div className="row-span-2 grid size-10 shrink-0 place-items-center rounded-full bg-[var(--accent)]/10 text-sm font-semibold text-[var(--accent)] sm:row-span-1">{initials(member.email)}</div>
+                <div className="col-start-2 min-w-0 sm:flex-1"><p className="truncate text-sm font-medium">{member.email}</p><p className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-[var(--fg-muted)]">{member.role === "admin" ? <Shield size={12} className="shrink-0" /> : <UserRound size={12} className="shrink-0" />}<span className="truncate">{member.role === "admin" ? "Администратор" : "Участник"}</span><span>·</span><span className={`whitespace-nowrap ${member.active ? "text-emerald-500" : "text-rose-400"}`}>{member.active ? "Активен" : "Доступ закрыт"}</span></p></div>
+                <div className="col-start-2 w-full min-w-0 sm:col-auto sm:w-48 sm:shrink-0"><div className="flex justify-between text-[11px]"><span className="text-[var(--fg-muted)]">Лимит</span><span className="tabular-nums">{member.granted ? `${percent.toLocaleString("ru-RU", { maximumFractionDigits: 1 })}%` : "Не назначен"}</span></div><div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--bg)]"><div className="h-full rounded-full bg-[var(--accent)]" style={{ width: `${percent}%` }} /></div></div>
+                <button type="button" onClick={() => { setSelectedId(member.user_id); setStatus(""); }} className={`${buttonClass} col-start-3 row-start-1 ml-0 sm:ml-auto sm:col-auto sm:row-auto`} aria-label={`Открыть профиль ${member.email}`}><span className="hidden sm:inline">Открыть</span><ArrowUpRight size={15} /></button>
                 {member.role !== "admin" && <button type="button" disabled={busy} onClick={() => void perform(async () => {
                   const { error } = await supabase!.rpc("glow_admin_access", { p_user: member.user_id, p_active: !member.active });
                   if (error) throw new Error("Не удалось изменить доступ.");
                   setStatus(member.active ? "Доступ заблокирован." : "Доступ восстановлен.");
-                })} className={`${buttonClass} px-2.5`} aria-label={member.active ? `Заблокировать ${member.email}` : `Разблокировать ${member.email}`} title={member.active ? "Заблокировать" : "Разблокировать"}>{member.active ? <Ban size={15} /> : <Check size={15} />}</button>}
+                })} className={`${buttonClass} col-start-3 row-start-2 px-2.5 sm:col-auto sm:row-auto`} aria-label={member.active ? `Заблокировать ${member.email}` : `Разблокировать ${member.email}`} title={member.active ? "Заблокировать" : "Разблокировать"}>{member.active ? <Ban size={15} /> : <Check size={15} />}</button>}
               </div>;
             })}
           </div>
