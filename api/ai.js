@@ -41,6 +41,7 @@ export default async function handler(req, res) {
   if (path !== 'chat/completions' || req.method !== 'POST') return fail(405, 'Unsupported request');
   const body = req.body;
   if (body?.web_search !== undefined && typeof body.web_search !== 'boolean') return fail(400, 'Invalid web search option');
+  if (body?.workspace_tools !== undefined && typeof body.workspace_tools !== 'boolean') return fail(400, 'Invalid workspace tools option');
   if (!body || typeof body.conversation_id !== 'string' || !['home','code','med'].includes(body.scope)) return fail(400, 'Conversation required');
   if (!body || !models.some(model => model.id === body.model) || body.stream !== true || !validMessages(body.messages)) return fail(400, 'Invalid conversation or attachments');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -53,12 +54,13 @@ export default async function handler(req, res) {
   let leased = false;
   let admitted = false;
   let rejectedByProvider = false;
+  let streamingResponse = false;
   const usageCollector = createUsageCollector();
   const maxOutput = Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192));
   try {
     const lease = await client.rpc('glow_acquire_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
     if (lease.error) return fail(403, 'Conversation access denied');
-    if (!lease.data) return fail(409, 'An answer is already being generated on another device');
+    if (!lease.data) return fail(409, 'A previous answer is still finishing. Please try again shortly.');
     leased = true;
     // Search adds retrieved context beyond the submitted conversation.
     const searchContextReserve = body.web_search === true ? 80000 : 0;
@@ -78,6 +80,11 @@ export default async function handler(req, res) {
       body: JSON.stringify({ model: body.model, messages: cacheHaiku ? withPromptCache(providerMessages) : providerMessages, stream: true,
         ...(cacheHaiku ? { session_id: body.conversation_id, stream_options: { include_usage: true } } : {}),
         ...webSearchOptions(body.web_search),
+        ...(body.workspace_tools ? { tools: [
+          ...(body.web_search ? webSearchOptions(true).tools : []),
+          { type: 'function', function: { name: 'workspace_list_files', description: 'List supported project files and folders in the selected Glow workspace. Call before choosing files to inspect.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
+          { type: 'function', function: { name: 'workspace_read_file', description: 'Read one supported file from the selected workspace. Use a relative_path returned by workspace_list_files.', parameters: { type: 'object', properties: { relative_path: { type: 'string', maxLength: 500 } }, required: ['relative_path'], additionalProperties: false } } },
+        ] } : {}),
         max_tokens: maxOutput,
         temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
     });
@@ -85,24 +92,32 @@ export default async function handler(req, res) {
     if (!upstream.body) return fail(502, 'Provider unavailable. Try again later.');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    streamingResponse = true;
     for await (const chunk of upstream.body) {
       usageCollector.push(chunk);
       if (res.destroyed) break;
       if (!res.write(chunk)) await waitForDrain(res);
     }
-    res.end();
   } catch {
     if (!res.headersSent) fail(502, 'Generation interrupted. Try again.');
-    else res.end();
   } finally {
     clearTimeout(timer);
-    if (admitted) {
+    try {
+      if (admitted) {
       const usage = usageCollector.finish();
       await budgetClient.rpc('glow_settle_token_usage', { p_request:leaseToken, p_input:usage?.input ?? null,
         p_output:usage?.output ?? null, p_total:usage?.total ?? null, p_failed:rejectedByProvider,
         p_cost:usage?.costUsd ?? null, p_cache_read:usage?.cacheReadTokens ?? null,
         p_cache_write:usage?.cacheWriteTokens ?? null });
+      }
+    } finally {
+      try {
+        if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
+      } finally {
+        // The client starts the next agent turn as soon as the stream closes.
+        // Keep it open until accounting and the conversation lease are released.
+        if (streamingResponse && !res.writableEnded) res.end();
+      }
     }
-    if (leased) await client.rpc('glow_release_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
   }
 }

@@ -8,7 +8,7 @@ export async function admitRequest(client, userId, requestId, reservation, model
     inactive: [403, 'Access denied'],
     credits: [429, 'Insufficient token allowance for this request'],
     rate: [429, 'Too many requests. Please wait a minute'],
-    concurrent: [409, 'An answer is already being generated on another device'],
+    concurrent: [409, 'A previous answer is still finishing. Please try again shortly.'],
     budget: [429, 'Daily beta request limit reached. Try again tomorrow'],
     disabled: [503, 'AI temporarily unavailable'],
   };
