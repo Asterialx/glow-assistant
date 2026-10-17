@@ -39,6 +39,10 @@ test('authenticated search is forwarded, user-injected tools ignored, and actual
       const res = Object.assign(new EventEmitter(), { headers:{}, chunks:[], setHeader(k,v) { this.headers[k]=v; }, status(code) { this.statusCode=code; return this; }, json(data) { this.data=data; }, write(chunk) { this.chunks.push(chunk); return true; }, end() { assert.equal(released, ended + 1, 'release conversation before closing stream'); assert.equal(settlements.length, ended + 1, 'settle usage before next agent turn'); ended++; } });
       const hasClientResearchPolicy = enabled && upstream.length === 0;
       const messages = hasClientResearchPolicy ? [{ role:'system', content:'Current research timestamp: 2026-10-13T00:00:00.000Z UTC.' }, {role:'user',content:'Find current info'}] : [{role:'user',content:'Find current info'}];
+      if (enabled) messages.push(
+        { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'workspace_list_files', arguments: '{}' } }] },
+        { role: 'tool', tool_call_id: 'call_1', content: '{"files":[]}' },
+      );
       await handler({ url:'/api/ai/chat/completions', method:'POST', headers:{authorization:'Bearer test-session'}, body:{ conversation_id:'chat', scope:'home', model:'z-ai/glm-5.3-flash', stream:true, messages, web_search:enabled, workspace_tools:enabled, tools:[{type:'openrouter:shell'}] } }, res);
       assert.equal(res.statusCode, 200);
       assert.match(Buffer.concat(res.chunks).toString(), /Answer/);
