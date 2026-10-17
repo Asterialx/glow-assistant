@@ -15,6 +15,7 @@ test('backend accepts bounded image inputs and refuses remote URLs and active fo
   assert.equal(validMessages([{role:'user',content:parts}]),true);
   assert.equal(validMessages([{role:'system',content:parts}]),false);
   for(const url of ['https://internal.example/photo.png','data:image/svg+xml;base64,YWJj','data:text/html;base64,YWJj']) assert.equal(validMessages([{role:'user',content:[{type:'image_url',image_url:{url}}]}]),false);
-  assert.equal(validMessages([{role:'user',content:[{type:'text',text:'x'.repeat(200001)}]}]),false);
+  assert.equal(validMessages([{role:'user',content:[{type:'text',text:'x'.repeat(200001)}]}]),true);
+  assert.equal(validMessages([{role:'user',content:'Я'.repeat(1800000)}]),false);
   assert.ok(reservationFor([{role:'user',content:parts}],1000)>10000);
 });

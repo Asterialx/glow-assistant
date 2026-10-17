@@ -6,6 +6,7 @@ import { DESIGN_MODE_SYSTEM } from "../designMode";
 import { isStudyPlanRequest } from "../studyPlan";
 import { betaAuthEnabled, supabase } from "../../auth/client";
 import { researchPolicy } from "../../../api/researchPolicy.js";
+import { messagesFitTransport } from "../../../api/messageValidation.js";
 import { splitAttachments } from "../attachments";
 import { COMPACT_UI_PROMPT } from "./uiPrompt";
 import { appendSearchSources } from "../searchSources";
@@ -217,6 +218,7 @@ export async function streamChatCompletion(
   const xkiroModel = toXkiroModelId(apiModel);
 
   try {
+    if (!messagesFitTransport(messages)) throw new Error("Документы прочитаны, но вместе с историей чата превышают 3,5 МБ — предел одного запроса к серверу. Отправьте документ в новом чате или разделите его на главы. Текст не был обрезан.");
     const body = {
       model: xkiroModel,
       ...(opts?.webSearch ? (betaAuthEnabled && !import.meta.env.DEV ? { web_search: true } : {

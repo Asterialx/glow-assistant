@@ -83,6 +83,5 @@ export function extractOfficeText(bytes: Uint8Array, filename: string): string {
     }).join("\n\n");
   }
   if (!output.trim()) throw new Error("Текст не найден: документ может содержать только изображения.");
-  const notice = "\n[Передана только начальная часть документа: текст сокращён до лимита 60 000 символов. Остальная часть не прочитана.]";
-  return output.length > 60000 ? output.slice(0, 60000 - notice.length) + notice : output;
+  return output;
 }

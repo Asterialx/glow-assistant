@@ -438,7 +438,6 @@ export function AppShell() {
         // Decode/transcribe one file at a time to keep mobile memory bounded.
         const attachments = [];
         for (const file of files) attachments.push(...await prepareAttachment(file, locale));
-        if (attachments.reduce((size, file) => size + (file.text?.length || 0), 0) > 100000) throw new Error("Документы слишком объёмные. Отправьте их по отдельности или выберите нужный фрагмент.");
         if (attachments.length > 8 || attachments.filter(item => item.image).length > 4) throw new Error("Прикрепите до 4 изображений за один раз.");
         content = attachToMessage(text, attachments);
       } catch (error) { setSyncError(error instanceof Error ? error.message : String(error)); return false; }

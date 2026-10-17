@@ -31,17 +31,18 @@ test('rejects old formats, corrupt/enormous ZIPs and XML entity declarations', (
   assert.throws(()=>extractOfficeText(bomb,'large.docx'),/распакованный/);
 });
 
-test('long text-only DOCX remains inside attachment limit including truncation notice', async () => {
+test('long text-only DOCX preserves all text through preparation and persistence', async () => {
   const source = readFileSync(new URL('../src/lib/attachments.ts', import.meta.url), 'utf8').replace('import("./officeExtract")', `import(${JSON.stringify(new URL('../src/lib/officeExtract.ts', import.meta.url).href)})`);
   const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
   const { prepareAttachment, attachToMessage, splitAttachments } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
-  const content = '<w:document xmlns:w="urn:word"><w:body><w:p><w:r><w:t>' + 'Текст диплома. '.repeat(8000) + '</w:t></w:r></w:p></w:body></w:document>';
+  const fullText = 'Текст диплома. '.repeat(24000) + 'КОНЕЦ ДИПЛОМА';
+  const content = '<w:document xmlns:w="urn:word"><w:body><w:p><w:r><w:t>' + fullText + '</w:t></w:r></w:p></w:body></w:document>';
   const bytes = zipSync({'word/document.xml': strToU8(content)});
   const file = new File([bytes], 'diploma.docx');
   const files = await prepareAttachment(file);
   assert.equal(files.length, 1);
-  assert.ok(files[0].text.length <= 60000);
-  assert.match(files[0].text, /Остальная часть не прочитана/);
+  assert.ok(files[0].text.length > 200000);
+  assert.equal(files[0].text, fullText);
   assert.deepEqual(splitAttachments(attachToMessage('Прочитай диплом', files)).files, files);
 });
 
@@ -50,7 +51,7 @@ test('DOCX accepts verbose Word XML above five MB while retaining decompression 
   assert.ok(strToU8(content).length > 5_000_000);
   const text = extractOfficeText(zipSync({'word/document.xml': strToU8(content)}), 'diploma.docx');
   assert.match(text, /Текст/);
-  assert.ok(text.length <= 60000);
+  assert.ok(text.length > 60000);
 });
 test('notebook preserves cell order, joins source lines and never imports active HTML output', () => {
   const notebook=parseNotebook(JSON.stringify({nbformat:4,metadata:{kernelspec:{language:'python'}},cells:[

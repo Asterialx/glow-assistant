@@ -6,7 +6,7 @@ export function splitAttachments(content: string): { text: string; files: ChatAt
     const value = JSON.parse(match[1]);
     if (!Array.isArray(value) || value.length > 8) throw new Error("Invalid attachments");
     const files = value.filter(item => item && typeof item.name === "string" && item.name.length <= 255 &&
-      ((typeof item.text === "string" && item.text.length <= 60000) || (typeof item.image === "string" && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(item.image) && item.image.length <= 700000)));
+      ((typeof item.text === "string") || (typeof item.image === "string" && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(item.image) && item.image.length <= 700000)));
     return { text: content.replace(match[0], "").trim(), files };
   } catch { return { text: content.replace(match[0], "[Не удалось восстановить вложение]"), files: [] }; }
 }
@@ -58,10 +58,6 @@ export async function prepareAttachment(file: File, locale = "ru"): Promise<Chat
     for (const item of embedded.images) pictures.push({ name: `${name} · ${item.name}`, image: await imageForModel(new File([new Uint8Array(item.bytes)], item.name, { type: item.mime })) });
     if (embedded.total) {
       const note = `\n[Изображения внутри документа: найдено ${embedded.total}, передано ${pictures.length}${embedded.skipped ? `, пропущено ${embedded.skipped} из-за размера или лимита` : ""}. Это встроенные изображения, не полный внешний вид страниц или слайдов. Остальные изображения и графики не прочитаны.]`;
-      if (text.length + note.length > 60000) {
-        const notice = "\n[Передана только начальная часть текста; остальная часть не прочитана.]";
-        text = text.slice(0, 60000 - note.length - notice.length) + notice;
-      }
       text += note;
     }
   } else if (/\.pdf$/i.test(name) || file.type === "application/pdf") {
@@ -75,6 +71,5 @@ export async function prepareAttachment(file: File, locale = "ru"): Promise<Chat
   } else if (file.type.startsWith("text/") || /\.(txt|md|csv|tsv|json|xml|yaml|yml|py|ts|tsx|js|jsx|html|css|sql|log|rst|srt)$/i.test(name)) text = await file.text();
   else throw new Error(`${name}: этот формат пока не удаётся прочитать. Для документа используйте PDF, DOCX, XLSX или PPTX, для фото — JPG или PNG.`);
   if (!text.trim()) throw new Error(`${name}: не удалось найти содержимое.`);
-  if (text.length > 60000) throw new Error(`${name}: документ слишком большой. Прикрепите нужный фрагмент, чтобы Glow учёл его целиком.`);
   return [{ name, text }, ...pictures];
 }

@@ -30,11 +30,9 @@ export async function extractPdfAttachments(file: File): Promise<ChatAttachment[
         const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error("Не удалось прочитать страницу.")), "image/jpeg", 0.85));
         pictures.push({ name: `${file.name} · страница ${i}`, image: await imageForModel(new File([blob], "page.jpg", { type: "image/jpeg" })) });
       }
-      if (parts.join("\n").length > 60000) throw new Error(`${file.name}: документ слишком большой. Прикрепите нужный фрагмент.`);
       page.cleanup();
     }
     const extracted = parts.join("\n\n") + `\n[Текст прочитан со всех страниц. Визуально передано ${pictures.length} из ${visualPages} страниц, выбранных для просмотра; на остальных страницах изображения и расположение элементов не анализировались. Не утверждай, что видел отсутствующие страницы.]`;
-    if (extracted.length > 60000) throw new Error(`${file.name}: документ слишком большой. Прикрепите нужный фрагмент.`);
     return [{ name: file.name, text: extracted }, ...pictures];
   } finally { await loading.destroy(); }
 }
