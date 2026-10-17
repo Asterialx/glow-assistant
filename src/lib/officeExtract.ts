@@ -5,17 +5,16 @@ const xml = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@", r
 const ordered = new XMLParser({ preserveOrder: true, ignoreAttributes: false, removeNSPrefix: true, parseTagValue: false, trimValues: false, htmlEntities: true });
 const array = (value: any): any[] => value == null ? [] : Array.isArray(value) ? value : [value];
 const scalar = (value: any): string => typeof value === "object" ? String(value?.["#text"] ?? "") : String(value ?? "");
-export function extractOfficeImages(bytes: Uint8Array): { images: { name: string; bytes: Uint8Array; mime: string }[]; total: number } {
-  let total = 0, size = 0;
+export function extractOfficeImages(bytes: Uint8Array): { images: { name: string; bytes: Uint8Array; mime: string }[]; total: number; skipped: number } {
+  let total = 0, size = 0, skipped = 0;
   const files = unzipSync(bytes, { filter: entry => {
     if (!/^(word|xl|ppt)\/media\/.*\.(png|jpe?g|webp)$/i.test(entry.name)) return false;
     total++;
-    if (total > 3) return false;
+    if (total > 3 || entry.originalSize > 5_000_000 || size + entry.originalSize > 10_000_000) { skipped++; return false; }
     size += entry.originalSize;
-    if (size > 10_000_000 || entry.originalSize > 5_000_000) throw new Error("Слишком большие изображения внутри документа.");
     return true;
   } });
-  return { total, images: Object.entries(files).map(([name, bytes]) => ({ name: name.split("/").pop()!, bytes, mime: /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg" })) };
+  return { total, skipped, images: Object.entries(files).map(([name, bytes]) => ({ name: name.split("/").pop()!, bytes, mime: /\.png$/i.test(name) ? "image/png" : /\.webp$/i.test(name) ? "image/webp" : "image/jpeg" })) };
 }
 function find(node: any, tag: string): any[] {
   if (!node || typeof node !== "object") return [];
@@ -33,7 +32,7 @@ function runText(nodes: any): string {
 
 /** Extract readable content, never execute macros, formulas or external relationships. */
 export function extractOfficeText(bytes: Uint8Array, filename: string): string {
-  if (bytes.byteLength > 10_000_000) throw new Error("Office-файл больше 10 МБ.");
+  if (bytes.byteLength > 20_000_000) throw new Error("Office-файл больше 20 МБ.");
   const kind = filename.toLowerCase().split(".").pop();
   if (!["docx", "xlsx", "pptx"].includes(kind || "")) throw new Error("Поддерживаются DOCX, XLSX и PPTX. Старый бинарный формат нужно пересохранить.");
   let total = 0, entries = 0;
