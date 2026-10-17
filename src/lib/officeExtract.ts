@@ -36,18 +36,20 @@ export function extractOfficeText(bytes: Uint8Array, filename: string): string {
   const kind = filename.toLowerCase().split(".").pop();
   if (!["docx", "xlsx", "pptx"].includes(kind || "")) throw new Error("Поддерживаются DOCX, XLSX и PPTX. Старый бинарный формат нужно пересохранить.");
   let total = 0, entries = 0;
+  const maxPartBytes = kind === "docx" ? 20_000_000 : 5_000_000;
+  const maxTotalBytes = kind === "docx" ? 30_000_000 : 15_000_000;
   const files = unzipSync(bytes, { filter: info => {
     const wanted = kind === "docx" ? /^word\/(document|header\d+|footer\d+)\.xml$/.test(info.name)
       : kind === "xlsx" ? /^xl\/(workbook\.xml|_rels\/workbook\.xml\.rels|sharedStrings\.xml|worksheets\/sheet\d+\.xml)$/.test(info.name)
       : /^ppt\/slides\/slide\d+\.xml$/.test(info.name);
     if (!wanted) return false;
     total += info.originalSize; entries++;
-    if (info.originalSize > 5_000_000 || total > 15_000_000 || entries > 300) throw new Error("Слишком большой распакованный документ.");
+    if (info.originalSize > maxPartBytes || total > maxTotalBytes || entries > 300) throw new Error("Слишком большой распакованный документ: объём внутренней разметки превышает лимит чтения. Пересохраните документ или отправьте нужные главы.");
     return true;
   } });
   const read = (path: string): string => {
     const data = files[path]; if (!data) return "";
-    if (data.length > 5_000_000) throw new Error("Часть документа слишком большая.");
+    if (data.length > maxPartBytes) throw new Error("Часть документа слишком большая.");
     const value = strFromU8(data);
     if (/<!DOCTYPE|<!ENTITY/i.test(value)) throw new Error("Неподдерживаемые XML-объявления.");
     return value;
@@ -81,5 +83,6 @@ export function extractOfficeText(bytes: Uint8Array, filename: string): string {
     }).join("\n\n");
   }
   if (!output.trim()) throw new Error("Текст не найден: документ может содержать только изображения.");
-  return output.length > 60000 ? output.slice(0, 60000) + "\n[Документ сокращён до 60 000 символов]" : output;
+  const notice = "\n[Передана только начальная часть документа: текст сокращён до лимита 60 000 символов. Остальная часть не прочитана.]";
+  return output.length > 60000 ? output.slice(0, 60000 - notice.length) + notice : output;
 }

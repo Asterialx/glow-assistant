@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { zipSync, strToU8 } from 'fflate';
+import ts from 'typescript';
 import { extractOfficeText } from '../src/lib/officeExtract.ts';
 import { parseNotebook, notebookContext } from '../src/lib/notebook.ts';
 import { isCloudTextFile } from '../src/lib/filePolicy.ts';
@@ -22,12 +23,34 @@ test('reads real PowerPoint slides in order', () => {
 });
 test('rejects old formats, corrupt/enormous ZIPs and XML entity declarations', () => {
   assert.throws(()=>extractOfficeText(new Uint8Array([1,2]),'bad.docx'));
-  assert.throws(()=>extractOfficeText(new Uint8Array(10_000_001),'big.docx'));
+  assert.throws(()=>extractOfficeText(new Uint8Array(20_000_001),'big.docx'));
   assert.throws(()=>extractOfficeText(new Uint8Array(),'legacy.doc'));
   const malicious=zipSync({'word/document.xml':strToU8('<!DOCTYPE x><document/>')});
   assert.throws(()=>extractOfficeText(malicious,'unsafe.docx'),/XML/);
-  const bomb=zipSync({'word/document.xml':new Uint8Array(5_000_001)});
+  const bomb=zipSync({'word/document.xml':new Uint8Array(20_000_001)});
   assert.throws(()=>extractOfficeText(bomb,'large.docx'),/распакованный/);
+});
+
+test('long text-only DOCX remains inside attachment limit including truncation notice', async () => {
+  const source = readFileSync(new URL('../src/lib/attachments.ts', import.meta.url), 'utf8').replace('import("./officeExtract")', `import(${JSON.stringify(new URL('../src/lib/officeExtract.ts', import.meta.url).href)})`);
+  const js = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext } }).outputText;
+  const { prepareAttachment, attachToMessage, splitAttachments } = await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+  const content = '<w:document xmlns:w="urn:word"><w:body><w:p><w:r><w:t>' + 'Текст диплома. '.repeat(8000) + '</w:t></w:r></w:p></w:body></w:document>';
+  const bytes = zipSync({'word/document.xml': strToU8(content)});
+  const file = new File([bytes], 'diploma.docx');
+  const files = await prepareAttachment(file);
+  assert.equal(files.length, 1);
+  assert.ok(files[0].text.length <= 60000);
+  assert.match(files[0].text, /Остальная часть не прочитана/);
+  assert.deepEqual(splitAttachments(attachToMessage('Прочитай диплом', files)).files, files);
+});
+
+test('DOCX accepts verbose Word XML above five MB while retaining decompression bounds', () => {
+  const content = '<w:document xmlns:w="urn:word"><w:body>' + '<w:p><w:pPr><w:spacing w:after="0"/></w:pPr><w:r><w:t>Текст.</w:t></w:r></w:p>'.repeat(65000) + '</w:body></w:document>';
+  assert.ok(strToU8(content).length > 5_000_000);
+  const text = extractOfficeText(zipSync({'word/document.xml': strToU8(content)}), 'diploma.docx');
+  assert.match(text, /Текст/);
+  assert.ok(text.length <= 60000);
 });
 test('notebook preserves cell order, joins source lines and never imports active HTML output', () => {
   const notebook=parseNotebook(JSON.stringify({nbformat:4,metadata:{kernelspec:{language:'python'}},cells:[

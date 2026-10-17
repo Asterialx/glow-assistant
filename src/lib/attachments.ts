@@ -56,7 +56,14 @@ export async function prepareAttachment(file: File, locale = "ru"): Promise<Chat
     text = extractOfficeText(bytes, name);
     const embedded = extractOfficeImages(bytes);
     for (const item of embedded.images) pictures.push({ name: `${name} · ${item.name}`, image: await imageForModel(new File([new Uint8Array(item.bytes)], item.name, { type: item.mime })) });
-    if (embedded.total) text += `\n[Изображения внутри документа: найдено ${embedded.total}, передано ${pictures.length}${embedded.skipped ? `, пропущено ${embedded.skipped} из-за размера или лимита` : ""}. Это встроенные изображения, не полный внешний вид страниц или слайдов. Остальные изображения и графики не прочитаны.]`;
+    if (embedded.total) {
+      const note = `\n[Изображения внутри документа: найдено ${embedded.total}, передано ${pictures.length}${embedded.skipped ? `, пропущено ${embedded.skipped} из-за размера или лимита` : ""}. Это встроенные изображения, не полный внешний вид страниц или слайдов. Остальные изображения и графики не прочитаны.]`;
+      if (text.length + note.length > 60000) {
+        const notice = "\n[Передана только начальная часть текста; остальная часть не прочитана.]";
+        text = text.slice(0, 60000 - note.length - notice.length) + notice;
+      }
+      text += note;
+    }
   } else if (/\.pdf$/i.test(name) || file.type === "application/pdf") {
     const { extractPdfAttachments } = await import("./pdfExtract"); return extractPdfAttachments(file);
   } else if (/\.(odt|ods|odp)$/i.test(name)) {
