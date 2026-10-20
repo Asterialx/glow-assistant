@@ -8,7 +8,10 @@ import { listWorkspaceFiles, readWorkspaceFile } from "../../lib/workspace";
 import { prepareAttachment } from "../../lib/attachments";
 import { redactPii } from "../../lib/tauri";
 import type { Locale } from "../../lib/i18n";
-import { generateCoursework, isCourseworkRequest } from "../../lib/coursework";
+import {
+  clarifyPrompt, courseworkRequestBefore, formatQuestions, generateCoursework, isAwaitingCourseworkAnswer,
+  isCourseworkRequest, parseClarification, readCourseworkSettings,
+} from "../../lib/coursework";
 
 /**
  * Transitional adapter for the existing SmartAPI integration.
@@ -32,7 +35,8 @@ export type LegacyGenerationOptions = {
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
   async stream({ history, generation }, callbacks, signal) {
     const currentText = history.filter(message => message.role === "user").at(-1)?.content || "";
-    if (generation.mode === "code" && !generation.agentPlan && isCourseworkRequest(currentText)) {
+    const answeringCoursework = isAwaitingCourseworkAnswer(history);
+    if (generation.mode === "code" && !generation.agentPlan && (answeringCoursework || isCourseworkRequest(currentText))) {
       // Coursework is built chapter by chapter, then returned as one docx glow-file.
       let usageTotal = { inputTokens: 0, outputTokens: 0, costUnits: 0 };
       const complete = async (messages: { role: "system" | "user"; content: string }[], maxTokens: number) => {
@@ -48,7 +52,21 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
         if (streamError) throw streamError;
         return text;
       };
-      const course = await generateCoursework(currentText, { complete, onStatus: generation.onAgentStatus, signal });
+      // First request: the model may ask questions and stop. The user's reply then starts the build.
+      const request = answeringCoursework ? courseworkRequestBefore(history) : currentText;
+      const skipped = /^пропустить$/i.test(currentText.trim());
+      const topic = answeringCoursework && !skipped ? `${request}\nДополнения пользователя: ${currentText}` : request;
+      if (!answeringCoursework) {
+        const clarification = parseClarification(await complete(clarifyPrompt(topic), 800));
+        if (!clarification.ready) {
+          callbacks.onToken(formatQuestions(clarification.questions));
+          callbacks.onDone(usageTotal);
+          return;
+        }
+      }
+      const storage = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
+      const settings = readCourseworkSettings(storage);
+      const course = await generateCoursework(topic, { complete, onStatus: generation.onAgentStatus, signal, ...settings });
       const file = JSON.stringify({ format: "docx", filename: `${course.title}.docx`, title: course.title, content: course.markdown });
       callbacks.onToken(`Курсовая «${course.title}» готова. Файл ниже. Список литературы составлен моделью: проверьте каждый источник перед сдачей.\n\n\`\`\`glow-file\n${file}\n\`\`\``);
       callbacks.onDone(usageTotal);

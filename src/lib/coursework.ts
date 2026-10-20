@@ -92,6 +92,64 @@ function referencesPrompt(topic: string): CourseworkMessage[] {
   ];
 }
 
+/** Marks the assistant message that asks clarifying questions, so the next user message is read as an answer. */
+export const COURSEWORK_QUESTIONS_MARK = "Перед написанием курсовой уточню:";
+
+function clampSetting(raw: string | null, min: number, max: number, fallback: number): number {
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
+}
+
+/** Settings are read from storage so a short test run can use fewer pages and tokens. */
+export function readCourseworkSettings(read: (key: string) => string | null): { pages: number; chapterMaxTokens: number } {
+  return {
+    pages: clampSetting(read("glow.courseworkPages"), 2, 60, 30),
+    chapterMaxTokens: clampSetting(read("glow.courseworkChapterTokens"), 1000, 16000, 8000),
+  };
+}
+
+export function clarifyPrompt(topic: string): CourseworkMessage[] {
+  return [
+    { role: "system", content: 'Ты помогаешь подготовить курсовую работу. Реши, нужны ли уточнения, чтобы написать хорошую работу. Спрашивай только о важном: тема и её формулировка, направление и аудитория, объём, методы или источники, требования вуза. Не больше 4 вопросов. Верни только JSON {"ready":true|false,"questions":["..."]} без пояснений.' },
+    { role: "user", content: `Запрос: ${topic}` },
+  ];
+}
+
+export function parseClarification(raw: string): { ready: boolean; questions: string[] } {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return { ready: true, questions: [] };
+  try {
+    const value = JSON.parse(raw.slice(start, end + 1));
+    const questions = Array.isArray(value?.questions)
+      ? value.questions.filter((q: unknown) => typeof q === "string" && q.trim()).map((q: string) => q.trim().slice(0, 300)).slice(0, 4)
+      : [];
+    return value?.ready === false && questions.length > 0 ? { ready: false, questions } : { ready: true, questions: [] };
+  } catch {
+    return { ready: true, questions: [] };
+  }
+}
+
+export function formatQuestions(questions: string[]): string {
+  const list = questions.map((question, index) => `${index + 1}. ${question}`).join("\n");
+  return `${COURSEWORK_QUESTIONS_MARK}\n\n${list}\n\nОтветьте одним сообщением. Если уточнения не нужны, напишите «пропустить».`;
+}
+
+/** The last coursework request before the most recent assistant message, or "" when there is none. */
+export function courseworkRequestBefore(history: { role: string; content: unknown }[]): string {
+  const lastAssistant = history.map((message) => message.role).lastIndexOf("assistant");
+  for (let index = lastAssistant - 1; index >= 0; index--) {
+    const message = history[index];
+    if (message.role === "user" && typeof message.content === "string" && isCourseworkRequest(message.content)) return message.content;
+  }
+  return "";
+}
+
+export function isAwaitingCourseworkAnswer(history: { role: string; content: unknown }[]): boolean {
+  const lastAssistant = [...history].reverse().find((message) => message.role === "assistant");
+  return typeof lastAssistant?.content === "string" && lastAssistant.content.startsWith(COURSEWORK_QUESTIONS_MARK);
+}
+
 export async function generateCoursework(topic: string, deps: CourseworkDeps): Promise<{ title: string; markdown: string }> {
   const checkAborted = () => { if (deps.signal?.aborted) throw new Error("Генерация остановлена."); };
   const status = (text: string) => deps.onStatus?.(text);

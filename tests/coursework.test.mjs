@@ -1,6 +1,9 @@
-import test from 'node:test';
+﻿import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isCourseworkRequest, parseOutline, sanitizeChapterText, assembleCoursework, generateCoursework, COURSEWORK_MAX_CHARS } from '../src/lib/coursework.ts';
+import {
+  isCourseworkRequest, parseOutline, sanitizeChapterText, assembleCoursework, generateCoursework, COURSEWORK_MAX_CHARS,
+  readCourseworkSettings, parseClarification, formatQuestions, COURSEWORK_QUESTIONS_MARK, isAwaitingCourseworkAnswer, courseworkRequestBefore,
+} from '../src/lib/coursework.ts';
 
 const outlineJson = JSON.stringify({
   title: 'Анализ рынка',
@@ -79,4 +82,34 @@ test('stops between steps when the request is aborted', async () => {
     complete: async (messages) => { controller.abort(); return messages[0].content.includes('план') ? outlineJson : 'x'; },
     signal: controller.signal,
   }), /остановлена/);
+});
+
+test('reads page and token settings with safe clamps and defaults', () => {
+  const store = { 'glow.courseworkPages': '3', 'glow.courseworkChapterTokens': '999999' };
+  assert.deepEqual(readCourseworkSettings((key) => store[key] ?? null), { pages: 3, chapterMaxTokens: 16000 });
+  assert.deepEqual(readCourseworkSettings(() => null), { pages: 30, chapterMaxTokens: 8000 });
+  assert.deepEqual(readCourseworkSettings((key) => (key === 'glow.courseworkPages' ? '1' : 'abc')), { pages: 2, chapterMaxTokens: 8000 });
+});
+
+test('parses clarification questions and treats broken answers as ready', () => {
+  assert.deepEqual(parseClarification('{"ready":false,"questions":["Кто аудитория?","Какой объём?"]}'), { ready: false, questions: ['Кто аудитория?', 'Какой объём?'] });
+  assert.deepEqual(parseClarification('{"ready":true,"questions":[]}'), { ready: true, questions: [] });
+  assert.deepEqual(parseClarification('не json'), { ready: true, questions: [] });
+});
+
+test('questions message carries the marker that the next reply is read against', () => {
+  const message = formatQuestions(['Кто аудитория?']);
+  assert.ok(message.startsWith(COURSEWORK_QUESTIONS_MARK));
+  assert.match(message, /1\. Кто аудитория\?/);
+  assert.equal(isAwaitingCourseworkAnswer([{ role: 'user', content: 'курсовая' }, { role: 'assistant', content: message }, { role: 'user', content: 'для вузовских преподавателей' }]), true);
+  assert.equal(isAwaitingCourseworkAnswer([{ role: 'user', content: 'курсовая' }, { role: 'assistant', content: 'готово' }]), false);
+});
+
+test('finds the original coursework request before the questions', () => {
+  const history = [
+    { role: 'user', content: 'Напиши курсовую по экономике' },
+    { role: 'assistant', content: formatQuestions(['Какой объём?']) },
+    { role: 'user', content: '10 страниц' },
+  ];
+  assert.equal(courseworkRequestBefore(history), 'Напиши курсовую по экономике');
 });
