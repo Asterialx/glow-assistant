@@ -8,6 +8,7 @@ import { listWorkspaceFiles, readWorkspaceFile } from "../../lib/workspace";
 import { prepareAttachment } from "../../lib/attachments";
 import { redactPii } from "../../lib/tauri";
 import type { Locale } from "../../lib/i18n";
+import { generateCoursework, isCourseworkRequest } from "../../lib/coursework";
 
 /**
  * Transitional adapter for the existing SmartAPI integration.
@@ -31,6 +32,28 @@ export type LegacyGenerationOptions = {
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
   async stream({ history, generation }, callbacks, signal) {
     const currentText = history.filter(message => message.role === "user").at(-1)?.content || "";
+    if (generation.mode === "code" && !generation.agentPlan && isCourseworkRequest(currentText)) {
+      // Coursework is built chapter by chapter, then returned as one docx glow-file.
+      let usageTotal = { inputTokens: 0, outputTokens: 0, costUnits: 0 };
+      const complete = async (messages: { role: "system" | "user"; content: string }[], maxTokens: number) => {
+        let text = "";
+        let streamError: Error | undefined;
+        await streamChatCompletion(generation.modelId, messages, {
+          onToken: (token) => { text += token; },
+          onDone: (usage) => {
+            usageTotal = { inputTokens: usageTotal.inputTokens + usage.inputTokens, outputTokens: usageTotal.outputTokens + usage.outputTokens, costUnits: usageTotal.costUnits + usage.costUnits };
+          },
+          onError: (error) => { streamError = error; },
+        }, signal, { temperature: generation.temperature, maxTokens, conversationId: history.at(-1)?.conversation_id, scope: generation.mode, webSearch: false });
+        if (streamError) throw streamError;
+        return text;
+      };
+      const course = await generateCoursework(currentText, { complete, onStatus: generation.onAgentStatus, signal });
+      const file = JSON.stringify({ format: "docx", filename: `${course.title}.docx`, title: course.title, content: course.markdown });
+      callbacks.onToken(`Курсовая «${course.title}» готова. Файл ниже. Список литературы составлен моделью: проверьте каждый источник перед сдачей.\n\n\`\`\`glow-file\n${file}\n\`\`\``);
+      callbacks.onDone(usageTotal);
+      return;
+    }
     const workflow = skillInstructions(currentText, [...BUILTIN_SKILLS, ...useSkillsStore.getState().custom]);
     const cleanHistory = history.map(message => message.role === "assistant"
       ? { ...message, content: splitSearchSources(message.content).text }
