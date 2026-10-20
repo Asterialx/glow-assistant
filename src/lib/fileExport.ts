@@ -92,6 +92,17 @@ export async function exportGeneratedFile(input: GeneratedFile): Promise<Blob> {
   }
   return d.Packer.toBlob(new d.Document({ creator: "Glow", title: file.title, styles: { default: { document: { run: { font: "Arial", size: 22, color: "243447" } } } }, sections: [{ properties: { page: { margin: { top: 850, bottom: 850, left: 850, right: 850 } } }, children }] }));
 }
-export function downloadBlob(blob: Blob, filename: string): void {
+/** In the desktop app a blob link click does nothing in WebView2, so the file is saved through a native dialog. */
+export async function downloadBlob(blob: Blob, filename: string): Promise<void> {
+  if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+    const [{ save }, { invoke }] = await Promise.all([import("@tauri-apps/plugin-dialog"), import("@tauri-apps/api/core")]);
+    const path = await save({ defaultPath: filename });
+    if (!path) return;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    await invoke("export_save_file", { path, bytesBase64: btoa(binary) });
+    return;
+  }
   const url = URL.createObjectURL(blob), a = document.createElement("a"); a.href = url; a.download = filename; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

@@ -42,6 +42,19 @@ fn is_readable_workspace_path(relative: &Path) -> bool {
     WORKSPACE_READ_EXTENSIONS.contains(&extension.as_str())
 }
 
+const EXPORT_EXTENSIONS: &[&str] = &["md", "txt", "csv", "json", "docx", "pdf", "xlsx", "pptx", "png", "svg", "ipynb"];
+
+/// Writes a file the user picked in the native save dialog. Only export formats are accepted.
+#[tauri::command]
+pub fn export_save_file(path: String, bytes_base64: String) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    let extension = target.extension().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase();
+    if !EXPORT_EXTENSIONS.contains(&extension.as_str()) { return Err("Этот формат нельзя сохранить.".into()); }
+    if bytes_base64.len() > 40_000_000 { return Err("Файл слишком большой.".into()); }
+    let bytes = BASE64.decode(bytes_base64).map_err(|_| "Некорректное содержимое файла.".to_string())?;
+    std::fs::write(&target, bytes).map_err(|_| "Не удалось сохранить файл.".to_string())
+}
+
 #[cfg(test)]
 mod workspace_read_rules {
     use super::is_readable_workspace_path;

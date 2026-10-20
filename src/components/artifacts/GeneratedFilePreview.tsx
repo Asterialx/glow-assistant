@@ -22,7 +22,7 @@ export function GeneratedFilePreview({ artifact, locale }: { artifact: Artifact;
   if (!file) return <p className="p-4 text-sm text-[var(--fg-muted)]">{ru ? "Не удалось прочитать файл." : "Cannot read file."}</p>;
   const save = async () => {
     setBusy(true); setError("");
-    try { const output = format === file.format && blob ? blob : await exportGeneratedFile({ ...file, format }); downloadBlob(output, file.filename.replace(/\.[^.]+$/, `.${format}`)); }
+    try { const output = format === file.format && blob ? blob : await exportGeneratedFile({ ...file, format }); await downloadBlob(output, file.filename.replace(/\.[^.]+$/, `.${format}`)); }
     catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(false); }
   };

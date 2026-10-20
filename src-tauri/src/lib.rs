@@ -34,6 +34,7 @@ pub fn run() {
             commands::workspace_list_files,
             commands::workspace_read_file,
             commands::workspace_write_file,
+            commands::export_save_file,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
