@@ -7,7 +7,9 @@ const filePromptUrl = new URL('../src/lib/generatedFile.ts', import.meta.url).hr
 let source=await readFile(new URL('../src/lib/llm/smartapi.ts',import.meta.url),'utf8');
 source=source.replace('import { getModel } from "../models";','const getModel = () => null;')
  .replace('import { DESIGN_MODE_SYSTEM } from "../designMode";','const DESIGN_MODE_SYSTEM = "design";')
- .replace('import { betaAuthEnabled, supabase } from "../../auth/client";','const betaAuthEnabled = false; const supabase = null;');
+ .replace('import { betaAuthEnabled, supabase } from "../../auth/client";','const betaAuthEnabled = false; const supabase = null;')
+ .replace('import { messagesFitTransport } from "../../../api/messageValidation.js";','const messagesFitTransport = () => true;')
+ .replace('import { WORKSPACE_TOOL_DEFINITIONS } from "../workspaceTools";','const WORKSPACE_TOOL_DEFINITIONS = [];');
 for(const [specifier,path] of [['../attachments','../src/lib/attachments.ts'],['../../../api/researchPolicy.js','../api/researchPolicy.js'],['../types','../src/lib/types.ts'],['../utils','../src/lib/utils.ts'],['../studyPlan','../src/lib/studyPlan.ts'],['./uiPrompt','../src/lib/llm/uiPrompt.ts'],['../../auth/accountStorage','../src/auth/accountStorage.ts']]) {
  source=source.replaceAll(`from "${specifier}"`,`from ${JSON.stringify(new URL(path,import.meta.url).href)}`);
 }
@@ -16,6 +18,13 @@ source=source.replace('import { appendSearchSources } from "../searchSources";',
 source=source.replace('from "../generatedFile"', `from ${JSON.stringify(filePromptUrl)}`);
 const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ESNext}}).outputText;
 const { buildChatPayload }=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
+
+test('Plan overrides file creation requests and leaves the generated-file contract out',()=>{
+ const payload=buildChatPayload('code',[{role:'user',content:'Создай Word документ',status:'done'}],'',[],false,undefined,false,false,true);
+ assert.match(payload[0].content,/PLAN MODE/);
+ assert.match(payload[0].content,/Do not implement/);
+ assert.ok(!payload[0].content.includes('glow-file/v1'));
+});
 
 test('images become actual vision parts and attached document text stays in model context',()=>{
  const content='Read files\n\n```glow-attachments\n'+JSON.stringify([{name:'sample.png',image:'data:image/jpeg;base64,YWJj'},{name:'table.xlsx',text:'Patients: 42'}])+'\n```';

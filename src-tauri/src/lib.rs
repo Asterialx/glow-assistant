@@ -28,6 +28,12 @@ pub fn run() {
             commands::parse_biomarker_text,
             commands::check_drug_interactions,
             commands::generate_protocol_markdown,
+            commands::workspace_set_root,
+            commands::workspace_clear_root,
+            commands::workspace_restore_root,
+            commands::workspace_list_files,
+            commands::workspace_read_file,
+            commands::workspace_write_file,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

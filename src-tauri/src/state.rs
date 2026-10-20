@@ -44,6 +44,7 @@ pub struct McpServerConfig {
 pub struct AppState {
     pub game: Arc<RwLock<GameModeState>>,
     pub mcp: Arc<RwLock<Vec<McpServerConfig>>>,
+    pub workspace_root: Arc<RwLock<Option<std::path::PathBuf>>>,
 }
 
 impl Default for AppState {
@@ -51,6 +52,7 @@ impl Default for AppState {
         Self {
             game: Arc::new(RwLock::new(GameModeState::default())),
             mcp: Arc::new(RwLock::new(default_mcp_servers())),
+            workspace_root: Arc::new(RwLock::new(None)),
         }
     }
 }

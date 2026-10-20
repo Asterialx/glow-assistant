@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Plus,
+  Code2,
+  MessageCircle,
   Folder,
   SlidersHorizontal,
   ChevronDown,
   ChevronRight,
   Download,
-  MessageCircle,
   MoreHorizontal,
   Pin,
   EyeOff,
@@ -15,6 +16,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useModeStore } from "../../stores/modeStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
 import { t } from "../../lib/i18n";
@@ -39,11 +41,14 @@ export function ClaudeSidebar({
   onConversationsChanged,
 }: Props) {
   const mode = useModeStore((s) => s.mode);
+  const setMode = useModeStore((s) => s.setMode);
   const locale = useUiStore((s) => s.locale);
   const userName = useUiStore((s) => s.userName);
   const account = useAccount();
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const setSettingsTab = useUiStore((s) => s.setSettingsTab);
+  const setWorkspaceEnabled = useWorkspaceStore((s) => s.setEnabled);
+  const setWorkspaceTaskStatus = useWorkspaceStore((s) => s.setTaskStatus);
   const conversations = useChatStore((s) => s.conversations);
   const activeConversationId = useChatStore((s) => s.activeConversationId);
   const setActiveConversationId = useChatStore((s) => s.setActiveConversationId);
@@ -186,6 +191,48 @@ export function ClaudeSidebar({
           <span className="text-[16px] font-semibold tracking-[-0.02em] text-[var(--fg)]">
             Glow
           </span>
+        </div>
+      </div>
+
+      <div className="flex justify-center px-3 pt-3">
+        <div className="relative grid h-9 w-[204px] grid-cols-2 rounded-full bg-[var(--bg)] p-0.5" role="group" aria-label={locale === "ru" ? "Режим Glow" : "Glow mode"}>
+          {([
+            { id: "home" as const, label: locale === "ru" ? "Чат" : "Chat", icon: MessageCircle },
+            { id: "code" as const, label: locale === "ru" ? "Работа" : "Work", icon: Code2 },
+          ]).map(({ id, label, icon: Icon }) => {
+            const active = id === "home" ? mode !== "code" : mode === "code";
+            return (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={active}
+                title={id === "code" && locale === "ru" ? "Агентское пространство Glow" : undefined}
+                onClick={() => {
+                  if (id === "home") {
+                    setMode("home");
+                    setWorkspaceEnabled(false);
+                    setWorkspaceTaskStatus("");
+                  } else {
+                    if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+                      window.dispatchEvent(new Event("glow:open-work-mode"));
+                    } else {
+                      window.dispatchEvent(new Event("glow:show-work-download"));
+                    }
+                  }
+                }}
+                className={cn(
+                  "flex min-w-0 items-center justify-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition-colors",
+                  active
+                    ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm"
+                    : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
+                )}
+              >
+                <Icon size={13} strokeWidth={1.7} />
+                {label}
+              </button>
+            );
+          })}
+
         </div>
       </div>
 

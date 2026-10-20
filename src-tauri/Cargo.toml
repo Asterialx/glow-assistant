@@ -25,6 +25,7 @@ tokio = { version = "1", features = ["time", "sync", "rt-multi-thread", "macros"
 sysinfo = "0.33"
 regex = "1"
 uuid = { version = "1", features = ["v4"] }
+base64 = "0.22"
 chrono = { version = "0.4", features = ["serde"] }
 thiserror = "2"
 parking_lot = "0.12"

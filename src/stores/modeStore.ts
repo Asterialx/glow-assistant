@@ -17,12 +17,10 @@ interface ModeState {
 }
 
 export const useModeStore = create<ModeState>((set) => ({
-  // Code and Med workspaces are paused; keep existing databases untouched.
-  mode: "home",
+  mode: localStorage.getItem("glow.mode") === "code" ? "code" : "home",
   setMode: (mode) => {
-    if (mode !== "home") return;
-    localStorage.setItem("glow.mode", "home");
-    set({ mode: "home" });
+    localStorage.setItem("glow.mode", mode);
+    set({ mode });
   },
   gameModeActive: false,
   setGameModeActive: (gameModeActive) =>

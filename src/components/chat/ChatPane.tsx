@@ -119,6 +119,7 @@ export function ChatPane({
   const closeArtifacts = useUiStore((s) => s.closeArtifacts);
   const activeArtifactId = useChatStore((s) => s.activeArtifactId);
   const designMode = useModeStore((s) => s.designMode);
+  const agentMode = useModeStore((s) => s.mode) === "code";
   const empty = messages.length === 0;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -256,14 +257,12 @@ export function ChatPane({
       <div className="glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-center px-4">
         <div className="glow-empty-intro mb-7 max-w-[620px] text-center">
           <div className="mb-3 flex items-center justify-center gap-3">
-            <span className="glow-asterisk text-[var(--accent)]" aria-hidden>
-              ✻
-            </span>
+            {agentMode ? <img src="/glow-work-mark.svg" alt="" className="h-10 w-10" /> : <span className="glow-asterisk text-[var(--accent)]" aria-hidden>✻</span>}
             <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
-              {t(locale, "taskTitle")}
+              {agentMode ? (locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
             </h1>
           </div>
-          <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{t(locale, "taskSubtitle")}</p>
+          <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{agentMode ? (locale === "ru" ? "Поручите задачу Glow. Подключите папку или начните без неё." : "Give Glow a task. Connect a folder or start without one.") : t(locale, "taskSubtitle")}</p>
         </div>
         <div className="w-full">
           <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} centered />
@@ -575,6 +574,9 @@ export function ChatPane({
 }
 
 function friendlyError(locale: "en" | "ru", content: string): string {
+  if (/A previous answer is still finishing|An answer is already being generated on another device/i.test(content)) {
+    return locale === "ru" ? "Предыдущий запрос ещё завершается. Подождите немного и повторите." : "The previous request is still finishing. Wait a moment and try again.";
+  }
   if (/Insufficient token allowance/i.test(content)) {
     return locale === "ru" ? "Недостаточно доступных токенов для этого запроса. Учтены история чата и резерв ответа. Проверьте лимит в настройках."
       : "Not enough available tokens for this request, including chat history and response reserve. Check your allowance in Settings.";

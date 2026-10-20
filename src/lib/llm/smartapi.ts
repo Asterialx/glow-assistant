@@ -6,22 +6,26 @@ import { DESIGN_MODE_SYSTEM } from "../designMode";
 import { isStudyPlanRequest } from "../studyPlan";
 import { betaAuthEnabled, supabase } from "../../auth/client";
 import { researchPolicy } from "../../../api/researchPolicy.js";
-import { messagesFitTransport } from "../../../api/messageValidation.js";
 import { splitAttachments } from "../attachments";
 import { COMPACT_UI_PROMPT } from "./uiPrompt";
 import { appendSearchSources } from "../searchSources";
 import { splitSearchSources } from "../searchSources";
 import { GENERATED_FILE_PROMPT } from "../generatedFile";
+import { WORKSPACE_TOOL_DEFINITIONS } from "../workspaceTools";
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
-  content: string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
+  role: "system" | "user" | "assistant" | "tool";
+  content: string | null | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
+  tool_calls?: { id: string; type: "function"; function: { name: string; arguments: string } }[];
+  tool_call_id?: string;
+  name?: string;
 }
 
 export interface StreamCallbacks {
   onToken: (token: string) => void;
   onDone: (usage: { inputTokens: number; outputTokens: number; costUnits: number }) => void;
   onError: (error: Error) => void;
+  onToolCalls?: (calls: { id: string; name: string; arguments: string }[]) => void;
 }
 
 function isTauri(): boolean {
@@ -29,7 +33,9 @@ function isTauri(): boolean {
 }
 
 function getBaseUrl(): string {
-  if (betaAuthEnabled && !import.meta.env.DEV) return "/api/ai";
+  if (betaAuthEnabled && !import.meta.env.DEV) {
+    return isTauri() ? "https://glowai-ashy.vercel.app/api/ai" : "/api/ai";
+  }
   // Dev (browser or tauri:dev on localhost:1420): Vite proxy → no CORS.
   if (import.meta.env.DEV) return "/smartapi";
   return import.meta.env.VITE_SMARTAPI_BASE_URL || "https://co.agentrouter.org/v1";
@@ -57,6 +63,15 @@ async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
     if (!token) throw new Error("Войдите в Glow, чтобы продолжить.");
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${token}`);
+    if (isTauri()) {
+      const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+      return tauriFetch(input, {
+        method: (init?.method as "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "HEAD" | "OPTIONS") || "GET",
+        headers: Object.fromEntries(headers.entries()),
+        body: init?.body as string | undefined,
+        signal: init?.signal ?? undefined,
+      });
+    }
     return fetch(input, { ...init, headers });
   }
   // Dev uses Vite proxy on same origin — browser fetch is fine (and required).
@@ -88,6 +103,7 @@ export function buildChatPayload(
   modelId?: string,
   designMode = false,
   webSearch = false,
+  agentPlan = false,
 ): ChatMessage[] {
   const model = modelId ? getModel(modelId) : null;
   const identity = model
@@ -128,10 +144,11 @@ export function buildChatPayload(
   }
 
   const latestRequest = [...history].reverse().find((message) => message.role === "user")?.content ?? "";
-  if (/\b(?:md|docx|pdf|xlsx|pptx|markdown|word|excel|powerpoint|spreadsheet|presentation)\b|(?:созда\w*|сдела\w*|подготов\w*|сгенер\w*|файл|презентаци|документ|таблиц|ворд|эксел|пдф|маркдаун)/i.test(splitAttachments(latestRequest).text) || projectPrompt?.includes("glow-file")) systemParts.push(GENERATED_FILE_PROMPT);
+  if (!agentPlan && (/\b(?:md|docx|pdf|xlsx|pptx|markdown|word|excel|powerpoint|spreadsheet|presentation)\b|(?:созда\w*|сдела\w*|подготов\w*|сгенер\w*|файл|презентаци|документ|таблиц|ворд|эксел|пдф|маркдаун)/i.test(splitAttachments(latestRequest).text) || projectPrompt?.includes("glow-file"))) systemParts.push(GENERATED_FILE_PROMPT);
   if (!designMode && isStudyPlanRequest(latestRequest)) {
     systemParts.push("Required format for the current study preparation request: deliver the actual plan as one complete fenced ```glow-ui JSON block with type=study_plan using the schema above. Include every requested day and topic with actionable tasks, not a sample. The application renders clickable topic sections, completion checkboxes and progress automatically. Keep any surrounding prose to at most two short sentences; do not replace the study_plan with markdown headings/lists, a table or a checklist. If information is sufficient, produce the plan immediately. Ask a minimal essential clarification only if a useful plan cannot be produced.");
   }
+  if (agentPlan) systemParts.push("PLAN MODE: provide an actionable plan only. You may inspect available files using read-only tools. Do not implement, generate artifacts or glow-file blocks, or claim to save files. Wait for an explicit switch to Work before execution.");
   const messages: ChatMessage[] = [
     { role: "system", content: systemParts.join("\n\n") },
   ];
@@ -196,7 +213,7 @@ export async function streamChatCompletion(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string; webSearch?: boolean },
+  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string; webSearch?: boolean; workspaceTools?: boolean },
 ): Promise<void> {
   const model = getModel(modelId);
   const url = `${opts?.webSearch && import.meta.env.DEV ? "/openrouter" : getBaseUrl()}/chat/completions`;
@@ -218,16 +235,21 @@ export async function streamChatCompletion(
   const xkiroModel = toXkiroModelId(apiModel);
 
   try {
-    if (!messagesFitTransport(messages)) throw new Error("Документы прочитаны, но вместе с историей чата превышают 3,5 МБ — предел одного запроса к серверу. Отправьте документ в новом чате или разделите его на главы. Текст не был обрезан.");
+    if (new TextEncoder().encode(JSON.stringify(messages)).byteLength > 3_500_000) throw new Error("Документы прочитаны, но вместе с историей чата превышают 3,5 МБ — предел одного запроса к серверу. Отправьте документ в новом чате или разделите его на главы. Текст не был обрезан.");
     const body = {
       model: xkiroModel,
       ...(opts?.webSearch ? (betaAuthEnabled && !import.meta.env.DEV ? { web_search: true } : {
         tools: [
           { type: "openrouter:web_search", parameters: { engine: "exa", mode: "auto", max_results: 6, max_total_results: 30, max_uses: 5, max_characters: 6000 } },
           { type: "openrouter:web_fetch", parameters: { engine: "exa", max_uses: 5, max_content_tokens: 6000 } },
+          ...(opts?.workspaceTools ? WORKSPACE_TOOL_DEFINITIONS : []),
         ],
       }) : {}),
-      ...(betaAuthEnabled && import.meta.env.VITE_CLOUD_DATA_ENABLED === "true" ? {
+      ...(!opts?.webSearch && opts?.workspaceTools ? (betaAuthEnabled && !import.meta.env.DEV
+        ? { workspace_tools: true }
+        : { tools: WORKSPACE_TOOL_DEFINITIONS }) : {}),
+      ...(opts?.webSearch && opts?.workspaceTools && betaAuthEnabled && !import.meta.env.DEV ? { workspace_tools: true } : {}),
+      ...(betaAuthEnabled && !import.meta.env.DEV ? {
         conversation_id: opts?.conversationId,
         scope: opts?.scope,
       } : {}),
@@ -275,9 +297,22 @@ export async function streamChatCompletion(
     const decoder = new TextDecoder();
     let buffer = "";
     let output = "";
-    let inputTokens = messages.reduce((sum, message) => sum + (typeof message.content === "string" ? estimateTokens(message.content) : message.content.reduce((total, part) => total + (part.type === "text" ? estimateTokens(part.text) : 3000), 0)), 0);
+    let inputTokens = messages.reduce((sum, message) => sum + (typeof message.content === "string" ? estimateTokens(message.content) : Array.isArray(message.content) ? message.content.reduce((total, part) => total + (part.type === "text" ? estimateTokens(part.text) : 3000), 0) : 0), 0);
     let providerOutputTokens: number | undefined;
     const citations = new Map<string, string>();
+    const toolCalls = new Map<number, { id: string; name: string; arguments: string }>();
+    const collectToolCalls = (json: any) => {
+      const deltas = json.choices?.[0]?.delta?.tool_calls;
+      if (!Array.isArray(deltas)) return;
+      for (const delta of deltas) {
+        const index = Number.isInteger(delta.index) ? delta.index : toolCalls.size;
+        const call = toolCalls.get(index) || { id: "", name: "", arguments: "" };
+        if (typeof delta.id === "string") call.id = delta.id;
+        if (typeof delta.function?.name === "string") call.name += delta.function.name;
+        if (typeof delta.function?.arguments === "string") call.arguments += delta.function.arguments;
+        toolCalls.set(index, call);
+      }
+    };
     const collectCitations = (json: any) => {
       const annotations = json.choices?.[0]?.delta?.annotations || json.choices?.[0]?.message?.annotations || [];
       for (const annotation of annotations) {
@@ -306,6 +341,7 @@ export async function streamChatCompletion(
         try { json = JSON.parse(data); } catch { continue; }
         if (json.error) throw new Error(json.error.message || "Provider stream failed");
         collectCitations(json);
+        collectToolCalls(json);
         {
           const token =
             json.choices?.[0]?.delta?.content ??
@@ -331,6 +367,7 @@ export async function streamChatCompletion(
       if (json?.error) throw new Error(json.error.message || "Provider stream failed");
       if (json) {
         collectCitations(json);
+        collectToolCalls(json);
         const token = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.text ?? "";
         if (token) { output += token; callbacks.onToken(token); }
         if (json.usage) {
@@ -339,9 +376,11 @@ export async function streamChatCompletion(
         }
       }
     }
-    if (!output.trim()) {
+    if (!output.trim() && toolCalls.size === 0) {
       throw new Error("Модель вернула пустой ответ. Повторите запрос вручную; автоматический повтор отключён.");
     }
+
+    if (toolCalls.size) callbacks.onToolCalls?.([...toolCalls.values()]);
 
     if (opts?.webSearch && citations.size) {
       const withSources = appendSearchSources(output, [...citations].map(([url, title]) => ({ url, title })));

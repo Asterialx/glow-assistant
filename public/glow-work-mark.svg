@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <title>Glow Work</title>
+  <path d="M24 4.5C20.5 9.2 7.5 21.1 7.5 29.5a16.5 16.5 0 1 0 33 0C40.5 21.1 27.5 9.2 24 4.5Z" stroke="#D97757" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="16.5" y="25" width="5.5" height="11" rx="2.75" fill="#D97757"/>
+  <rect x="26" y="25" width="5.5" height="11" rx="2.75" fill="#D97757"/>
+</svg>

@@ -8,6 +8,8 @@ import {
   ArrowUp,
   Square,
   Globe,
+  FolderOpen,
+  Download,
 } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { PlusActionMenu } from "./PlusActionMenu";
@@ -35,6 +37,8 @@ import {
 import { setMcpEnabled } from "../../lib/tauri";
 import { ATTACHMENT_ACCEPT } from "../../lib/filePolicy";
 import { FileAttachment, DocumentActivity } from "../chat/FileAttachment";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { chooseWorkspace, currentWorkspaceName, isDesktopApp, clearWorkspace } from "../../lib/workspace";
 
 interface Props {
   onSend: (text: string, files?: File[]) => void | boolean | Promise<void | boolean>;
@@ -50,15 +54,26 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
   const locale = useUiStore((s) => s.locale);
+  const setMode = useModeStore((s) => s.setMode);
+  const mode = useModeStore((s) => s.mode);
+  const taskMode = useWorkspaceStore((s) => s.taskMode);
   const designMode = useModeStore((s) => s.designMode);
   const setDesignMode = useModeStore((s) => s.setDesignMode);
   const chromeAgentActive = useModeStore((s) => s.chromeAgentActive);
   const setChromeAgentActive = useModeStore((s) => s.setChromeAgentActive);
   const webSearch = useModeStore((s) => s.webSearch);
   const setWebSearch = useModeStore((s) => s.setWebSearch);
+  const workspaceEnabled = useWorkspaceStore((s) => s.enabled);
+  const setWorkspaceEnabled = useWorkspaceStore((s) => s.setEnabled);
+  const workspaceName = useWorkspaceStore((s) => s.folderName);
+  const setWorkspaceName = useWorkspaceStore((s) => s.setFolderName);
+  const workspaceTaskStatus = useWorkspaceStore((s) => s.taskStatus);
+  const setWorkspaceTaskStatus = useWorkspaceStore((s) => s.setTaskStatus);
   const fileAccept = ATTACHMENT_ACCEPT;
   const lang = resolveSttLang(locale);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [downloadInfoOpen, setDownloadInfoOpen] = useState(false);
+  const [workspaceDisclosureOpen, setWorkspaceDisclosureOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<Record<number, string>>({});
   useEffect(() => {
@@ -68,6 +83,55 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
   }, [files]);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isDesktopApp()) return;
+    void currentWorkspaceName().then((name) => {
+      if (name) {
+        setWorkspaceName(name);
+        if (useWorkspaceStore.getState().enabled) setMode("code");
+      }
+    }).catch(() => {});
+  }, [setMode, setWorkspaceEnabled, setWorkspaceName]);
+
+  const connectWorkspace = async () => {
+    if (!isDesktopApp()) { setDownloadInfoOpen(true); return; }
+    try {
+      const name = await chooseWorkspace();
+      if (name) {
+        setWorkspaceName(name);
+        setWorkspaceEnabled(true);
+        setMode("code");
+        setWorkspaceTaskStatus("");
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Не удалось подключить папку.");
+    }
+  };
+  const openWorkMode = async () => {
+    setMode("code");
+    setDownloadInfoOpen(false);
+  };
+
+  const selectWorkFolder = () => {
+    if (!isDesktopApp()) { setDownloadInfoOpen(true); return; }
+    if (window.localStorage.getItem("glow.workspaceDisclosure.v1") !== "1") setWorkspaceDisclosureOpen(true);
+    else void connectWorkspace();
+  };
+
+  useEffect(() => {
+    const onOpenWorkMode = () => { void openWorkMode(); };
+    const onShowWorkDownload = () => setDownloadInfoOpen(true);
+    const onChangeWorkFolder = () => { void connectWorkspace(); };
+    window.addEventListener("glow:open-work-mode", onOpenWorkMode);
+    window.addEventListener("glow:show-work-download", onShowWorkDownload);
+    window.addEventListener("glow:change-work-folder", onChangeWorkFolder);
+    return () => {
+      window.removeEventListener("glow:open-work-mode", onOpenWorkMode);
+      window.removeEventListener("glow:show-work-download", onShowWorkDownload);
+      window.removeEventListener("glow:change-work-folder", onChangeWorkFolder);
+    };
+  }, [connectWorkspace, openWorkMode]);
 
   const [micOpen, setMicOpen] = useState(false);
   const [micHover, setMicHover] = useState(false);
@@ -506,6 +570,12 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
     >
       <div className={cn("mx-auto", centered ? "max-w-[720px]" : "max-w-3xl")}>
         {preparing && <DocumentActivity phase="reading" locale={locale} />}
+        {mode === "code" && workspaceTaskStatus && (
+          <div className="mb-2 flex min-w-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-[12px]" role="status" aria-live="polite">
+            <img src="/glow-work-mark.svg" alt="" className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words text-[var(--fg-muted)]">{workspaceTaskStatus}</span>
+          </div>
+        )}
         {files.length > 0 && (
           <div className="mb-2 flex flex-wrap gap-2">
             {files.map((f, index) => (
@@ -583,7 +653,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
               value={draft}
               disabled={disabled}
               rows={1}
-              placeholder={centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
+              placeholder={mode === "code" ? (taskMode === "plan" ? (locale === "ru" ? "Что нужно спланировать?" : "What would you like to plan?") : (locale === "ru" ? "Какую задачу выполнить?" : "What would you like to get done?")) : centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
               className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
               onChange={(e) => {
                 setDraft(e.target.value);
@@ -659,6 +729,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
                     menuOpen && "bg-[var(--bg-hover)]",
                   )}
                   onClick={() => setMenuOpen((v) => !v)}
+                  disabled={disabled}
                   aria-label="+"
                   aria-expanded={menuOpen}
                 >
@@ -820,6 +891,31 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
           )}
         </div>
       </div>
+      {mode === "code" && <div className="mx-auto mt-3 flex max-w-[720px] flex-wrap items-center justify-between gap-2 px-2 text-[12px] text-[var(--fg-muted)]">
+        <div className="flex min-w-0 items-center gap-1">
+          <button type="button" disabled={disabled} onClick={selectWorkFolder} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--bg-hover)] disabled:opacity-50" title={workspaceName || undefined}>
+            <FolderOpen size={14} /><span className="max-w-[220px] truncate">{workspaceEnabled && workspaceName ? workspaceName : locale === "ru" ? "Выбрать папку" : "Choose folder"}</span><ChevronDown size={12} />
+          </button>
+          {workspaceEnabled && <button type="button" disabled={disabled} aria-label={locale === "ru" ? "Работать без папки" : "Work without a folder"} className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]" onClick={async () => { await clearWorkspace(); setWorkspaceEnabled(false); setWorkspaceName(null); setWorkspaceTaskStatus(""); }}><X size={12} /></button>}
+        </div>
+        <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? "Plan" : "Work"}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только планирование" : "Planning only") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : (locale === "ru" ? "Папка подключена" : "Folder connected")}</span></span>
+      </div>}
+      {downloadInfoOpen && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDownloadInfoOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="glow-work-download-title" className="w-full max-w-md overflow-hidden rounded-[26px] border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-[var(--border)] px-6 py-5"><img src="/glow-work-mark.svg" alt="" aria-hidden="true" className="h-10 w-10 shrink-0 object-contain" /><div><h2 id="glow-work-download-title" className="text-lg font-medium">{locale === "ru" ? "Подключение папки" : "Connect a folder"}</h2><p className="text-[12px] text-[var(--fg-muted)]">{locale === "ru" ? "Доступно в приложении" : "Available in the app"}</p></div><button type="button" className="ml-auto rounded-lg p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]" aria-label={locale === "ru" ? "Закрыть" : "Close"} onClick={() => setDownloadInfoOpen(false)}><X size={16} /></button></div>
+            <div className="space-y-4 px-6 py-5"><p className="text-sm leading-6 text-[var(--fg-muted)]">{locale === "ru" ? "Для доступа к папке на компьютере откройте приложение Glow. В браузере можно продолжить работу без папки и прикреплять нужные файлы к сообщениям." : "Open the Glow desktop app to connect a folder on your computer. In the browser you can work without a folder and attach files to messages."}</p><button type="button" disabled className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white opacity-60"><Download size={16} />{locale === "ru" ? "Скачать Glow для Windows · скоро" : "Download Glow for Windows · coming soon"}</button><p className="text-center text-[11px] leading-5 text-[var(--fg-faint)]">{locale === "ru" ? "Настольный установщик ещё не опубликован. После выхода кнопка начнёт его загрузку." : "The desktop installer has not been published yet. This button will download it after release."}</p></div>
+          </section>
+        </div>
+      )}
+      {workspaceDisclosureOpen && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setWorkspaceDisclosureOpen(false); }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="glow-workspace-access-title" className="w-full max-w-md overflow-hidden rounded-[26px] border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-[var(--border)] px-6 py-5"><span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent)]"><FolderOpen size={20} /></span><div><h2 id="glow-workspace-access-title" className="text-lg font-medium">{locale === "ru" ? "Рабочая папка" : "Workspace folder"}</h2><p className="text-[12px] text-[var(--fg-muted)]">{locale === "ru" ? "Доступ только после вашего выбора" : "Access starts only after you choose"}</p></div><button type="button" className="ml-auto rounded-lg p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]" aria-label={locale === "ru" ? "Закрыть" : "Close"} onClick={() => setWorkspaceDisclosureOpen(false)}><X size={16} /></button></div>
+            <div className="space-y-4 px-6 py-5"><p className="text-sm leading-6 text-[var(--fg-muted)]">{locale === "ru" ? "Glow сможет просматривать выбранную папку, читать нужные поддерживаемые файлы и создавать новые результаты. Материалы, которые Glow прочитает для ответа, отправляются выбранному AI-провайдеру." : "Glow can browse the selected folder, read relevant supported files, and create new results. Files read for a response are sent to the selected AI provider."}</p><button type="button" className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white hover:opacity-90" onClick={() => { window.localStorage.setItem("glow.workspaceDisclosure.v1", "1"); setWorkspaceDisclosureOpen(false); void connectWorkspace(); }}>{locale === "ru" ? "Продолжить и выбрать папку" : "Continue and choose a folder"}</button><button type="button" className="w-full rounded-xl px-4 py-2 text-sm text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]" onClick={() => setWorkspaceDisclosureOpen(false)}>{locale === "ru" ? "Пока нет" : "Not now"}</button></div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

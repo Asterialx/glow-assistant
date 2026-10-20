@@ -6,6 +6,7 @@ import {
   Paperclip,
   Plus,
   ScrollText,
+  Check,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useChatStore } from "../../stores/chatStore";
@@ -17,6 +18,7 @@ import { conversationService } from "../../conversation/conversationService";
 import { cloudDataEnabled } from "../../db";
 import { BUILTIN_SKILLS } from "../../lib/skills";
 import { useSkillsStore } from "../../stores/skillsStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 
 type SubKey = "project" | "skills" | null;
 
@@ -30,6 +32,8 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const locale = useUiStore((s) => s.locale);
   const ru = locale === "ru";
   const mode = useModeStore((s) => s.mode);
+  const taskMode = useWorkspaceStore((s) => s.taskMode);
+  const setTaskMode = useWorkspaceStore((s) => s.setTaskMode);
   const webSearch = useModeStore((s) => s.webSearch);
   const setWebSearch = useModeStore((s) => s.setWebSearch);
   const projects = useChatStore((s) => s.projects);
@@ -67,10 +71,15 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
 
   return (
     <div ref={rootRef} className="absolute bottom-full left-0 z-50 mb-2 flex items-end gap-1.5">
-      <div className="w-[min(280px,44vw)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
+      <div className="w-[min(300px,calc(100vw-48px))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
+        {mode === "code" && <>
+          <MenuRow icon={<Briefcase size={16} />} label="Work" active={taskMode === "work"} trailing={taskMode === "work" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("work"); onClose(); }} onMouseEnter={() => setSub(null)} />
+          <MenuRow icon={<ScrollText size={16} />} label="Plan" active={taskMode === "plan"} trailing={taskMode === "plan" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("plan"); onClose(); }} onMouseEnter={() => setSub(null)} />
+          <div className="my-1.5 border-t border-[var(--border)]" />
+        </>}
         {<MenuRow
           icon={<Paperclip size={16} strokeWidth={1.7} />}
-          label="Add files or photos"
+          label={ru ? "Файлы и фото" : "Add files or photos"}
           trailing={<span className="text-[12px] text-[var(--fg-faint)]">Ctrl+U</span>}
           onClick={openFiles}
         />}
