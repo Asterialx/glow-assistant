@@ -146,7 +146,6 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
             const path = args.relative_path;
             if (typeof path !== "string" || path.length > 500) throw new Error("Glow получил недопустимое имя файла.");
             if (readPaths.has(path)) throw new Error("Этот файл уже прочитан в текущей задаче.");
-            if (readPaths.size >= 8) throw new Error("В одной задаче можно прочитать не более восьми файлов.");
             readPaths.add(path);
             generation.onAgentStatus?.(generation.locale === "ru" ? `Читаю · ${path}` : `Reading · ${path}`);
             const bytes = await readWorkspaceFile(path);
@@ -155,7 +154,6 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
             let text = items.filter((item) => item.text).map((item) => item.text).join("\n\n");
             if (generation.mode === "med") text = (await redactPii(text)).text;
             readChars += text.length;
-            if (readChars > 100000) throw new Error("Для этой задачи прочитано слишком много текста. Уточните, какие материалы важнее.");
             const images = items.filter((item) => item.image);
             if (generation.mode === "med" && images.length) throw new Error(generation.locale === "ru" ? "Режим Med не передаёт изображения рабочей папки, чтобы не отправлять неотредактированные персональные данные. Используйте обезличенную копию." : "Med mode does not send workspace images to avoid sharing unredacted personal data. Use a redacted copy.");
             imageCount += images.length;
