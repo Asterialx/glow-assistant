@@ -10,7 +10,7 @@ import { redactPii } from "../../lib/tauri";
 import type { Locale } from "../../lib/i18n";
 import {
   clarifyPrompt, courseworkRequestBefore, formatQuestions, generateCoursework, isAwaitingCourseworkAnswer,
-  isCourseworkRequest, parseClarification, readCourseworkSettings,
+  isCourseworkRequest, parseClarification,
 } from "../../lib/coursework";
 
 /**
@@ -64,9 +64,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
           return;
         }
       }
-      const storage = (key: string) => { try { return localStorage.getItem(key); } catch { return null; } };
-      const settings = readCourseworkSettings(storage);
-      const course = await generateCoursework(topic, { complete, onStatus: generation.onAgentStatus, signal, ...settings });
+      const course = await generateCoursework(topic, { complete, onStatus: generation.onAgentStatus, signal });
       const file = JSON.stringify({ format: "docx", filename: `${course.title}.docx`, title: course.title, content: course.markdown });
       callbacks.onToken(`Курсовая «${course.title}» готова. Файл ниже. Список литературы составлен моделью: проверьте каждый источник перед сдачей.\n\n\`\`\`glow-file\n${file}\n\`\`\``);
       callbacks.onDone(usageTotal);

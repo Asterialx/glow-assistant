@@ -95,19 +95,6 @@ function referencesPrompt(topic: string): CourseworkMessage[] {
 /** Marks the assistant message that asks clarifying questions, so the next user message is read as an answer. */
 export const COURSEWORK_QUESTIONS_MARK = "Перед написанием курсовой уточню:";
 
-function clampSetting(raw: string | null, min: number, max: number, fallback: number): number {
-  const value = Number(raw);
-  return Number.isFinite(value) && value > 0 ? Math.min(max, Math.max(min, Math.round(value))) : fallback;
-}
-
-/** Settings are read from storage so a short test run can use fewer pages and tokens. */
-export function readCourseworkSettings(read: (key: string) => string | null): { pages: number; chapterMaxTokens: number } {
-  return {
-    pages: clampSetting(read("glow.courseworkPages"), 2, 60, 30),
-    chapterMaxTokens: clampSetting(read("glow.courseworkChapterTokens"), 1000, 16000, 8000),
-  };
-}
-
 export function clarifyPrompt(topic: string): CourseworkMessage[] {
   return [
     { role: "system", content: 'Ты помогаешь подготовить курсовую работу. Реши, нужны ли уточнения, чтобы написать хорошую работу. Спрашивай только о важном: тема и её формулировка, направление и аудитория, объём, методы или источники, требования вуза. Не больше 4 вопросов. Верни только JSON {"ready":true|false,"questions":["..."]} без пояснений.' },
