@@ -1,30 +1,49 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 
+/** docx-preview output is untrusted: keep only http(s)/mailto links, drop scripts and on* handlers. */
+function sanitizeWordBody(body: HTMLElement): string {
+  body.querySelectorAll("script, iframe, object, embed").forEach(element => element.remove());
+  body.querySelectorAll("*").forEach(element => {
+    for (const { name } of Array.from(element.attributes)) if (name.startsWith("on")) element.removeAttribute(name);
+  });
+  body.querySelectorAll("a").forEach(link => {
+    if (!/^(https?:|mailto:)/i.test(link.getAttribute("href") ?? "")) link.removeAttribute("href");
+    link.setAttribute("target", "_blank");
+    link.setAttribute("rel", "noopener noreferrer");
+  });
+  return body.innerHTML;
+}
+
+/** Sandboxed document: no scripts, no same-origin access, no network and no form or base navigation. */
+function wordDocument(body: string, scale: number): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; base-uri 'none'; form-action 'none'"><style>body{margin:0;padding:16px;background:#e7e8ec;color:#243447;zoom:${scale}}section.glow-word{background:white;box-shadow:0 2px 12px #0002;margin:0 auto 24px;box-sizing:border-box}p{max-width:none}</style></head><body>${body}</body></html>`;
+}
+
 export function WordFilePreview({ blob }: { blob: Blob }) {
-  const host = useRef<HTMLDivElement>(null), page = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1), [error, setError] = useState("");
+  const host = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1), [error, setError] = useState(""), [body, setBody] = useState("");
   useEffect(() => {
     const container = host.current;
     if (!container) return;
-    const observer = new ResizeObserver(() => setScale(Math.min(1, Math.max(.2, (container.clientWidth - 32) / 794))));
+    const observer = new ResizeObserver(() => setScale(Math.round(Math.min(1, Math.max(.2, (container.clientWidth - 32) / 794)) * 20) / 20));
     observer.observe(container); return () => observer.disconnect();
   }, []);
   useEffect(() => {
     let cancelled = false;
     const target = document.createElement("div");
-    setError("");
+    setError(""); setBody("");
     void import("docx-preview").then(({ renderAsync }) => renderAsync(blob, target, undefined, {
       className: "glow-word", inWrapper: false, ignoreWidth: false, ignoreHeight: false,
       ignoreFonts: false, breakPages: true, ignoreLastRenderedPageBreak: false,
       renderAltChunks: false, useBase64URL: true,
-    })).then(() => { if (!cancelled && page.current) page.current.replaceChildren(target); })
+    })).then(() => { if (!cancelled) setBody(sanitizeWordBody(target)); })
       .catch(e => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, [blob]);
-  return <div ref={host} className="min-h-0 flex-1 overflow-auto bg-[#e7e8ec] p-4">
-    {error && <p role="alert" className="text-sm text-[#334155]">{error}</p>}
-    <div ref={page} className="glow-word-pages mx-auto w-fit text-[#243447]" style={{ zoom: scale } as CSSProperties} />
-    <style>{`.glow-word-pages section.glow-word {background:white;box-shadow:0 2px 12px #0002;margin:0 auto 24px;box-sizing:border-box}.glow-word-pages p{max-width:none}`}</style>
+  return <div ref={host} className="flex min-h-0 flex-1 flex-col bg-[#e7e8ec]">
+    {error && <p role="alert" className="p-4 text-sm text-[#334155]">{error}</p>}
+    {body && <iframe title="word-preview" sandbox="" referrerPolicy="no-referrer" className="min-h-0 w-full flex-1 border-0"
+      srcDoc={wordDocument(body, scale)} />}
   </div>;
 }
 

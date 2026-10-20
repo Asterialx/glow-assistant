@@ -136,19 +136,30 @@ function previewBridge(channel: string, initial: HtmlPreviewState, themed: boole
   });
   window.addEventListener("resize", publishSize);
   window.addEventListener("load", publishSize);
+  // Links would navigate this frame to an arbitrary page inside the app panel; only in-page anchors stay active.
+  document.addEventListener("click", (event) => {
+    const link = (event.target as Element | null)?.closest?.("a[href]");
+    if (link && !(link.getAttribute("href") || "").startsWith("#")) event.preventDefault();
+  }, true);
 }
 
 export function buildHtmlPreviewDocument(html: string, channel: string, saved?: HtmlPreviewState, theme?: Pick<ThemeDef, "vars" | "kind">): string {
   const state = validateHtmlPreviewState(saved) ?? { forms: {}, custom: {} };
   const escapeJson = (value: unknown) => JSON.stringify(value).replace(/</g, "\\u003c").replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
-  const bootstrap = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'"><script>(${previewBridge.toString()})(${escapeJson(channel)},${escapeJson(state)},${Boolean(theme)});</script>`;
-  let document = /<head\b[^>]*>/i.test(html) ? html.replace(/<head\b[^>]*>/i, (head) => `${head}${bootstrap}`)
-    : /<html\b[^>]*>/i.test(html) ? html.replace(/<html\b[^>]*>/i, (root) => `${root}<head>${bootstrap}</head>`)
-    : `<!doctype html><html><head>${bootstrap}</head><body>${html}</body></html>`;
+  // Parsed into an inert document, so the bootstrap is always the first head child, whatever tags the model wrote.
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const csp = parsed.createElement("meta");
+  csp.httpEquiv = "Content-Security-Policy";
+  csp.content = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:; connect-src 'none'; base-uri 'none'; form-action 'none'";
+  const bridge = parsed.createElement("script");
+  bridge.textContent = `(${previewBridge.toString()})(${escapeJson(channel)},${escapeJson(state)},${Boolean(theme)});`;
+  parsed.head.prepend(csp, bridge);
   if (theme) {
     const vars = Object.entries(theme.vars).filter(([key, value]) => /^--[a-z-]+$/.test(key) && !/[<>;{}]/.test(value)).map(([key,value]) => `${key}:${value} !important;`).join("");
-    const style = `<style data-glow-theme>:root{${vars}--glow-color-scheme:${theme.kind};}${canvasThemeCss}</style>`;
-    document = /<\/body>/i.test(document) ? document.replace(/<\/body>/i, `${style}</body>`) : `${document}${style}`;
+    const style = parsed.createElement("style");
+    style.setAttribute("data-glow-theme", "");
+    style.textContent = `:root{${vars}--glow-color-scheme:${theme.kind};}${canvasThemeCss}`;
+    parsed.body.appendChild(style);
   }
-  return document;
+  return `<!doctype html>${parsed.documentElement.outerHTML}`;
 }
