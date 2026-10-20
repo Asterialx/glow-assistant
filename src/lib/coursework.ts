@@ -97,19 +97,29 @@ export const COURSEWORK_QUESTIONS_MARK = "Перед написанием кур
 
 export function clarifyPrompt(topic: string): CourseworkMessage[] {
   return [
-    { role: "system", content: 'Ты помогаешь подготовить курсовую работу. Реши, нужны ли уточнения, чтобы написать хорошую работу. Спрашивай только о важном: тема и её формулировка, направление и аудитория, объём, методы или источники, требования вуза. Не больше 4 вопросов. Верни только JSON {"ready":true|false,"questions":["..."]} без пояснений.' },
+    { role: "system", content: 'Ты помогаешь подготовить курсовую работу. Реши, нужны ли уточнения, чтобы написать хорошую работу. Спрашивай только о важном: тема и её формулировка, направление и аудитория, объём, методы или источники, требования вуза. Не больше 4 вопросов. Если у вопроса есть очевидные варианты ответа, дай 2–5 коротких options, иначе options не указывай. Верни только JSON {"ready":true|false,"questions":[{"prompt":"...","options":["..."]}]} без пояснений.' },
     { role: "user", content: `Запрос: ${topic}` },
   ];
 }
 
-export function parseClarification(raw: string): { ready: boolean; questions: string[] } {
+export type ClarifyingQuestion = { prompt: string; options?: string[] };
+
+export function parseClarification(raw: string): { ready: boolean; questions: ClarifyingQuestion[] } {
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start < 0 || end <= start) return { ready: true, questions: [] };
   try {
     const value = JSON.parse(raw.slice(start, end + 1));
-    const questions = Array.isArray(value?.questions)
-      ? value.questions.filter((q: unknown) => typeof q === "string" && q.trim()).map((q: string) => q.trim().slice(0, 300)).slice(0, 4)
+    const questions: ClarifyingQuestion[] = Array.isArray(value?.questions)
+      ? value.questions.slice(0, 4).flatMap((item: unknown): ClarifyingQuestion[] => {
+        if (typeof item === "string" && item.trim()) return [{ prompt: item.trim().slice(0, 300) }];
+        const question = item as { prompt?: unknown; options?: unknown };
+        if (typeof question?.prompt !== "string" || !question.prompt.trim()) return [];
+        const options = Array.isArray(question.options)
+          ? [...new Set(question.options.filter((o: unknown) => typeof o === "string" && o.trim()).map((o: string) => o.trim().slice(0, 120)))].slice(0, 5)
+          : [];
+        return [{ prompt: question.prompt.trim().slice(0, 300), ...(options.length >= 2 ? { options } : {}) }];
+      })
       : [];
     return value?.ready === false && questions.length > 0 ? { ready: false, questions } : { ready: true, questions: [] };
   } catch {
@@ -117,9 +127,16 @@ export function parseClarification(raw: string): { ready: boolean; questions: st
   }
 }
 
-export function formatQuestions(questions: string[]): string {
-  const list = questions.map((question, index) => `${index + 1}. ${question}`).join("\n");
-  return `${COURSEWORK_QUESTIONS_MARK}\n\n${list}\n\nОтветьте одним сообщением. Если уточнения не нужны, напишите «пропустить».`;
+/** Questions go out as an interactive questionnaire block, the same card the chat uses for clarifications. */
+export function formatQuestions(questions: ClarifyingQuestion[]): string {
+  const block = {
+    type: "questionnaire",
+    title: "Уточнения для курсовой",
+    questions: questions.map((question, index) => question.options
+      ? { id: `q${index + 1}`, prompt: question.prompt, mode: "single", options: question.options, required: false }
+      : { id: `q${index + 1}`, prompt: question.prompt, mode: "text", required: false }),
+  };
+  return `${COURSEWORK_QUESTIONS_MARK}\n\n\`\`\`glow-ui\n${JSON.stringify(block)}\n\`\`\`\n\nМожно ответить на вопросы карточкой выше или написать «пропустить».`;
 }
 
 /** The last coursework request before the most recent assistant message, or "" when there is none. */

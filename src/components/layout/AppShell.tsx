@@ -241,7 +241,7 @@ export function AppShell() {
       designMode,
       webSearch: webSearch || shouldSearchWeb(userText),
       workspaceTools: workspaceEnabled,
-      ...(workspaceEnabled ? { onAgentStatus: setWorkspaceTaskStatus } : {}),
+      ...(mode === "code" ? { onAgentStatus: setWorkspaceTaskStatus } : {}),
     };
   };
 

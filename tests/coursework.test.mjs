@@ -85,15 +85,16 @@ test('stops between steps when the request is aborted', async () => {
 });
 
 test('parses clarification questions and treats broken answers as ready', () => {
-  assert.deepEqual(parseClarification('{"ready":false,"questions":["Кто аудитория?","Какой объём?"]}'), { ready: false, questions: ['Кто аудитория?', 'Какой объём?'] });
+  assert.deepEqual(parseClarification('{"ready":false,"questions":["Кто аудитория?",{"prompt":"Формат?","options":["Эссе","Исследование"]}]}'), { ready: false, questions: [{ prompt: 'Кто аудитория?' }, { prompt: 'Формат?', options: ['Эссе', 'Исследование'] }] });
   assert.deepEqual(parseClarification('{"ready":true,"questions":[]}'), { ready: true, questions: [] });
   assert.deepEqual(parseClarification('не json'), { ready: true, questions: [] });
 });
 
 test('questions message carries the marker that the next reply is read against', () => {
-  const message = formatQuestions(['Кто аудитория?']);
+  const message = formatQuestions([{ prompt: 'Кто аудитория?' }]);
   assert.ok(message.startsWith(COURSEWORK_QUESTIONS_MARK));
-  assert.match(message, /1\. Кто аудитория\?/);
+  assert.match(message, /```glow-ui\n\{"type":"questionnaire"/);
+  assert.match(message, /"prompt":"Кто аудитория\?"/);
   assert.equal(isAwaitingCourseworkAnswer([{ role: 'user', content: 'курсовая' }, { role: 'assistant', content: message }, { role: 'user', content: 'для вузовских преподавателей' }]), true);
   assert.equal(isAwaitingCourseworkAnswer([{ role: 'user', content: 'курсовая' }, { role: 'assistant', content: 'готово' }]), false);
 });
@@ -101,7 +102,7 @@ test('questions message carries the marker that the next reply is read against',
 test('finds the original coursework request before the questions', () => {
   const history = [
     { role: 'user', content: 'Напиши курсовую по экономике' },
-    { role: 'assistant', content: formatQuestions(['Какой объём?']) },
+    { role: 'assistant', content: formatQuestions([{ prompt: 'Какой объём?' }]) },
     { role: 'user', content: '10 страниц' },
   ];
   assert.equal(courseworkRequestBefore(history), 'Напиши курсовую по экономике');

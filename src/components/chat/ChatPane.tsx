@@ -26,6 +26,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
 import { useModeStore } from "../../stores/modeStore";
+import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { t } from "../../lib/i18n";
 import { SmartInputBar } from "../input/SmartInputBar";
 import { cn } from "../../lib/utils";
@@ -120,6 +121,7 @@ export function ChatPane({
   const activeArtifactId = useChatStore((s) => s.activeArtifactId);
   const designMode = useModeStore((s) => s.designMode);
   const agentMode = useModeStore((s) => s.mode) === "code";
+  const workspaceTaskStatus = useWorkspaceStore((s) => s.taskStatus);
   const empty = messages.length === 0;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -396,7 +398,7 @@ export function ChatPane({
                       {display.buildingFile ? locale === "ru" ? "Создаю файл…" : "Creating file…" : webSearching && isLast
                         ? locale === "ru" ? "Проверяю свежие сайты…" : "Checking current websites…"
                         : showThinking
-                        ? t(locale, "thinking")
+                        ? (agentMode && workspaceTaskStatus ? workspaceTaskStatus : t(locale, "thinking"))
                         : display.buildingHtml
                           ? designMode
                             ? t(locale, "buildingDesign")
