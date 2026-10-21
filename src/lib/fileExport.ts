@@ -82,15 +82,74 @@ export async function exportGeneratedFile(input: GeneratedFile): Promise<Blob> {
     const inlineTokens = marked.lexer(text).flatMap((token: any) => token.tokens || [{ text }]);
     return inlineTokens.map((token: any) => new d.TextRun({ text: token.type === "link" ? `${token.text} (${token.href})` : token.text || token.raw || "", bold: token.type === "strong", italics: token.type === "em", ...(token.type === "codespan" ? { font: "Consolas" } : {}) }));
   };
-  const children: (InstanceType<typeof d.Paragraph> | InstanceType<typeof d.Table>)[] = [];
-  for (const token of tokens as any[]) {
+  const font = "Times New Roman";
+  const pageMargin = { top: 1134, bottom: 1134, left: 1701, right: 851 };
+  const body: any[] = [];
+  const bodyParagraph = (children: any[]) => new d.Paragraph({ children, alignment: d.AlignmentType.JUSTIFIED, indent: { firstLine: 709 }, spacing: { line: 360, after: 0 } });
+  const headingLevel = (depth: number) => depth === 2 ? d.HeadingLevel.HEADING_1 : depth === 3 ? d.HeadingLevel.HEADING_2 : d.HeadingLevel.HEADING_3;
+  const listItems = (list: any, level: number): void => {
+    list.items.forEach((item: any, index: number) => {
+      const own = (item.tokens || []).filter((token: any) => token.type !== "list" && token.type !== "space");
+      const text = own.map((token: any) => token.text ?? token.raw ?? "").join(" ").trim() || item.text;
+      const prefix = list.ordered ? `${(list.start || 1) + index}. ` : "";
+      body.push(new d.Paragraph({
+        children: runs(prefix + text),
+        ...(list.ordered ? { indent: { left: 709 + level * 709, hanging: 357 } } : { bullet: { level } }),
+        alignment: d.AlignmentType.JUSTIFIED,
+        spacing: { line: 360, after: 60 },
+      }));
+      for (const nested of (item.tokens || []).filter((token: any) => token.type === "list")) listItems(nested, level + 1);
+    });
+  };
+  const tokenList = tokens as any[];
+  const titleToken = tokenList[0]?.type === "heading" && tokenList[0].depth === 1 ? tokenList[0] : null;
+  const showContents = tokenList.filter((token) => token.type === "heading" && token.depth >= 2).length >= 2;
+  for (let index = titleToken ? 1 : 0; index < tokenList.length; index++) {
+    const token = tokenList[index];
     if (token.type === "space") continue;
-    if (token.type === "heading") children.push(new d.Paragraph({ text: plain(token.text), heading: token.depth === 1 ? d.HeadingLevel.TITLE : token.depth === 2 ? d.HeadingLevel.HEADING_1 : d.HeadingLevel.HEADING_2, spacing: { before: 220, after: 140 } }));
-    else if (token.type === "list") token.items.forEach((item: any, index: number) => children.push(new d.Paragraph({ children: runs(`${token.ordered ? `${index + 1}. ` : ""}${item.text}`), ...(!token.ordered ? { bullet: { level: 0 } } : {}), spacing: { after: 100 } })));
-    else if (token.type === "table") children.push(new d.Table({ width: { size: 100, type: d.WidthType.PERCENTAGE }, rows: [token.header, ...token.rows].map((row: any[], index: number) => new d.TableRow({ children: row.map(cell => new d.TableCell({ children: [new d.Paragraph({ children: [new d.TextRun({ text: plain(cell.text), bold: index === 0 })] })], ...(index === 0 ? { shading: { fill: "EEF2F6" } } : {}) })) })) }));
-    else children.push(new d.Paragraph({ children: token.type === "code" ? [new d.TextRun({ text: token.text, font: "Consolas", size: 20 })] : runs(token.text || token.raw || ""), spacing: { after: 180, line: 300 } }));
+    if (token.type === "heading" && plain(token.text).trim().toLowerCase() === "содержание") {
+      // The contents are generated from the headings, so the hand-written list is dropped.
+      if (tokenList[index + 1]?.type === "list") index++;
+      continue;
+    }
+    if (token.type === "heading") body.push(new d.Paragraph({ text: plain(token.text), heading: headingLevel(token.depth) }));
+    else if (token.type === "list") listItems(token, 0);
+    else if (token.type === "table") body.push(new d.Table({ width: { size: 100, type: d.WidthType.PERCENTAGE }, rows: [token.header, ...token.rows].map((row: any[], rowIndex: number) => new d.TableRow({ children: row.map(cell => new d.TableCell({ children: [new d.Paragraph({ children: [new d.TextRun({ text: plain(cell.text), bold: rowIndex === 0, font, size: 24 })] })], ...(rowIndex === 0 ? { shading: { fill: "EEF2F6" } } : {}) })) })) }));
+    else if (token.type === "code") body.push(new d.Paragraph({ children: [new d.TextRun({ text: token.text, font: "Consolas", size: 20 })], spacing: { after: 180 } }));
+    else body.push(bodyParagraph(runs(token.text || token.raw || "")));
   }
-  return d.Packer.toBlob(new d.Document({ creator: "Glow", title: file.title, styles: { default: { document: { run: { font: "Arial", size: 22, color: "243447" } } } }, sections: [{ properties: { page: { margin: { top: 850, bottom: 850, left: 850, right: 850 } } }, children }] }));
+  const sections: any[] = [];
+  if (titleToken) {
+    sections.push({
+      properties: { page: { margin: pageMargin } },
+      children: [new d.Paragraph({ alignment: d.AlignmentType.CENTER, spacing: { before: 3600, after: 400 }, children: [new d.TextRun({ text: plain(titleToken.text), bold: true, size: 32, font })] })],
+    });
+  }
+  const contents = showContents ? [
+    new d.Paragraph({ text: "Содержание", heading: d.HeadingLevel.HEADING_1 }),
+    new d.TableOfContents("Содержание", { hyperlink: true, headingStyleRange: "1-3" }),
+    new d.Paragraph({ children: [new d.PageBreak()] }),
+  ] : [];
+  sections.push({
+    properties: { page: { margin: pageMargin } },
+    footers: { default: new d.Footer({ children: [new d.Paragraph({ alignment: d.AlignmentType.CENTER, children: [new d.TextRun({ children: [d.PageNumber.CURRENT], font, size: 24 })] })] }) },
+    children: [...contents, ...body],
+  });
+  const heading = (id: string, name: string, extra: Record<string, unknown>) => ({ id, name, basedOn: "Normal", next: "Normal", quickFormat: true, run: { font, size: 28, bold: true, color: "000000", ...(extra.italics ? { italics: true } : {}) }, paragraph: { keepNext: true, spacing: { before: 240, after: 240 }, alignment: extra.center ? d.AlignmentType.CENTER : d.AlignmentType.LEFT } });
+  return d.Packer.toBlob(new d.Document({
+    creator: "Glow",
+    title: file.title,
+    styles: {
+      default: { document: { run: { font, size: 28, color: "000000" } } },
+      paragraphStyles: [
+        heading("Heading1", "Heading 1", { center: true }),
+        heading("Heading2", "Heading 2", {}),
+        heading("Heading3", "Heading 3", { italics: true }),
+      ],
+    },
+    ...(showContents ? { features: { updateFields: true } } : {}),
+    sections,
+  }));
 }
 /** In the desktop app a blob link click does nothing in WebView2, so the file is saved through a native dialog. */
 export async function downloadBlob(blob: Blob, filename: string): Promise<void> {
