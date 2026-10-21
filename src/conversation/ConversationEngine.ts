@@ -107,21 +107,14 @@ export class ConversationEngine<TGeneration> {
 
   async send(input: SendInput<TGeneration>): Promise<ConversationResult | null> {
     if (this.state.streaming) return null;
-    const conversation = input.conversationId
-      ? await this.resolveConversation(input.scope, input.conversationId)
-      : await this.ensureConversation(input.scope, input.projectId ?? null);
+    // Show the message and a waiting placeholder at once; storage writes follow in the background of the UI.
+    const existing = input.conversationId ? null : this.state.conversations.find((item) => item.id === this.state.activeConversationId) ?? null;
+    const created = !input.conversationId && !existing;
+    const conversationId = input.conversationId ?? existing?.id ?? this.createId();
     const parentId = input.parentId === undefined ? this.state.branchPath.at(-1)?.id ?? null : input.parentId;
-
-    if (isDefaultChatTitle(conversation.title) && input.parentId === undefined) {
-      const title = titleFromFirstMessage(input.titleSource ?? input.content);
-      if (title && !isDefaultChatTitle(title)) {
-        await this.repository.renameConversation(input.scope, conversation.id, title);
-      }
-    }
-
     const userMessage: Message = {
       id: this.createId(),
-      conversation_id: conversation.id,
+      conversation_id: conversationId,
       parent_id: parentId,
       role: "user",
       content: input.content,
@@ -129,7 +122,46 @@ export class ConversationEngine<TGeneration> {
       status: "done",
       created_at: this.now(),
     };
-    await this.repository.insertMessage(input.scope, userMessage);
+    const placeholder: Message = {
+      id: this.createId(),
+      conversation_id: conversationId,
+      parent_id: userMessage.id,
+      role: "assistant",
+      content: "",
+      model_id: input.modelId,
+      status: "streaming",
+      created_at: this.now(),
+    };
+    const isNormalSend = input.parentId === undefined || input.parentId === (this.state.branchPath.at(-1)?.id ?? null);
+    const newConversation: Conversation | null = created
+      ? { id: conversationId, project_id: input.projectId ?? null, title: "New chat", active_leaf_id: null, created_at: this.now(), updated_at: this.now() }
+      : null;
+    this.setState({
+      conversations: newConversation ? [newConversation, ...this.state.conversations] : this.state.conversations,
+      activeConversationId: conversationId,
+      messages: isNormalSend ? [...this.state.messages, userMessage, placeholder] : this.state.messages,
+      branchPath: isNormalSend ? [...this.state.branchPath, userMessage, placeholder] : this.state.branchPath,
+      streaming: true,
+    });
+
+    try {
+      if (newConversation) await this.repository.createConversation(input.scope, input.projectId ?? null, "New chat", conversationId);
+      const conversation = input.conversationId ? await this.resolveConversation(input.scope, input.conversationId) : existing ?? newConversation;
+      if (conversation && isDefaultChatTitle(conversation.title) && input.parentId === undefined) {
+        const title = titleFromFirstMessage(input.titleSource ?? input.content);
+        if (title && !isDefaultChatTitle(title)) {
+          await this.repository.renameConversation(input.scope, conversation.id, title);
+        }
+      }
+      await this.repository.insertMessage(input.scope, userMessage);
+    } catch (error) {
+      this.setState({
+        streaming: false,
+        messages: this.state.messages.filter((item) => item.id !== placeholder.id),
+        branchPath: this.state.branchPath.filter((item) => item.id !== placeholder.id),
+      });
+      throw error;
+    }
     return this.generateAssistantReply(input.scope, userMessage, input.modelId, input.generation);
   }
 

@@ -16,7 +16,7 @@ export type GenerationUsage = {
 
 export interface ConversationRepository {
   listConversations(scope: AppMode): Promise<Conversation[]>;
-  createConversation(scope: AppMode, projectId: string | null, title: string): Promise<Conversation>;
+  createConversation(scope: AppMode, projectId: string | null, title: string, id?: string): Promise<Conversation>;
   renameConversation(scope: AppMode, conversationId: string, title: string): Promise<void>;
   deleteConversation(scope: AppMode, conversationId: string): Promise<void>;
   setConversationProject(scope: AppMode, conversationId: string, projectId: string | null): Promise<void>;

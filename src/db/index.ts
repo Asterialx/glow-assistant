@@ -318,11 +318,12 @@ export async function createConversation(
   mode: AppMode,
   projectId: string | null = null,
   title = "New chat",
+  id: string = uid(),
 ): Promise<Conversation> {
   const db = await getModeDb(mode);
   const t = nowMs();
   const conv: Conversation = {
-    id: uid(),
+    id,
     project_id: projectId,
     title,
     active_leaf_id: null,

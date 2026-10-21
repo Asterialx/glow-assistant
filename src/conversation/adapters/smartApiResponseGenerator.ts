@@ -32,6 +32,11 @@ export type LegacyGenerationOptions = {
   onAgentStatus?: (status: string) => void;
 };
 
+/** A full HTML page or a long document does not fit the default 4096-token answer and gets cut off mid-file. */
+function outputBudget(generation: { mode: string; designMode: boolean; maxTokens: number }): number {
+  return generation.mode === "code" || generation.designMode ? Math.max(generation.maxTokens, 12000) : generation.maxTokens;
+}
+
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
   async stream({ history, generation }, callbacks, signal) {
     const currentText = history.filter(message => message.role === "user").at(-1)?.content || "";
@@ -105,7 +110,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
         onToolCalls: (next) => { calls = next; },
       }, signal, {
         temperature: generation.temperature,
-        maxTokens: generation.maxTokens,
+        maxTokens: outputBudget(generation),
         conversationId: history.at(-1)?.conversation_id,
         scope: generation.mode,
         webSearch: generation.webSearch,

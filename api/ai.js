@@ -56,7 +56,7 @@ export default async function handler(req, res) {
   let rejectedByProvider = false;
   let streamingResponse = false;
   const usageCollector = createUsageCollector();
-  const maxOutput = Math.max(16, Math.min(Number(body.max_tokens) || 4096, 8192));
+  const maxOutput = Math.max(16, Math.min(Number(body.max_tokens) || 4096, 16384));
   try {
     const lease = await client.rpc('glow_acquire_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
     if (lease.error) return fail(403, 'Conversation access denied');
