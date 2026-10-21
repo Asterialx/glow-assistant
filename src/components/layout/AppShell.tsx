@@ -51,6 +51,15 @@ import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { isDesktopApp, listWorkspaceFiles, writeWorkspaceFile } from "../../lib/workspace";
 import { exportGeneratedFile } from "../../lib/fileExport";
 
+/** Memory is only used to enrich the prompt, so a slow lookup must not hold up sending. */
+let cachedMemoryFacts: string[] = [];
+async function memoryFactsForPrompt(): Promise<string[]> {
+  const fresh = listMemory()
+    .then((items) => { cachedMemoryFacts = items.map((item) => item.fact); return cachedMemoryFacts; })
+    .catch(() => cachedMemoryFacts);
+  return Promise.race([fresh, new Promise<string[]>((resolve) => setTimeout(() => resolve(cachedMemoryFacts), 300))]);
+}
+
 export function AppShell() {
   const locale = useUiStore((s) => s.locale);
   useEffect(() => {
@@ -192,9 +201,6 @@ export function AppShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, ready]);
 
-  const ensureConversation = async () => {
-    return (await conversationService.ensureConversation(mode, activeProjectId)).id;
-  };
 
   const createGenerationOptions = async (userText = ""): Promise<LegacyGenerationOptions> => {
     const project = projects.find((item) => item.id === activeProjectId);
@@ -225,7 +231,7 @@ export function AppShell() {
       ? "PLAN MODE: inspect available source files if needed and propose a clear actionable plan. Ask only necessary questions. Do not execute the plan, create artifacts, produce glow-file blocks or claim files were saved. Wait for the user to switch to Work before implementation."
       : workspaceEnabled ? "WORK MODE: complete the user's task using the selected workspace when relevant." : "WORK MODE WITHOUT A FOLDER: complete the task using the conversation, attachments and web search if needed. You have no access to local files. Provide requested deliverables as glow-file artifacts for preview and download; never claim to save them to a local folder."
       : "";
-    const memory = memoryPaused || localStorage.getItem("glow.memoryFromChats") !== "1" ? [] : (await listMemory()).map((item) => item.fact);
+    const memory = memoryPaused || localStorage.getItem("glow.memoryFromChats") !== "1" ? [] : await memoryFactsForPrompt();
     const feedback = feedbackPreferenceHints();
     // The experimental catalog must not imply tools that the model cannot call.
     const extensions = "";
@@ -471,7 +477,6 @@ export function AppShell() {
         // Invalid stored UI falls back to the normal conversation path.
       }
     }
-    const convId = await ensureConversation();
     const parentId =
       parentOverride !== undefined ? parentOverride : (branchPath.at(-1)?.id ?? null);
 
@@ -502,7 +507,6 @@ export function AppShell() {
       : generation.webSearch ? "Researching materials and current sources…" : "Preparing the task…");
     const result = await runWithSearchStatus(generation.webSearch, () => conversationService.send({
       scope: mode,
-      conversationId: convId,
       content,
       modelId: generation.modelId,
       generation,
@@ -513,7 +517,7 @@ export function AppShell() {
     if (workspaceStopRequested.current) {
       workspaceStopRequested.current = false;
       setWorkspaceTaskStatus(locale === "ru" ? "Задача остановлена · уже созданные файлы сохранены" : "Task stopped · files already created are saved");
-      await loadConversation(convId);
+      await loadConversation(result.conversationId);
       return;
     }
     if (result.error) { setSyncError(result.error.message); setWorkspaceTaskStatus(`${locale === "ru" ? "Задача прервана" : "Task interrupted"} · ${result.error.message}`); return; }
@@ -521,7 +525,7 @@ export function AppShell() {
     if (!result.error) {
       const assistantText = splitSearchSources(result.assistantMessage.content).text;
       if (saveGeneratedToWorkspace) setWorkspaceTaskStatus(locale === "ru" ? "Подготавливаю результат…" : "Preparing the result…");
-      await maybeSpawnArtifacts(convId, result.assistantMessage.id, assistantText, text, saveGeneratedToWorkspace, generation.agentPlan);
+      await maybeSpawnArtifacts(result.conversationId, result.assistantMessage.id, assistantText, text, saveGeneratedToWorkspace, generation.agentPlan);
       if (saveGeneratedToWorkspace) {
         let hasFile = false;
         try { hasFile = extractGeneratedFiles(assistantText).length > 0; } catch { /* The artifact handler reports malformed files. */ }
@@ -530,7 +534,7 @@ export function AppShell() {
       await extractMemory(assistantText);
       if (mode === "code" && !saveGeneratedToWorkspace) setWorkspaceTaskStatus(generation.agentPlan ? (locale === "ru" ? "План готов" : "Plan ready") : (locale === "ru" ? "Готово" : "Done"));
     }
-    await loadConversation(convId);
+    await loadConversation(result.conversationId);
   };
 
   /** Re-run assistant reply under the same user message (new branch leaf). */
