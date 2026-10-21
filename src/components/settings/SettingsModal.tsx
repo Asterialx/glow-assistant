@@ -1,11 +1,12 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { useUiStore } from "../../stores/uiStore";
 import { THEMES } from "../../lib/themes";
 import { accountStorage as storage } from "../../auth/accountStorage";
 import { supabase } from "../../auth/client";
 import { useAccount } from "../../auth/AccountContext";
-import { AdminPanel } from "../../auth/AdminPanel";
+// The admin panel pulls in charting code that regular users never open.
+const AdminPanel = lazy(() => import("../../auth/AdminPanel").then((module) => ({ default: module.AdminPanel })));
 import { cloudDataEnabled, listMemory, deleteMemory } from "../../db";
 import { exportSyncPackage, importSyncPackage, getOrCreateAccount, saveAccount } from "../../lib/accountSync";
 import type { GlobalMemory } from "../../lib/types";
@@ -121,7 +122,9 @@ export function SettingsModal() {
         </section>}
         {tab === "privacy" && <section className="space-y-4"><h2 className="text-lg font-semibold">{text("Data and privacy", "Данные и приватность")}</h2><p className="text-sm">{cloudDataEnabled ? text("Saved workspace data is stored in your Supabase account. Local preferences stay on this device.", "Сохранённые данные рабочего пространства хранятся в вашем аккаунте Supabase. Локальные настройки остаются на этом устройстве.") : "__TAURI_INTERNALS__" in window ? text("Workspace data is stored locally in SQLite on this device.", "Данные рабочего пространства хранятся локально в SQLite на этом устройстве.") : text("Workspace data is stored in this browser. Clearing browser data may remove it.", "Данные рабочего пространства хранятся в этом браузере. Очистка данных браузера может их удалить.")}</p><p className="text-sm text-[var(--fg-muted)]">{text("Conversation context is sent to the AI provider to generate answers. Provider API keys stay on the server. Web search may send search queries to the search service.", "Контекст разговора передаётся AI-провайдеру для генерации ответа. API-ключи провайдера остаются на сервере. Web search может передавать поисковые запросы поисковому сервису.")}</p><p className="text-sm text-[var(--fg-muted)]">{text("Med masks supported patterns of personal data before sending text. Full anonymization is not guaranteed.", "Med маскирует поддерживаемые шаблоны персональных данных перед отправкой текста. Полная анонимизация не гарантируется.")}</p></section>}
         {tab === "billing" && (account ? <TokenLimitsPanel /> : <BillingDashboard />)}
-        {tab === "admin" && account?.access.role === "admin" && <AdminPanel />}
+        {tab === "admin" && account?.access.role === "admin" && (
+          <Suspense fallback={null}><AdminPanel /></Suspense>
+        )}
         {tab === "capabilities" && <section><h2 className="text-lg font-semibold">Artifacts</h2><Row title={text("Automatically open the Artifacts panel", "Автоматически открывать панель Artifacts")} description={text("Inline tools and artifact generation remain available when off.", "При отключении встроенные инструменты и генерация артефактов остаются доступны.")}><Toggle label="Artifacts" on={artifacts} change={v => { setArtifacts(v); storage.setItem("glow.capArtifacts", v ? "1" : "0"); if (!v) ui.setArtifactsOpen(false); }} /></Row></section>}
         {tab === "skills" && <SkillsPanel />}
         {tab === "memory" && <section className="space-y-4"><h2 className="text-lg font-semibold">{text("Memory", "Память")}</h2><Row title={text("Use and save memory", "Использовать и сохранять память")} description={text("Save facts marked by the assistant and use them in future requests. Off stops both reading and writing without deleting facts. This preference applies to this device.", "Сохранять факты, отмеченные ассистентом, и использовать их в следующих запросах. Отключение останавливает чтение и запись без удаления фактов. Настройка действует на этом устройстве.")}><Toggle label={text("Use and save memory", "Использовать и сохранять память")} on={memoryOn} change={v => { setMemoryOn(v); storage.setItem("glow.memoryFromChats", v ? "1" : "0"); }} /></Row>{facts.length === 0 && <p className="text-sm text-[var(--fg-muted)]">{text("No saved facts.", "Сохранённых фактов нет.")}</p>}{facts.map(item => <div key={item.id} className="rounded-xl border border-[var(--border)] p-3"><p className="text-sm">{item.fact}</p><button className="mt-2 text-xs text-[var(--fg-muted)]" onClick={async () => {
