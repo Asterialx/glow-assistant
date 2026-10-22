@@ -31,4 +31,4 @@ foreach ($asset in $release.assets) {
 
 $uploadUri = "https://uploads.github.com/repos/$repo/releases/$($release.id)/assets?name=$assetName"
 Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $headers -InFile $Installer -ContentType "application/octet-stream" | Out-Null
-Write-Output "Published $assetName from $tag: https://github.com/$repo/releases/latest/download/$assetName"
+Write-Output "Published $assetName from ${tag}: https://github.com/${repo}/releases/latest/download/${assetName}"
