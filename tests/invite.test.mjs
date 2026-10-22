@@ -26,7 +26,7 @@ test('invites refuse anonymous and non-admin requests before sending mail',async
 }));
 test('invites reject invalid limits and cross-origin requests',async()=>scenario({},async calls=>{
  let res=response();await handler({...request(),headers:{...request().headers,origin:'https://evil.example'}},res);assert.equal(res.code,403);assert.equal(calls.length,0);
- res=response();await handler(request({email:'tester@example.com',credits:1000001}),res);assert.equal(res.code,400);assert.ok(!calls.some(c=>c.path.includes('/invite')));
+ res=response();await handler(request({email:'tester@example.com',credits:10000001}),res);assert.equal(res.code,400);assert.ok(!calls.some(c=>c.path.includes('/invite')));
 }));
 test('invite prepares allowance before email and redirects only to current site',async()=>scenario({},async calls=>{
  const res=response();await handler(request(),res);assert.equal(res.code,200);
