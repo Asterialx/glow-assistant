@@ -50,6 +50,9 @@ interface Props {
 
 const DOT_COUNT = 48;
 
+/** Stable link to the newest installer; the publish script replaces the asset on each build. */
+const GLOW_DESKTOP_DOWNLOAD_URL = "https://github.com/Asterialx/glow-assistant/releases/latest/download/Glow-Assistant-setup.exe";
+
 export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }: Props) {
   const draft = useChatStore((s) => s.draft);
   const setDraft = useChatStore((s) => s.setDraft);
@@ -904,7 +907,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDownloadInfoOpen(false); }}>
           <section role="dialog" aria-modal="true" aria-labelledby="glow-work-download-title" className="w-full max-w-md overflow-hidden rounded-[26px] border border-[var(--border)] bg-[var(--bg-elevated)] shadow-2xl">
             <div className="flex items-center gap-3 border-b border-[var(--border)] px-6 py-5"><img src="/glow-work-mark.svg" alt="" aria-hidden="true" className="h-10 w-10 shrink-0 object-contain" /><div><h2 id="glow-work-download-title" className="text-lg font-medium">{locale === "ru" ? "Подключение папки" : "Connect a folder"}</h2><p className="text-[12px] text-[var(--fg-muted)]">{locale === "ru" ? "Доступно в приложении" : "Available in the app"}</p></div><button type="button" className="ml-auto rounded-lg p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]" aria-label={locale === "ru" ? "Закрыть" : "Close"} onClick={() => setDownloadInfoOpen(false)}><X size={16} /></button></div>
-            <div className="space-y-4 px-6 py-5"><p className="text-sm leading-6 text-[var(--fg-muted)]">{locale === "ru" ? "Для доступа к папке на компьютере откройте приложение Glow. В браузере можно продолжить работу без папки и прикреплять нужные файлы к сообщениям." : "Open the Glow desktop app to connect a folder on your computer. In the browser you can work without a folder and attach files to messages."}</p><button type="button" disabled className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white opacity-60"><Download size={16} />{locale === "ru" ? "Скачать Glow для Windows · скоро" : "Download Glow for Windows · coming soon"}</button><p className="text-center text-[11px] leading-5 text-[var(--fg-faint)]">{locale === "ru" ? "Настольный установщик ещё не опубликован. После выхода кнопка начнёт его загрузку." : "The desktop installer has not been published yet. This button will download it after release."}</p></div>
+            <div className="space-y-4 px-6 py-5"><p className="text-sm leading-6 text-[var(--fg-muted)]">{locale === "ru" ? "Для доступа к папке на компьютере откройте приложение Glow. В браузере можно продолжить работу без папки и прикреплять нужные файлы к сообщениям." : "Open the Glow desktop app to connect a folder on your computer. In the browser you can work without a folder and attach files to messages."}</p><a href={GLOW_DESKTOP_DOWNLOAD_URL} download className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-3 text-sm font-medium text-white hover:opacity-90"><Download size={16} />{locale === "ru" ? "Скачать Glow для Windows" : "Download Glow for Windows"}</a><p className="text-center text-[11px] leading-5 text-[var(--fg-faint)]">{locale === "ru" ? "Установщик для Windows 10 и 11." : "Installer for Windows 10 and 11."}</p></div>
           </section>
         </div>
       )}
