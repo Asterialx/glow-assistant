@@ -21,13 +21,20 @@ export function loadModelCatalog(): Promise<ModelInfo[]> {
 
   const isOpenRouter = import.meta.env.VITE_SMARTAPI_BASE_URL?.includes("openrouter.ai");
   const serverMode = betaAuthEnabled && !import.meta.env.DEV;
-  const baseUrl = serverMode ? "/api/ai" : import.meta.env.DEV
+  const tauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+  const baseUrl = serverMode ? (tauri ? "https://glowai-ashy.vercel.app/api/ai" : "/api/ai") : import.meta.env.DEV
     ? "/smartapi"
     : import.meta.env.VITE_SMARTAPI_BASE_URL || "https://api.xkiro.com/v1";
 
   catalogRequest = (async () => {
     const token = serverMode ? (await supabase?.auth.getSession())?.data.session?.access_token : undefined;
-    return fetch(`${baseUrl.replace(/\/$/, "")}/models`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    const url = `${baseUrl.replace(/\/$/, "")}/models`;
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    if (tauri && serverMode) {
+      const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+      return tauriFetch(url, { method: "GET", headers });
+    }
+    return fetch(url, { headers });
   })()
     .then(async (response) => {
       if (!response.ok) throw new Error(`Model catalog request failed (${response.status})`);
@@ -36,6 +43,7 @@ export function loadModelCatalog(): Promise<ModelInfo[]> {
         const allowed = [
           { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash", tier: "cheap" as const },
           { id: "anthropic/claude-haiku-5.5", name: "Claude Haiku 5.5", tier: "balanced" as const },
+          { id: "openai/gpt-6-luna", name: "GPT 6 Luna", tier: "balanced" as const },
         ];
         activeCatalog = allowed.filter(entry => (payload.data ?? []).some(model => model.id === entry.id)).map((entry, index): ModelInfo => ({
           id: entry.id,

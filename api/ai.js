@@ -34,6 +34,7 @@ export default async function handler(req, res) {
   const models = [
     { id: 'z-ai/glm-5.3-flash', display_name: 'GLM 5.3 Flash', modality: 'chat', access_tier: 'paid' },
     { id: 'anthropic/claude-haiku-5.5', display_name: 'Claude Haiku 5.5', modality: 'chat', access_tier: 'paid' },
+  { id: 'openai/gpt-6-luna', display_name: 'GPT 6 Luna', modality: 'chat', access_tier: 'paid' },
   ];
   if (path === 'models' && req.method === 'GET') {
     return res.status(200).json({ data: models });
