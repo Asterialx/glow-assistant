@@ -7,6 +7,18 @@ import { UserUsageDetail, type TokenEntry } from "./UserUsageDetail";
 interface Member { user_id: string; email: string; role: string; active: boolean; balance: number; granted: number; used: number }
 interface Invitation { email: string; claimed_by: string | null; expires_at: string; accepted: boolean }
 
+const HOSTED_API = "https://glowai-ashy.vercel.app";
+
+/** The desktop app has no /api routes of its own, so it calls the hosted API through the native HTTP client. */
+async function postAdminApi(path: string, body: unknown, token: string): Promise<Response> {
+  const init: RequestInit = { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) };
+  if ("__TAURI_INTERNALS__" in window) {
+    const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
+    return tauriFetch(`${HOSTED_API}${path}`, init);
+  }
+  return fetch(path, init);
+}
+
 export function AdminPanel() {
   const [members, setMembers] = useState<Member[]>([]);
   const [invites, setInvites] = useState<Invitation[]>([]);
@@ -68,10 +80,7 @@ export function AdminPanel() {
     const { data: { session } } = await supabase!.auth.getSession();
     if (!session) throw new Error("Сессия истекла. Войдите снова.");
     setResendAfter(previous => ({ ...previous, [address]: beginEmailCooldown(address) }));
-    const response = await fetch("/api/invite", {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ email: address, action: "resend" }),
-    });
+    const response = await postAdminApi("/api/invite", { email: address, action: "resend" }, session.access_token);
     const result = await response.json().catch(() => null);
     if (!response.ok) throw new Error(result?.message || "Не удалось отправить письмо повторно.");
     setStatus(result.message);
@@ -83,10 +92,7 @@ export function AdminPanel() {
       if (!Number.isSafeInteger(value) || value < 0 || value > 10000000) throw new Error("Лимит должен быть целым числом от 0 до 10 000 000.");
       const { data: { session } } = await supabase!.auth.getSession();
       if (!session) throw new Error("Сессия истекла. Войдите снова.");
-      const response = await fetch("/api/invite", {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), credits: value }),
-      });
+      const response = await postAdminApi("/api/invite", { email: email.trim().toLowerCase(), credits: value }, session.access_token);
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.message || "Сервер приглашений не ответил. Попробуйте ещё раз.");
       setStatus(result?.message || "Приглашение отправлено."); setEmail("");
