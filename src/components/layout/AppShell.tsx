@@ -246,6 +246,7 @@ export function AppShell() {
       memory,
       designMode,
       webSearch: webSearch || shouldSearchWeb(userText),
+      webAuto: mode !== "med",
       workspaceTools: workspaceEnabled,
       ...(mode === "code" ? { onAgentStatus: setWorkspaceTaskStatus } : {}),
     };

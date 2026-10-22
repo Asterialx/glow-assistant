@@ -26,6 +26,8 @@ export type LegacyGenerationOptions = {
   memory: string[];
   designMode: boolean;
   webSearch: boolean;
+  /** The model may search when it judges fresh or external facts are needed. */
+  webAuto?: boolean;
   locale: Locale;
   workspaceTools?: boolean;
   agentPlan?: boolean;
@@ -40,6 +42,7 @@ function outputBudget(generation: { mode: string; designMode: boolean; maxTokens
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
   async stream({ history, generation }, callbacks, signal) {
     const currentText = history.filter(message => message.role === "user").at(-1)?.content || "";
+    const webTools = generation.webSearch || (generation.webAuto === true && generation.mode !== "med");
     const answeringCoursework = isAwaitingCourseworkAnswer(history);
     if (generation.mode === "code" && !generation.agentPlan && (answeringCoursework || isCourseworkRequest(currentText))) {
       // Coursework is built chapter by chapter, then returned as one docx glow-file.
@@ -87,7 +90,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
       false,
       generation.modelId,
       generation.designMode,
-      generation.webSearch,
+      webTools,
       generation.agentPlan,
     );
     let payload: ChatMessage[] = initialPayload;
@@ -113,7 +116,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
         maxTokens: outputBudget(generation),
         conversationId: history.at(-1)?.conversation_id,
         scope: generation.mode,
-        webSearch: generation.webSearch,
+        webSearch: webTools,
         workspaceTools: generation.workspaceTools,
       });
       if (streamError) throw streamError;
