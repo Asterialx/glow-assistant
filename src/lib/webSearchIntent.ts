@@ -6,9 +6,12 @@ const EXPLICIT_RESEARCH = /\b(?:papers?|studies|research|sources|citations|journ
 const EXPLICIT_LOOKUP = /\b(?:search|look up|browse|check online|verify online|find online)\b|(?:поищи\s+в\s+интернет\w*|найди\s+в\s+интернет\w*|проверь\s+в\s+сети)/iu;
 const WEBSITE_REFERENCE = /(?:https?:\/\/|\bwww\.)\S+|\b[a-z\d-]+\.(?:com|org|net|gov|edu|io|ai|ru|uk|de|fr|jp|pubmed)\b/i;
 
-/** Search for changing facts, cited research and explicit requests to look things up. */
+/** Questions about the state of a market, economy or situation change over time, so they need fresh sources. */
+const TIME_SENSITIVE_CUES = /\b(?:situation|forecast|outlook|market|economy|inflation|oil prices?|in 20[2-3]\d)\b|(?:нынешн\w*|текущ\w*|ситуац\w*|происходит\w*|прогноз\w*|тенденц\w*|динамик\w*|дефицит\w*|бензин\w*|топлив\w*|дизел\w*|нефт\w*|инфляц\w*|ставк\w*|рынк\w*|экономик\w*|\b20[2-3]\d\b)/iu;
+
+/** Search for changing facts, market and situation questions, cited research and explicit requests to look things up. */
 export function shouldSearchWeb(text: string): boolean {
   const value = text.trim();
   if (!value) return false;
-  return WEB_CUES.test(value) || MEDICAL_CUES.test(value) || EXPLICIT_RESEARCH.test(value) || EXPLICIT_LOOKUP.test(value) || WEBSITE_REFERENCE.test(value);
+  return WEB_CUES.test(value) || MEDICAL_CUES.test(value) || EXPLICIT_RESEARCH.test(value) || EXPLICIT_LOOKUP.test(value) || WEBSITE_REFERENCE.test(value) || TIME_SENSITIVE_CUES.test(value);
 }

@@ -9,9 +9,9 @@ test('search is opt-in and tools/cost bounds are server-owned', () => {
   assert.deepEqual(webSearchOptions('true'), {});
   const tool = webSearchOptions(true).tools[0];
   assert.equal(tool.type, 'openrouter:web_search');
-  assert.equal(tool.parameters.max_uses, 5);
-  assert.equal(tool.parameters.max_total_results, 30);
-  assert.equal(webSearchOptions(true).tools[1].parameters.max_uses, 5);
+  assert.equal(tool.parameters.max_uses, 8);
+  assert.equal(tool.parameters.max_total_results, 60);
+  assert.equal(webSearchOptions(true).tools[1].parameters.max_uses, 8);
 });
 test('authenticated search is forwarded, user-injected tools ignored, and actual usage settled', async () => {
   const names = ['GLOW_AI_ENABLED','VITE_SUPABASE_URL','VITE_SUPABASE_PUBLISHABLE_KEY','OPENROUTER_API_KEY','SUPABASE_SERVICE_ROLE_KEY'];

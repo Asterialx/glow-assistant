@@ -133,6 +133,7 @@ export function buildChatPayload(
     systemParts.push(COMPACT_UI_PROMPT);
   }
   if (webSearch) systemParts.push(researchPolicy());
+  if (webSearch && mode !== "med") systemParts.push("Web research: for questions about current events, markets or situations, run several searches with different wording (Russian and English), open the most relevant pages instead of relying on snippets, and check key figures against at least two independent sources. Prefer official sources (Росстат, ministries, central banks, exchanges, regulators) and report publication dates. If sources disagree, show both values and say which is more authoritative. Cite the links you used.");
   systemParts.push(
     "Conversation grounding: preserve the user's goal, constraints, and corrections from the provided history. The user's latest explicit correction takes precedence over earlier values and saved memory hints. Treat earlier assistant answers as unverified statements, not evidence that their facts are true. Never invent user details, sources, tool results, or completed actions. If a needed fact is not in the available context, say so; separate assumptions and examples from verified facts.",
     "If the user sends a [Voice note] with a transcript, treat that transcript as their spoken request and reply normally. Never ask them to type it again unless the transcript is missing.",
