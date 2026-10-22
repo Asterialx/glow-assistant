@@ -51,6 +51,7 @@ interface Props {
   artifacts?: Artifact[];
   onOpenArtifact?: (artifactId: string) => void;
   onEditMessage?: (message: Message, editedText: string) => void;
+  onResendMessage?: (message: Message) => void;
   onRegenerate?: (message: Message) => void;
   onWidgetChange?: (widget: UiWidget) => void;
   onSend: (text: string, files?: File[]) => void | boolean | Promise<void | boolean>;
@@ -107,6 +108,7 @@ export function ChatPane({
   artifacts = [],
   onOpenArtifact,
   onEditMessage,
+  onResendMessage,
   onRegenerate,
   onWidgetChange,
   onSend,
@@ -357,6 +359,16 @@ export function ChatPane({
                     ) : (
                       <div className="rounded-[22px] bg-[var(--user-bubble)] px-[18px] py-[10px] text-[15.5px] leading-[1.55] text-[var(--fg)]">
                         <UserMessageBody content={m.content} />
+                      </div>
+                    )}
+                    {!isEditing && (
+                      <div className="mt-1 flex items-center justify-end gap-0.5 text-[var(--fg-faint)] opacity-0 transition-opacity group-hover:opacity-100">
+                        <IconBtn title={locale === "ru" ? "Копировать" : "Copy"} onClick={() => void copyText(m.id, m.content)}>
+                          {copiedId === m.id ? <Check size={15} /> : <Copy size={15} />}
+                        </IconBtn>
+                        <IconBtn title={locale === "ru" ? "Повторить" : "Retry"} disabled={!!streaming} onClick={() => onResendMessage?.(m)}>
+                          <RotateCcw size={15} />
+                        </IconBtn>
                       </div>
                     )}
                   </div>

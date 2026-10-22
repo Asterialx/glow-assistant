@@ -147,11 +147,11 @@ export function AppShell() {
     );
     setArtifactRevisions(Object.fromEntries(revisions));
     if (arts.length === 0) useUiStore.getState().closeArtifacts();
-    const map: Record<string, UiWidget[]> = {};
-    for (const m of conversationService.getState().messages) {
-      map[m.id] = await listWidgets(mode, m.id);
-    }
-    setWidgetsByMessage(map);
+    // Widgets for all messages load in parallel instead of one storage round trip per message.
+    const widgets = await Promise.all(
+      conversationService.getState().messages.map(async (m) => [m.id, await listWidgets(mode, m.id)] as const),
+    );
+    setWidgetsByMessage(Object.fromEntries(widgets));
   };
 
   useEffect(() => {
@@ -538,6 +538,11 @@ export function AppShell() {
   };
 
   /** Re-run assistant reply under the same user message (new branch leaf). */
+  /** Sends the same user message again as a sibling, so the earlier version stays in the branch history. */
+  const handleResendMessage = (message: Message) => {
+    void handleSend(message.content, undefined, message.parent_id);
+  };
+
   const handleRegenerate = async (assistantMessage: Message) => {
     const userMessage = conversationService
       .getState()
@@ -715,6 +720,7 @@ export function AppShell() {
             }}
             onEditMessage={handleEditBranch}
             onRegenerate={handleRegenerate}
+            onResendMessage={handleResendMessage}
             onWidgetChange={async (w) => {
               let nextList = (widgetsByMessage[w.message_id] || []).map((x) =>
                 x.id === w.id ? w : x,
