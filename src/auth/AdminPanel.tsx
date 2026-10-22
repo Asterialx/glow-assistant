@@ -80,7 +80,7 @@ export function AdminPanel() {
     event.preventDefault();
     void perform(async () => {
       const value = Number(credits);
-      if (!Number.isSafeInteger(value) || value < 0 || value > 1000000) throw new Error("Лимит должен быть целым числом от 0 до 1 000 000.");
+      if (!Number.isSafeInteger(value) || value < 0 || value > 10000000) throw new Error("Лимит должен быть целым числом от 0 до 10 000 000.");
       const { data: { session } } = await supabase!.auth.getSession();
       if (!session) throw new Error("Сессия истекла. Войдите снова.");
       const response = await fetch("/api/invite", {
@@ -96,7 +96,7 @@ export function AdminPanel() {
     event.preventDefault();
     void perform(async () => {
       const value = Number(amount);
-      if (!target || !Number.isSafeInteger(value) || value < 1 || value > 1000000 || !reason.trim()) throw new Error("Выберите пользователя, сумму и причину начисления.");
+      if (!target || !Number.isSafeInteger(value) || value < 1 || value > 10000000 || !reason.trim()) throw new Error("Выберите пользователя, сумму и причину начисления.");
       const fingerprint = JSON.stringify([target, value, reason.trim()]);
       if (creditRequest.current?.fingerprint !== fingerprint) creditRequest.current = { fingerprint, id: crypto.randomUUID() };
       const { error } = await supabase!.rpc("glow_admin_token_grant", { p_user: target, p_amount: value, p_reason: reason.trim(), p_request: creditRequest.current.id });
@@ -131,14 +131,14 @@ export function AdminPanel() {
           <form onSubmit={invite} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
             <h2 className="flex items-center gap-2 font-medium"><Users size={17} className="text-[var(--accent)]" /> Пригласить пользователя</h2>
             <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Email<input type="email" required value={email} onChange={e => setEmail(e.target.value)} className={inputClass} /></label>
-            <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Начальный лимит в токенах<input type="number" min={0} max={1000000} step={1} required value={credits} onChange={e => setCredits(e.target.value)} className={inputClass} /></label>
+            <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Начальный лимит в токенах<input type="number" min={0} max={10000000} step={1} required value={credits} onChange={e => setCredits(e.target.value)} className={inputClass} /></label>
             <button disabled={busy} className={buttonClass}>Отправить приглашение <ArrowUpRight size={15} /></button>
           </form>
           <form onSubmit={credit} className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-4">
             <h2 className="flex items-center gap-2 font-medium"><Shield size={17} className="text-[var(--accent)]" /> Начислить токены</h2>
             <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Пользователь<select required value={target} onChange={e => setTarget(e.target.value)} className={inputClass}><option value="">Выберите пользователя</option>{members.map(m => <option key={m.user_id} value={m.user_id}>{m.email}</option>)}</select></label>
             <div className="grid grid-cols-2 gap-3">
-              <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Количество<input type="number" required min={1} max={1000000} step={1} value={amount} onChange={e => setAmount(e.target.value)} className={inputClass} /></label>
+              <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Количество<input type="number" required min={1} max={10000000} step={1} value={amount} onChange={e => setAmount(e.target.value)} className={inputClass} /></label>
               <label className="block space-y-1.5 text-xs text-[var(--fg-muted)]">Причина<input required maxLength={240} value={reason} onChange={e => setReason(e.target.value)} className={inputClass} /></label>
             </div>
             <button disabled={busy} className={buttonClass}>Начислить <Check size={15} /></button>

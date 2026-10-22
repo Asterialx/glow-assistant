@@ -26,7 +26,7 @@ Deno.serve(async (request: Request) => {
     const payload = JSON.parse(body);
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     const credits = payload.credits;
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !Number.isSafeInteger(credits) || credits < 0 || credits > 1000000) return respond(400, "Invalid invitation");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || !Number.isSafeInteger(credits) || credits < 0 || credits > 10000000) return respond(400, "Invalid invitation");
     const { error: prepareError } = await client.rpc("glow_admin_invite", { p_email: email, p_credits: credits });
     if (prepareError) return respond(409, "Invitation could not be prepared; account may already exist");
     const admin = createClient(url, secret, { auth: { persistSession: false } });

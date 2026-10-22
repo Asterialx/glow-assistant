@@ -26,7 +26,7 @@ export default async function handler(req, res) {
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     const credits = body?.credits;
     const resend = body?.action === "resend";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || (!resend && (!Number.isSafeInteger(credits) || credits < 0 || credits > 1000000))) return respond(400, 'validation', 'Введите корректный email и лимит от 0 до 1 000 000 токенов.');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 || (!resend && (!Number.isSafeInteger(credits) || credits < 0 || credits > 10000000))) return respond(400, 'validation', 'Введите корректный email и лимит от 0 до 1 000 000 токенов.');
     const redirectTo = "https://glowai-ashy.vercel.app/?invite=1";
     const admin = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
     let sendError;
