@@ -29,7 +29,7 @@ test('authenticated catalog works without a Vercel catch-all query parameter', a
     const res = response();
     await handler({ url: '/api/ai/models', query: {}, method: 'GET', headers: { authorization: 'Bearer test-session' } }, res);
     assert.equal(res.code, 200);
-    assert.deepEqual(res.body.data.map(model => model.id), ['z-ai/glm-5.3-flash', 'anthropic/claude-haiku-5.5']);
+    assert.deepEqual(res.body.data.map(model => model.id), ['z-ai/glm-5.3-flash', 'anthropic/claude-haiku-5.5', 'openai/gpt-6-luna']);
   } finally {
     globalThis.fetch = originalFetch;
     for (const name of names) {
