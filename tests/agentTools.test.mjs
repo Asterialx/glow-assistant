@@ -7,8 +7,10 @@ import handler from '../api/ai.js';
 const names = (tools) => tools.map(tool => tool.function.name);
 
 test('plan set is read-only and the agent set adds writes and commands', () => {
-  assert.deepEqual(names(CODE_TOOL_SETS.code_plan), ['code_list', 'code_read', 'code_search', 'doc_read', 'update_tasks']);
-  assert.deepEqual(names(CODE_TOOL_SETS.code_agent).slice(5), ['code_edit', 'code_create', 'code_delete', 'code_run']);
+  assert.deepEqual(names(CODE_TOOL_SETS.code_plan), ['code_list', 'code_read', 'code_search', 'doc_read', 'git_status', 'git_diff', 'git_log', 'update_tasks']);
+  assert.deepEqual(names(CODE_TOOL_SETS.code_agent).slice(8), ['code_edit', 'code_create', 'code_delete', 'code_run', 'git_branch', 'git_commit']);
+  const plan = names(CODE_TOOL_SETS.code_plan);
+  assert.equal(plan.includes('git_commit') || plan.includes('git_branch'), false, 'planning can read git but never change it');
   for (const tool of CODE_TOOL_SETS.code_agent) assert.match(tool.function.name, /^[a-z0-9_]{1,64}$/);
 });
 
@@ -26,6 +28,8 @@ test('every required argument is declared and edits stay under the 20000 charact
   assert.ok(edit.old_string.maxLength + edit.new_string.maxLength + edit.path.maxLength < 20000);
   const create = CODE_TOOL_SETS.code_agent.find(tool => tool.function.name === 'code_create').function.parameters.properties;
   assert.ok(create.content.maxLength + create.path.maxLength < 20000);
+  const commit = CODE_TOOL_SETS.code_agent.find(tool => tool.function.name === 'git_commit').function.parameters.properties;
+  assert.ok(commit.message.maxLength + commit.paths.maxItems * commit.paths.items.maxLength < 20000);
 });
 
 async function withServer(run) {

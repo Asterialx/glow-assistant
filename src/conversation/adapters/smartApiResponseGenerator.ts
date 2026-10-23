@@ -95,6 +95,8 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
       const tools = createToolExecutor(taskId);
       const agentPayload = buildChatPayload(generation.mode, cleanHistory, [generation.systemExtra, workflow].filter(Boolean).join("\n\n"), generation.memory, false, generation.modelId, generation.designMode, false, mode === "plan");
       const store = () => useAgentStore.getState();
+      // A failed checkpoint must not block the task: edits still keep their own per-file snapshots.
+      if (mode === "auto") await tools.begin().catch(() => undefined);
       store().begin();
       try {
         const result = await runAgent(agentPayload, {
@@ -113,15 +115,19 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
           },
           exec: tools.exec,
           classifyCommand: tools.classifyCommand,
+          gitBranch: tools.gitBranch,
           confirm: (request) => store().ask(request),
           drainExtraMessages: tools.drainExtraMessages,
           onToken: callbacks.onToken,
           onStep: (step) => { store().upsertStep(step); if (step.status === "running") generation.onAgentStatus?.(step.summary); },
           onTasks: (next) => store().setTasks(next),
         }, { mode, autonomy, signal });
+        // In a git repository the finished checkpoint lists every changed file, also those changed by commands.
+        const finished = mode === "auto" ? await tools.finish().catch(() => ({ changed: [] as string[] })) : { changed: [] as string[] };
+        const changedFiles = finished.changed.length ? finished.changed : result.changedFiles;
         const notice = result.stopped === "max_turns" ? "Остановлено: достигнут лимит шагов. Напишите «продолжай», чтобы продолжить."
           : result.stopped === "budget" ? "Остановлено: исчерпан бюджет токенов задачи. Напишите «продолжай», чтобы продолжить." : "";
-        callbacks.onToken(`${notice ? `\n\n_${notice}_` : ""}${appendAgentTrace("", { v: 1, taskId, stopped: result.stopped, steps: result.steps, tasks: result.tasks, changedFiles: result.changedFiles })}`);
+        callbacks.onToken(`${notice ? `\n\n_${notice}_` : ""}${appendAgentTrace("", { v: 1, taskId, stopped: result.stopped, steps: result.steps, tasks: result.tasks, changedFiles })}`);
         if (result.stopped === "error") throw new Error(result.error || "Агент остановился из-за ошибки.");
         callbacks.onDone(result.usage);
       } finally {

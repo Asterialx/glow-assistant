@@ -7,7 +7,7 @@ const call = (id, name, args = {}) => ({ id, name, arguments: JSON.stringify(arg
 const usage = (n = 100) => ({ inputTokens: n, outputTokens: 10, costUnits: 0 });
 
 /** A scripted model: each entry is one turn; the loop's tool results are captured for assertions. */
-function harness({ turns, confirmAnswers = [], classify = () => ({ decision: 'allow' }), exec } = {}) {
+function harness({ turns, confirmAnswers = [], classify = () => ({ decision: 'allow' }), exec, branch = 'main' } = {}) {
   const seen = { toolSets: [], messages: [], exec: [], confirms: [], steps: [], text: '' };
   let turn = 0, confirmIndex = 0;
   const deps = {
@@ -24,6 +24,7 @@ function harness({ turns, confirmAnswers = [], classify = () => ({ decision: 'al
       return { ok: true };
     },
     async classifyCommand(command) { return classify(command); },
+    async gitBranch() { return branch; },
     async confirm(request) { seen.confirms.push(request); return confirmAnswers[confirmIndex++] ?? 'deny'; },
     onToken(token) { seen.text += token; },
     onStep(step) { seen.steps.push(step); },
@@ -90,6 +91,57 @@ test('autopilot skips questions about commands but still asks before deleting', 
   await runAgent(user, deps, { mode: 'auto', autonomy: 'autopilot' });
   assert.deepEqual(seen.confirms.map(request => request.kind), ['delete']);
   assert.deepEqual(seen.exec.map(item => [item.name, item.approved]), [['code_run', false]]);
+});
+
+test('git reading is always allowed and git writing is refused in plan mode', async () => {
+  const { deps, seen } = harness({ turns: [{ calls: [call('1', 'git_status'), call('2', 'git_diff', { path: 'a.ts' }), call('3', 'git_log'), call('4', 'git_commit', { message: 'x' }), call('5', 'git_branch', { name: 'glow/x' })] }, { text: 'plan' }] });
+  const result = await runAgent(user, deps, { mode: 'plan', autonomy: 'autopilot' });
+  assert.deepEqual(seen.exec.map(item => item.name), ['git_status', 'git_diff', 'git_log']);
+  assert.deepEqual(result.steps.map(step => step.status), ['done', 'done', 'done', 'denied', 'denied']);
+  assert.equal(seen.confirms.length, 0);
+});
+
+test('a commit or a new branch asks first unless autopilot is on the agent\'s own branch', async () => {
+  const commit = [{ calls: [call('1', 'git_commit', { message: 'Fix sum' })] }, { text: 'ok' }];
+  const careful = harness({ turns: commit, confirmAnswers: ['once'], branch: 'glow/fix-sum' });
+  await runAgent(user, careful.deps, { mode: 'auto', autonomy: 'important' });
+  assert.deepEqual(careful.seen.confirms.map(request => [request.kind, request.title]), [['git', 'Коммит: Fix sum']]);
+  assert.equal(careful.seen.exec.length, 1);
+
+  const own = harness({ turns: commit, branch: 'glow/fix-sum' });
+  await runAgent(user, own.deps, { mode: 'auto', autonomy: 'autopilot' });
+  assert.equal(own.seen.confirms.length, 0, 'autopilot commits on a glow/ branch without asking');
+  assert.equal(own.seen.exec.length, 1);
+
+  for (const branch of ['main', 'master', 'feature/login', '']) {
+    const other = harness({ turns: commit, confirmAnswers: ['deny'], branch });
+    await runAgent(user, other.deps, { mode: 'auto', autonomy: 'autopilot' });
+    assert.equal(other.seen.confirms.length, 1, `autopilot still asks on "${branch}"`);
+    assert.equal(other.seen.exec.length, 0);
+  }
+
+  const branching = harness({ turns: [{ calls: [call('1', 'git_branch', { name: 'glow/new' })] }, { text: 'ok' }] });
+  await runAgent(user, branching.deps, { mode: 'auto', autonomy: 'autopilot' });
+  assert.equal(branching.seen.confirms.length, 0);
+  const asked = harness({ turns: [{ calls: [call('1', 'git_branch', { name: 'glow/new' })] }, { text: 'ok' }], confirmAnswers: ['once'] });
+  await runAgent(user, asked.deps, { mode: 'auto', autonomy: 'important' });
+  assert.deepEqual(asked.seen.confirms.map(request => request.kind), ['git']);
+});
+
+test('allowing commits for the whole task asks once, but a different branch name asks again', async () => {
+  const { deps, seen } = harness({ turns: [
+    { calls: [call('1', 'git_commit', { message: 'one' })] }, { calls: [call('2', 'git_commit', { message: 'two' })] },
+    { calls: [call('3', 'git_branch', { name: 'glow/a' })] }, { calls: [call('4', 'git_branch', { name: 'glow/b' })] }, { text: 'ok' }], confirmAnswers: ['task', 'task', 'deny'] });
+  await runAgent(user, deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(seen.confirms.length, 3);
+  assert.deepEqual(seen.exec.map(item => item.name), ['git_commit', 'git_commit', 'git_branch']);
+});
+
+test('a git failure is returned to the model like any other tool error', async () => {
+  const { deps, seen } = harness({ turns: [{ calls: [call('1', 'git_commit', { message: 'x' })] }, { text: 'ok' }], confirmAnswers: ['once'], exec: () => { throw 'Нет изменений для коммита.'; } });
+  const result = await runAgent(user, deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(result.steps[0].status, 'error');
+  assert.equal(tools(seen, 1)[0].error, 'Нет изменений для коммита.');
 });
 
 test('the eleventh changed file asks first, except in autopilot', async () => {

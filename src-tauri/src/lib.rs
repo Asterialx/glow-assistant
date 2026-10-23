@@ -1,6 +1,7 @@
 mod code_tools;
 mod commands;
 mod game_mode;
+mod git_tools;
 mod mcp;
 mod pii;
 mod policy;
@@ -46,6 +47,14 @@ pub fn run() {
             code_tools::code_run,
             code_tools::code_classify_command,
             code_tools::code_restore_checkpoint,
+            git_tools::git_status,
+            git_tools::git_diff,
+            git_tools::git_log,
+            git_tools::git_branch,
+            git_tools::git_commit,
+            git_tools::git_current_branch,
+            git_tools::checkpoint_begin,
+            git_tools::checkpoint_finish,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

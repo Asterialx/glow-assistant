@@ -8,7 +8,7 @@ export type TaskStatus = "pending" | "in_progress" | "done";
 export type Task = { id: string; title: string; status: TaskStatus };
 export type StepStatus = "running" | "done" | "error" | "denied";
 export type Step = { id: string; name: string; summary: string; status: StepStatus; detail?: string; diff?: string; ms?: number };
-export type ConfirmRequest = { id: string; kind: "command" | "delete" | "many_files" | "task"; title: string; reason: string };
+export type ConfirmRequest = { id: string; kind: "command" | "delete" | "many_files" | "git" | "task"; title: string; reason: string };
 export type ConfirmAnswer = "once" | "task" | "deny";
 
 export interface AgentDeps {
@@ -16,6 +16,7 @@ export interface AgentDeps {
   turn(messages: ChatMessage[], toolSet: "code_agent" | "code_plan", onToken: (token: string) => void): Promise<{ calls: AgentCall[]; usage?: Usage }>;
   exec(name: string, args: Record<string, unknown>, approved: boolean): Promise<unknown>;
   classifyCommand(command: string): Promise<CommandClass>;
+  gitBranch?(): Promise<string>;
   confirm(request: ConfirmRequest): Promise<ConfirmAnswer>;
   /** Messages a tool wants added after its result, for example pictures read from a document. */
   drainExtraMessages?(): ChatMessage[];
@@ -161,7 +162,7 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
       }
 
       record(step);
-      const verdict = await decideTool(call.name, args, { mode: options.mode, autonomy: options.autonomy, changedFiles: changed, classifyCommand: deps.classifyCommand });
+      const verdict = await decideTool(call.name, args, { mode: options.mode, autonomy: options.autonomy, changedFiles: changed, classifyCommand: deps.classifyCommand, gitBranch: deps.gitBranch });
       let approved = false;
       if (verdict.kind === "deny") {
         record({ ...step, status: "denied", detail: verdict.reason, ms: Date.now() - started });
@@ -169,7 +170,8 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
         continue;
       }
       if (verdict.kind === "ask") {
-        const key = `${verdict.confirmKind}:${call.name === "code_run" ? String(args.command) : verdict.confirmKind === "many_files" ? "files" : String(args.path)}`;
+        const subject = call.name === "code_run" ? String(args.command) : verdict.confirmKind === "many_files" ? "files" : verdict.confirmKind === "git" ? `${call.name}:${call.name === "git_branch" ? String(args.name) : ""}` : String(args.path);
+        const key = `${verdict.confirmKind}:${subject}`;
         if (!await approve(key, { kind: verdict.confirmKind, title: step.summary, reason: verdict.reason })) {
           record({ ...step, status: "denied", detail: "Пользователь отклонил действие", ms: Date.now() - started });
           await answer({ error: "Пользователь отклонил это действие. Не повторяйте его: выберите другой путь или спросите пользователя." });

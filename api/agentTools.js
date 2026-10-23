@@ -28,6 +28,15 @@ const READ_ONLY = [
   fn('doc_read', 'Read a non-code document of the project as text: pdf, docx, xlsx, pptx, odt, rtf, csv, images and similar. Use code_read for source and text files.', {
     path: text(500, 'File path relative to the project root.'),
   }, ['path']),
+  fn('git_status', 'Current branch and the changed files of the project (git). Says is_repo false when the folder is not a git repository.'),
+  fn('git_diff', 'Show uncommitted changes as a unified diff (git). Untracked new files are not part of a diff: list them with git_status.', {
+    path: text(500, 'Limit the diff to one file.'),
+    staged: { type: 'boolean', description: 'Show staged changes instead of working-tree changes.' },
+  }),
+  fn('git_log', 'Recent commits (git): hash, date, author, subject.', {
+    max_count: { type: 'integer', minimum: 1, maximum: 30 },
+    path: text(500, 'Only commits that touched this file.'),
+  }),
   fn('update_tasks', 'Show the user your task list and keep it current: call it before you start and whenever a task changes status. At most one task is in_progress.', {
     tasks: {
       type: 'array', maxItems: 12,
@@ -55,6 +64,13 @@ const WRITE = [
     command: text(600, 'Program and arguments, for example: npm run build'),
     timeout_sec: { type: 'integer', minimum: 5, maximum: 600 },
   }, ['command']),
+  fn('git_branch', 'Create and switch to a new branch. The name must start with glow/ (for example glow/fix-sum-bug). Use it before committing when the project is on main or master.', {
+    name: text(80, 'Branch name such as glow/fix-sum-bug: lowercase letters, digits, dots, dashes and underscores.'),
+  }, ['name']),
+  fn('git_commit', 'Commit changes (git). Hooks are not run and secret files are never included. Commit only when the user asked for it or the task plan says so. Without paths, all changed files are committed.', {
+    message: text(2000, 'Commit message: a short imperative subject, optionally followed by a blank line and details.'),
+    paths: { type: 'array', maxItems: 30, items: text(300), description: 'Commit only these files (up to 30); omit to commit all changed files.' },
+  }, ['message']),
 ];
 
 export const CODE_TOOL_SETS = Object.freeze({

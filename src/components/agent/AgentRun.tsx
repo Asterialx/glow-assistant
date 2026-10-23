@@ -3,7 +3,7 @@ import { AlertTriangle, Check, ChevronRight, CircleDashed, LoaderCircle, ShieldX
 import type { Locale } from "../../lib/i18n";
 import type { Step, Task } from "../../lib/agent/loop";
 import type { AgentTrace } from "../../lib/agent/trace";
-import { restoreCheckpoint } from "../../lib/agent/tools";
+import { restoreCheckpoint, type RestoreResult } from "../../lib/agent/tools";
 import { useAgentStore } from "../../stores/agentStore";
 import { cn } from "../../lib/utils";
 
@@ -56,7 +56,7 @@ export function AgentRun({ locale, trace, live }: Props) {
   const store = useAgentStore();
   const steps = live ? store.steps : trace?.steps ?? [];
   const tasks = live ? store.tasks : trace?.tasks ?? [];
-  const [restored, setRestored] = useState<number | null>(null);
+  const [restored, setRestored] = useState<RestoreResult | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [undoError, setUndoError] = useState("");
   if (!steps.length && !tasks.length) return null;
@@ -83,7 +83,9 @@ export function AgentRun({ locale, trace, live }: Props) {
           <span>{ru ? `Изменено файлов: ${changed}` : `Files changed: ${changed}`}</span>
           {restored === null
             ? <button type="button" disabled={undoing} onClick={() => void undo()} className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[var(--bg-hover)] px-2.5 py-1.5 font-medium text-[var(--fg)] hover:bg-[var(--bg-active)] disabled:opacity-50"><Undo2 size={13} />{ru ? "Откатить задачу" : "Undo task"}</button>
-            : <span className="ml-auto text-[var(--fg)]">{restored > 0 ? (ru ? `Откат выполнен: файлов ${restored}` : `Undone: ${restored} files`) : ru ? "Откатывать нечего" : "Nothing to undo"}</span>}
+            : <span className="ml-auto text-[var(--fg)]">{restored.restored > 0 ? (ru ? `Откат выполнен: файлов ${restored.restored}` : `Undone: ${restored.restored} files`) : restored.skipped.length ? (ru ? "Ничего не откачено" : "Nothing was undone") : ru ? "Откатывать нечего" : "Nothing to undo"}</span>}
+          {restored && restored.commits > 0 && <span className="w-full text-amber-500">{ru ? `В истории git остались коммиты задачи: ${restored.commits}. Откат вернул файлы, а сами коммиты отменяете вы (git reset).` : `The task's ${restored.commits} commit(s) stay in git history; the undo restored files only (use git reset).`}</span>}
+          {restored && restored.skipped.length > 0 && <span className="w-full text-amber-500">{ru ? `Пропущено, файлы изменены после задачи: ${restored.skipped.slice(0, 5).join(", ")}${restored.skipped.length > 5 ? ` и ещё ${restored.skipped.length - 5}` : ""}` : `Skipped, edited after the task: ${restored.skipped.slice(0, 5).join(", ")}`}</span>}
           {undoError && <span className="w-full text-red-400">{undoError}</span>}
         </div>
       )}

@@ -82,12 +82,12 @@ pub struct RunResult {
     pub stderr: String,
 }
 
-fn root_of(state: &State<'_, AppState>) -> Result<PathBuf, String> {
+pub(crate) fn root_of(state: &State<'_, AppState>) -> Result<PathBuf, String> {
     state.workspace_root.read().clone().ok_or_else(|| "Сначала выберите рабочую папку.".to_string())
 }
 
 /// A path the model supplies: relative, no `..`, no drive or root. `""` and `"."` mean the root.
-fn relative(path: &str, allow_root: bool) -> Result<PathBuf, String> {
+pub(crate) fn relative(path: &str, allow_root: bool) -> Result<PathBuf, String> {
     let trimmed = path.trim().trim_start_matches("./").trim_start_matches(".\\");
     if trimmed.is_empty() || trimmed == "." {
         return if allow_root { Ok(PathBuf::new()) } else { Err("Укажите путь к файлу.".into()) };
@@ -99,11 +99,11 @@ fn relative(path: &str, allow_root: bool) -> Result<PathBuf, String> {
     Ok(parsed.to_path_buf())
 }
 
-fn display(path: &Path) -> String {
+pub(crate) fn display(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
-fn blocked(path: &Path, write: bool) -> Result<(), String> {
+pub(crate) fn blocked(path: &Path, write: bool) -> Result<(), String> {
     match policy::path_blocked(path, write) {
         Some(reason) => Err(format!("Доступ закрыт: {reason}.")),
         None => Ok(()),
@@ -537,10 +537,17 @@ pub fn code_classify_command(command: String) -> Decision {
     policy::classify_command(&command)
 }
 
+/// Undo a task: from its git checkpoint when the folder is a repository, otherwise from the per-file snapshots.
 #[tauri::command]
-pub fn code_restore_checkpoint(app: AppHandle, state: State<'_, AppState>, task_id: String) -> Result<usize, String> {
+pub fn code_restore_checkpoint(app: AppHandle, state: State<'_, AppState>, task_id: String) -> Result<crate::git_tools::RestoreResult, String> {
     let root = root_of(&state)?;
-    restore_in(&root, &checkpoint_dir(&app, &root, &task_id)?)
+    let snapshots = checkpoint_dir(&app, &root, &task_id)?;
+    if let Some(result) = crate::git_tools::restore_git_in(&root, &task_id)? {
+        let _ = std::fs::remove_dir_all(&snapshots);
+        return Ok(result);
+    }
+    let restored = restore_in(&root, &snapshots)?;
+    Ok(crate::git_tools::RestoreResult { restored, skipped: vec![], mode: "files".into(), commits: 0 })
 }
 
 #[cfg(test)]
