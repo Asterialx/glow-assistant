@@ -173,7 +173,7 @@ export function DevicesSection() {
                   type="button"
                   className="rounded-lg p-2 text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
                   onClick={() => copy(account.syncKey, "key")}
-                  title="Copy"
+                  title={locale === "ru" ? "Копировать" : "Copy"}
                 >
                   {copied === "key" ? <Check size={15} /> : <Copy size={15} />}
                 </button>

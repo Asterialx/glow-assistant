@@ -3,7 +3,7 @@
 import { hasIncompleteWidgetFence, stripInlineUiFromText } from "./widgetParse";
 import { CODE_ARTIFACT_FENCE } from "./artifactCode";
 import { stripGenUiFences } from "./genUi";
-import { stripGeneratedFileFences, extractGeneratedFiles } from "./generatedFile";
+import { stripGeneratedFileFences, extractGeneratedFiles, claimsMissingFile } from "./generatedFile";
 
 const HTML_FENCE_OPEN = /```\s*html\b/i;
 
@@ -84,6 +84,7 @@ export function getAssistantDisplay(text: string, isStreaming: boolean): Assista
   const hasFile = /```glow-file\b/.test(text);
   let invalidFile = false;
   if (hasFile && !isStreaming) { try { invalidFile = !extractGeneratedFiles(text).length; } catch { invalidFile = true; } }
+  else if (!hasFile && !isStreaming) invalidFile = claimsMissingFile(text);
   text = stripGeneratedFileFences(text);
   const htmlArtifact = extractHtmlArtifact(text);
   const hasFence = htmlArtifact !== null;

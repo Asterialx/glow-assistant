@@ -488,17 +488,25 @@ export function calculateCalculatorResult(
   return calculateFormula(block.formula, values);
 }
 
+// JS \b ignores Cyrillic, so Russian words need explicit letter lookarounds ("поэтому" must not match "это").
+const RU_START = "(?<![\\p{L}\\p{N}])";
+const RU_END = "(?![\\p{L}\\p{N}])";
+const ARTIFACT_NOUN = "(?:график|диаграмм|таблиц|калькулятор|схем|страниц|план|виджет|артефакт|код|файл|сайт|приложен|игр|опросн)";
+const EDIT_ACTION = new RegExp(`\\b(?:change|update|modify|edit|extend|refine|convert|turn|make|add)\\b|${RU_START}(?:измени|изменить|поменяй|поменять|добавь|добавить|расширь|расширить|улучши|улучшить|преврати|превратить|сделай)`, "iu");
+// A bare "этот/это" is usually a topic or a date ("за этот год", "про это"); it only counts before an artifact noun.
+const EDIT_REFERENCE = new RegExp(`\\b(?:this|that|it|current|existing|same)\\b|${RU_START}(?:его|её|ее|неё|нее|него|сюда)${RU_END}|${RU_START}текущ|${RU_START}эт(?:от|у|ой|ого|ому|ом|и|а|о)\\s+${ARTIFACT_NOUN}`, "iu");
+const NEW_ARTIFACT = new RegExp(`\\bnew\\b|${RU_START}(?:нов(?:ый|ую|ое|ого)${RU_END}|ещё один|еще один)`, "iu");
+
 export function isArtifactEditRequest(text: string): boolean {
-  const action = /\b(?:change|update|modify|edit|extend|refine|convert|turn|make|add)\b|(?:измени|изменить|поменяй|поменять|добавь|добавить|расширь|расширить|улучши|улучшить|преврати|превратить|сделай)/i.test(text);
-  const reference = /\b(?:this|that|it|current|existing|same)\b|(?:этот|эту|этого|это|его|её|нее|него|текущ|сюда|в него|в неё|к этому|к этой)/i.test(text);
   const explicitChartEdit = /(?:change|switch|измен[иь]|поменяй)\s+(?:the\s+)?(?:chart\s+type|type\s+of\s+(?:the\s+)?chart|тип\s+(?:этого\s+)?графика|вид\s+(?:этого\s+)?графика)/i.test(text);
-  const asksForNew = /\bnew\b|(?:нов(?:ый|ую|ое|ого)|ещё один|еще один)/i.test(text);
-  return !asksForNew && (explicitChartEdit || (action && reference));
+  return !NEW_ARTIFACT.test(text) && (explicitChartEdit || (EDIT_ACTION.test(text) && EDIT_REFERENCE.test(text)));
 }
 
 export function requestedChartType(text: string): "bar" | "line" | null {
-  if (!/(?:^|\s)(?:измени|поменяй|переключи|сделай|change|switch|make|set)(?:\s|$)/i.test(text)) return null;
-  if (/(?:линейн|\bline\b)/i.test(text)) return "line";
-  if (/(?:столбчат|\bbar\b)/i.test(text)) return "bar";
-  return null;
+  if (!/(?<![\p{L}])(?:измени|поменяй|переключи|сделай|change|switch|make|set)(?![\p{L}])/iu.test(text)) return null;
+  const matches = [...text.matchAll(/(?<![\p{L}])(линейн|столбчат|line(?![\p{L}])|bar(?![\p{L}]))/giu)];
+  // "поменяй столбчатый на линейный": the type after "на/to" is the target; otherwise the first one named wins.
+  const target = matches.find((match) => /(?:^|\s)(?:на|в|to|into)\s+(?:\p{L}+\s+)?$/iu.test(text.slice(0, match.index))) ?? matches[0];
+  if (!target) return null;
+  return /^(?:линейн|line)/i.test(target[1]!) ? "line" : "bar";
 }

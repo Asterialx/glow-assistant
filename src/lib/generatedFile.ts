@@ -11,6 +11,12 @@ const FORMATS = ["md", "docx", "pdf", "xlsx", "pptx"];
 export function stripGeneratedFileFences(text: string): string {
   return text.replace(/```glow-file[^\n]*\r?\n[\s\S]*?(?:\r?\n```|$)/g, "").trim();
 }
+// shortcut: wording heuristic on short replies; replace with an explicit status from the model if wording keeps drifting.
+const FILE_CLAIM = /(?:файл|документ|презентаци|таблиц)[^.\n]{0,60}(?:готов|создан|подготовлен|сформирован)|(?:готов|создал|сделал|подготовил|сформировал)[^.\n]{0,40}(?:файл|документ|презентаци)/i;
+/** True when a short reply says a file is ready but carries no glow-file block (some models skip it). */
+export function claimsMissingFile(text: string): boolean {
+  return text.length < 400 && !text.includes("```") && !text.includes("|") && FILE_CLAIM.test(text);
+}
 export const GENERATED_FILE_PROMPT = 'File creation: when asked to create a downloadable document, spreadsheet or presentation, return a complete fenced ```glow-file JSON object, not Python code or an invented download URL. Schema: {"format":"md|docx|pdf|xlsx|pptx","filename":"name.ext","title":"Specific title","content":"Markdown text"}. For xlsx replace content with sheets:[{"name":"Sheet","rows":[["Column","Value"],["Item",42],["Total",{"formula":"SUM(B2:B2)"}]]}]. Supported formulas: SUM/AVERAGE/MIN/MAX/COUNT(A1:A10), range references only; strings are not formulas. For pptx replace content with slides:[{"title":"Title","body":"Concise slide text with newline bullets","notes":"Optional notes"}]. Max 5 files, 30 slides (body <=1000 chars), 10 sheets/1000 rows/30 columns, document <=80000 chars. Supply finished content, no placeholders or fabricated data. The app renders and exports actual files automatically. For revisions return the complete replacement glow-file object. Keep prose outside the block brief.';
 export function validateGeneratedFile(value: unknown): GeneratedFile {
   const v = value as GeneratedFile;
@@ -50,7 +56,9 @@ export function extractGeneratedFiles(text: string): GeneratedFile[] {
   const files: GeneratedFile[] = [];
   for (const match of text.matchAll(/```glow-file[^\n]*\r?\n([\s\S]*?)\r?\n```/g)) {
     if (files.length >= 5) throw new Error("Создавайте до пяти файлов за один ответ.");
-    files.push(validateGeneratedFile(JSON.parse(match[1])));
+    let spec: unknown;
+    try { spec = JSON.parse(match[1]); } catch { throw new Error("Блок файла повреждён: в ответе модели ошибка JSON."); }
+    files.push(validateGeneratedFile(spec));
   }
   return files;
 }

@@ -30,11 +30,13 @@ export function loadModelCatalog(): Promise<ModelInfo[]> {
     const token = serverMode ? (await supabase?.auth.getSession())?.data.session?.access_token : undefined;
     const url = `${baseUrl.replace(/\/$/, "")}/models`;
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    // A stalled request would otherwise keep the cached promise pending and block every retry.
+    const signal = AbortSignal.timeout(15000);
     if (tauri && serverMode) {
       const { fetch: tauriFetch } = await import("@tauri-apps/plugin-http");
-      return tauriFetch(url, { method: "GET", headers });
+      return tauriFetch(url, { method: "GET", headers, signal });
     }
-    return fetch(url, { headers });
+    return fetch(url, { headers, signal });
   })()
     .then(async (response) => {
       if (!response.ok) throw new Error(`Model catalog request failed (${response.status})`);

@@ -288,7 +288,7 @@ export async function streamChatCompletion(
       throw new Error(
         text
           ? `API ${res.status}: ${text.slice(0, 400)}`
-          : `API ${res.status}: пустой ответ шлюза (часто из‑за слишком большого запроса или сбоя модели). Попробуйте новый чат или другую модель.`,
+          : `API ${res.status}: пустой ответ шлюза (обычно сбой соединения с провайдером или модели). Повторите запрос или выберите другую модель.`,
       );
     }
 
@@ -326,6 +326,9 @@ export async function streamChatCompletion(
       }
     };
 
+    // A stream that stops without a finish reason or [DONE] was cut by the connection; "length" means the token budget ran out.
+    let finishReason: string | undefined;
+    let sawDone = false;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -337,10 +340,11 @@ export async function streamChatCompletion(
         const trimmed = line.trim();
         if (!trimmed.startsWith("data:")) continue;
         const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") continue;
+        if (data === "[DONE]") { sawDone = true; continue; }
         let json;
         try { json = JSON.parse(data); } catch { continue; }
         if (json.error) throw new Error(json.error.message || "Provider stream failed");
+        finishReason = json.choices?.[0]?.finish_reason ?? finishReason;
         collectCitations(json);
         collectToolCalls(json);
         {
@@ -367,6 +371,7 @@ export async function streamChatCompletion(
       try { json = JSON.parse(lastLine.slice(5).trim()); } catch { /* Incomplete event. */ }
       if (json?.error) throw new Error(json.error.message || "Provider stream failed");
       if (json) {
+        finishReason = json.choices?.[0]?.finish_reason ?? finishReason;
         collectCitations(json);
         collectToolCalls(json);
         const token = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.text ?? "";
@@ -379,6 +384,11 @@ export async function streamChatCompletion(
     }
     if (!output.trim() && toolCalls.size === 0) {
       throw new Error("Модель вернула пустой ответ. Повторите запрос вручную; автоматический повтор отключён.");
+    }
+    // Code or a file cut mid-block would become a half-built artifact whose buttons never work.
+    const cutOff = finishReason === "length" || (!finishReason && !sawDone);
+    if (cutOff && toolCalls.size === 0 && (output.match(/```/g)?.length ?? 0) % 2 === 1) {
+      throw new Error(finishReason === "length" ? "Ответ оборван: не хватило лимита длины." : "Ответ оборван: соединение прервалось.");
     }
 
     if (toolCalls.size) callbacks.onToolCalls?.([...toolCalls.values()]);

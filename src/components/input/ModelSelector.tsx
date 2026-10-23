@@ -15,12 +15,17 @@ export function ModelSelector() {
   const ref = useRef<HTMLDivElement>(null);
   const selected = models.find((model) => model.id === selectedModelId);
 
-  const refreshModels = async () => {
+  const refreshModels = async (retries = 0): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
       setModels(await loadModelCatalog());
     } catch (cause) {
+      // Short network blips (DNS, TLS) are common; retry quietly before showing the error.
+      if (retries < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1500 * (retries + 1)));
+        return refreshModels(retries + 1);
+      }
       setError(cause instanceof Error ? cause.message : "Не удалось загрузить модели");
     } finally {
       setLoading(false);

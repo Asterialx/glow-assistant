@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateFormula, extractGenUiBlocks, stripGenUiFences, validateGenUiBlock, recoverInlineArtifacts } from '../src/lib/genUi.ts';
+import { calculateFormula, extractGenUiBlocks, stripGenUiFences, validateGenUiBlock, recoverInlineArtifacts, isArtifactEditRequest, requestedChartType } from '../src/lib/genUi.ts';
 
 const field = { id: 'angle', label: 'Angle', min: 0, max: 90, step: 1, initial: 30, control: 'range' };
 test('calculator permits an empty optional unit without leaking JSON', () => {
@@ -99,4 +99,30 @@ test('saved rejected message can recover without duplicating persisted artifacts
   assert.equal(recovered[0].message_id, 'm1');
   assert.equal(recoverInlineArtifacts(message, [recovered[0]]).length, 0);
   assert.equal(recoverInlineArtifacts({ ...message, role: 'user' }, []).length, 0);
+});
+
+test('real edits of the open artifact are recognised', () => {
+  for (const text of ['измени этот график на линейный', 'добавь в него колонку', 'сделай его больше', 'добавь в текущую таблицу строку', 'поменяй тип графика', 'make it a line chart', 'update the current table']) {
+    assert.equal(isArtifactEditRequest(text), true, text);
+  }
+});
+
+test('requested chart type follows the target, not words from the topic', () => {
+  const cases = [
+    ['сделай диаграмму: столбчатую про линейные уравнения', 'bar'],
+    ['измени, пожалуйста, на линейный график', 'line'],
+    ['поменяй столбчатый на линейный', 'line'],
+    ['поменяй линейный на столбчатый', 'bar'],
+    ['make it a bar chart', 'bar'],
+    ['switch to a line chart', 'line'],
+    ['покажи график продаж', null],
+    ['линейный график', null],
+  ];
+  for (const [text, expected] of cases) assert.equal(requestedChartType(text), expected, text);
+});
+
+test('new requests are not treated as edits of the open artifact', () => {
+  for (const text of ['сделай график продаж за этот год', 'сделай презентацию про это', 'сделай таблицу расходов за месяц, поэтому добавь еду и транспорт', 'сделай новую таблицу', 'сделай ещё один график', 'составь таблицу кого куда отправить']) {
+    assert.equal(isArtifactEditRequest(text), false, text);
+  }
 });

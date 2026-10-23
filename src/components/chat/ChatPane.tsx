@@ -509,9 +509,10 @@ export function ChatPane({
                   </button>
                 )}
 
-                {!isStreaming && visibleContent.startsWith("Error:") && isLast && (
+                {!isStreaming && (visibleContent.startsWith("Error:") || m.status === "error") && isLast && (
                   <div className="mt-1 flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2.5 text-[13px] text-[var(--fg-muted)]">
-                    <span className="min-w-0 flex-1">{friendlyError(locale, visibleContent)}</span>
+                    {/* A partial answer keeps its text; the box tells the user it was cut off. */}
+                    <span className="min-w-0 flex-1">{visibleContent.startsWith("Error:") ? friendlyError(locale, visibleContent) : locale === "ru" ? "Ответ оборван на середине: лимит длины или обрыв соединения. Повторите запрос." : "The answer was cut off (length limit or lost connection). Try again."}</span>
                     <button
                       type="button"
                       onClick={() => onRegenerate?.(m)}
@@ -530,34 +531,34 @@ export function ChatPane({
                     )}
                   >
                     <IconBtn
-                      title="Copy"
+                      title={locale === "ru" ? "Копировать" : "Copy"}
                       onClick={() => void copyText(m.id, display.content || visibleContent)}
                     >
                       {copiedId === m.id ? <Check size={15} /> : <Copy size={15} />}
                     </IconBtn>
                     <IconBtn
-                      title={speakingId === m.id ? "Stop" : "Read aloud"}
+                      title={speakingId === m.id ? (locale === "ru" ? "Остановить" : "Stop") : (locale === "ru" ? "Озвучить" : "Read aloud")}
                       active={speakingId === m.id}
                       onClick={() => toggleSpeak(m.id, display.content || visibleContent)}
                     >
                       <Volume2 size={15} />
                     </IconBtn>
                     <IconBtn
-                      title="Helpful"
+                      title={locale === "ru" ? "Полезно" : "Helpful"}
                       active={votes[m.id] === "up"}
                       onClick={() => vote(m, "up", display.content || visibleContent)}
                     >
                       <ThumbsUp size={15} />
                     </IconBtn>
                     <IconBtn
-                      title="Not helpful"
+                      title={locale === "ru" ? "Не полезно" : "Not helpful"}
                       active={votes[m.id] === "down"}
                       onClick={() => vote(m, "down", display.content || visibleContent)}
                     >
                       <ThumbsDown size={15} />
                     </IconBtn>
                     <IconBtn
-                      title="Regenerate"
+                      title={locale === "ru" ? "Повторить ответ" : "Regenerate"}
                       disabled={!!streaming}
                       onClick={() => onRegenerate?.(m)}
                     >

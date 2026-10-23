@@ -521,7 +521,8 @@ export function AppShell() {
       await loadConversation(result.conversationId);
       return;
     }
-    if (result.error) { setSyncError(result.error.message); setWorkspaceTaskStatus(`${locale === "ru" ? "Задача прервана" : "Task interrupted"} · ${result.error.message}`); return; }
+    // The failed answer is already shown in the chat, so no second banner here.
+    if (result.error) { setWorkspaceTaskStatus(`${locale === "ru" ? "Задача прервана" : "Task interrupted"} · ${result.error.message}`); return; }
     if (result.usage && result.assistantMessage.content.trim()) void notifyReply(result.assistantMessage.id, result.assistantMessage.status);
     if (!result.error) {
       const assistantText = splitSearchSources(result.assistantMessage.content).text;
@@ -556,7 +557,7 @@ export function AppShell() {
       generation,
     }));
     if (!result) return;
-    if (result.error) { setSyncError(result.error.message); return; }
+    if (result.error) return;
     if (result.usage && result.assistantMessage.content.trim()) void notifyReply(result.assistantMessage.id, result.assistantMessage.status);
     if (!result.error) {
       await maybeSpawnArtifacts(
@@ -587,7 +588,7 @@ export function AppShell() {
       titleSource: editedText,
     }));
     if (!result) return;
-    if (result.error) { setSyncError(result.error.message); return; }
+    if (result.error) return;
     if (result.usage && result.assistantMessage.content.trim()) void notifyReply(result.assistantMessage.id, result.assistantMessage.status);
     if (!result.error) {
       await maybeSpawnArtifacts(

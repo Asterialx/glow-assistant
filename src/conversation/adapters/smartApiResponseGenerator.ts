@@ -35,8 +35,9 @@ export type LegacyGenerationOptions = {
 };
 
 /** A full HTML page or a long document does not fit the default 4096-token answer and gets cut off mid-file. */
-function outputBudget(generation: { mode: string; designMode: boolean; maxTokens: number }): number {
-  return generation.mode === "code" || generation.designMode ? Math.max(generation.maxTokens, 12000) : generation.maxTokens;
+const BUILD_REQUEST = /html|сайт|веб-?страниц|лендинг|мини-?игр|игр[уаые]|сап[её]р|морской бой|приложени|калькулятор|\bgame\b|\bapp\b/i;
+function outputBudget(generation: { mode: string; designMode: boolean; maxTokens: number }, request = ""): number {
+  return generation.mode === "code" || generation.designMode || BUILD_REQUEST.test(request) ? Math.max(generation.maxTokens, 12000) : generation.maxTokens;
 }
 
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
@@ -113,7 +114,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
         onToolCalls: (next) => { calls = next; },
       }, signal, {
         temperature: generation.temperature,
-        maxTokens: outputBudget(generation),
+        maxTokens: outputBudget(generation, currentText),
         conversationId: history.at(-1)?.conversation_id,
         scope: generation.mode,
         webSearch: webTools,

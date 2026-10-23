@@ -231,23 +231,17 @@ function Calculator({
                   className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-2.5 text-sm text-[var(--fg)] outline-none focus:border-[var(--accent)]"
                 />
               </div>
-              {field.control === "range" && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="range"
-                    min={field.min}
-                    max={field.max}
-                    step={field.step}
-                    value={value}
-                    onChange={(event) => updateField(field.id, Number(event.currentTarget.value), true)}
-                    aria-label={`${field.label} slider`}
-                    className="min-w-0 flex-1 accent-[var(--accent)]"
-                  />
-                  <output className="w-12 shrink-0 text-right text-xs tabular-nums text-[var(--fg-faint)]">
-                    {numberFormat.format(value)}
-                  </output>
-                </div>
-              )}
+              {/* Every field has min/max/step, so each one gets a slider; the model's number/range hint only made them inconsistent. */}
+              <input
+                type="range"
+                min={field.min}
+                max={field.max}
+                step={field.step}
+                value={value}
+                onChange={(event) => updateField(field.id, Number(event.currentTarget.value), true)}
+                aria-label={`${field.label} slider`}
+                className="block w-full accent-[var(--accent)]"
+              />
             </div>
           );
         })}

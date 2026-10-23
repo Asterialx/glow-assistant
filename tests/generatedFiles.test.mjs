@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { unzipSync, strFromU8 } from 'fflate';
 import ts from 'typescript';
-import { validateGeneratedFile, extractGeneratedFiles, stripGeneratedFileFences, generatedCellValue } from '../src/lib/generatedFile.ts';
+import { validateGeneratedFile, extractGeneratedFiles, stripGeneratedFileFences, generatedCellValue, claimsMissingFile } from '../src/lib/generatedFile.ts';
 const require = createRequire(import.meta.url);
 let source = await readFile(new URL('../src/lib/fileExport.ts', import.meta.url), 'utf8');
 source = source.replaceAll('from "./generatedFile"', `from ${JSON.stringify(new URL('../src/lib/generatedFile.ts',import.meta.url).href)}`);
@@ -21,6 +21,15 @@ test('file fences preserve prose, hide incomplete metadata and reject unsafe or 
   assert.throws(()=>validateGeneratedFile({...doc,format:'exe'}));
   assert.throws(()=>validateGeneratedFile({format:'xlsx',title:'x',sheets:[{name:'x',rows:[[{formula:'HYPERLINK("http://evil")'}]]}]}));
 });
+test('a short reply that announces a file without a glow-file block is flagged',()=>{
+  for(const text of ['Готово — файл с таблицей расходов за месяц. Суммы поставил примерные, вы сможете заменить их своими прямо в Excel.','Презентация готова.','Я создал документ с планом курсовой.'])assert.equal(claimsMissingFile(text),true,text);
+  for(const text of ['Вот список ингредиентов: хлеб, масло, сыр.','Файлы в Linux хранятся в дереве каталогов.','Таблица умножения: 2×2=4.','Готово.\n| а | б |\n|---|---|\n| 1 | 2 |','Файл готов:\n```js\nlet a = 1\n```','x'.repeat(400)+' файл готов'])assert.equal(claimsMissingFile(text),false,text);
+});
+
+test('a truncated or malformed file block fails with a Russian message, not a raw JSON parser error',()=>{
+  for(const body of['{bad','{"format":"md","title":"T","content":"x'])assert.throws(()=>extractGeneratedFiles('```glow-file\n'+body+'\n```'),/Блок файла повреждён/);
+});
+
 test('spreadsheet formulas compute verified numeric ranges and fail on cycles',()=>{
   const rows=[['Item','Amount'],['A',20],['B',22],['Total',{formula:'SUM(B2:B3)'}]];
   assert.equal(generatedCellValue(rows,3,1),42);
