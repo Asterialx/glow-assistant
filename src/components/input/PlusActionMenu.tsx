@@ -19,6 +19,7 @@ import { cloudDataEnabled } from "../../db";
 import { BUILTIN_SKILLS } from "../../lib/skills";
 import { useSkillsStore } from "../../stores/skillsStore";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useAgentStore } from "../../stores/agentStore";
 
 type SubKey = "project" | "skills" | null;
 
@@ -34,6 +35,8 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const mode = useModeStore((s) => s.mode);
   const taskMode = useWorkspaceStore((s) => s.taskMode);
   const setTaskMode = useWorkspaceStore((s) => s.setTaskMode);
+  const autonomy = useAgentStore((s) => s.autonomy);
+  const setAutonomy = useAgentStore((s) => s.setAutonomy);
   const webSearch = useModeStore((s) => s.webSearch);
   const setWebSearch = useModeStore((s) => s.setWebSearch);
   const projects = useChatStore((s) => s.projects);
@@ -73,8 +76,11 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
     <div ref={rootRef} className="absolute bottom-full left-0 z-50 mb-2 flex items-end gap-1.5">
       <div className="w-[min(300px,calc(100vw-48px))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
         {mode === "code" && <>
-          <MenuRow icon={<Briefcase size={16} />} label="Work" active={taskMode === "work"} trailing={taskMode === "work" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("work"); onClose(); }} onMouseEnter={() => setSub(null)} />
-          <MenuRow icon={<ScrollText size={16} />} label="Plan" active={taskMode === "plan"} trailing={taskMode === "plan" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("plan"); onClose(); }} onMouseEnter={() => setSub(null)} />
+          <MenuRow icon={<Briefcase size={16} />} label={ru ? "Авто" : "Auto"} active={taskMode === "work"} trailing={taskMode === "work" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("work"); onClose(); }} onMouseEnter={() => setSub(null)} />
+          {taskMode === "work" && (["autopilot", "important", "tasks"] as const).map((level) => (
+            <MenuRow key={level} icon={<span className="w-4" />} label={level === "autopilot" ? (ru ? "Автопилот: спросит только про удаление" : "Autopilot: asks only before deleting") : level === "important" ? (ru ? "Спрашивать о важном" : "Ask about important actions") : (ru ? "Подтверждать каждую задачу" : "Approve every task")} active={autonomy === level} trailing={autonomy === level ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setAutonomy(level); onClose(); }} onMouseEnter={() => setSub(null)} />
+          ))}
+          <MenuRow icon={<ScrollText size={16} />} label={ru ? "План" : "Plan"} active={taskMode === "plan"} trailing={taskMode === "plan" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("plan"); onClose(); }} onMouseEnter={() => setSub(null)} />
           <div className="my-1.5 border-t border-[var(--border)]" />
         </>}
         {<MenuRow

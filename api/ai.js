@@ -6,6 +6,12 @@ import { webSearchOptions } from './webSearch.js';
 import { researchPolicy } from './researchPolicy.js';
 import { validMessages } from './messageValidation.js';
 import { withPromptCache } from './promptCache.js';
+import { codeToolsFor } from './agentTools.js';
+
+const WORKSPACE_FUNCTIONS = [
+  { type: 'function', function: { name: 'workspace_list_files', description: 'List supported project files and folders in the selected Glow workspace. Call before choosing files to inspect.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
+  { type: 'function', function: { name: 'workspace_read_file', description: 'Read one supported file from the selected workspace. Use a relative_path returned by workspace_list_files.', parameters: { type: 'object', properties: { relative_path: { type: 'string', maxLength: 500 } }, required: ['relative_path'], additionalProperties: false } } },
+];
 
 export function resolveAiPath(req) {
   const pathname = new URL(req.url || '/', 'http://localhost').pathname;
@@ -43,6 +49,7 @@ export default async function handler(req, res) {
   const body = req.body;
   if (body?.web_search !== undefined && typeof body.web_search !== 'boolean') return fail(400, 'Invalid web search option');
   if (body?.workspace_tools !== undefined && typeof body.workspace_tools !== 'boolean') return fail(400, 'Invalid workspace tools option');
+  if (body?.tool_set !== undefined && (!codeToolsFor(body.tool_set) || body.scope !== 'code')) return fail(400, 'Invalid tool set');
   if (!body || typeof body.conversation_id !== 'string' || !['home','code','med'].includes(body.scope)) return fail(400, 'Conversation required');
   if (!body || !models.some(model => model.id === body.model) || body.stream !== true || !validMessages(body.messages)) return fail(400, 'Invalid conversation or attachments');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -69,6 +76,8 @@ export default async function handler(req, res) {
     if (rejection) return fail(rejection.status, rejection.message);
     admitted = true;
     const cacheHaiku = body.model === 'anthropic/claude-haiku-5.5';
+    // A named code tool set wins over the document workspace tools; the client never sends schemas.
+    const functionTools = body.tool_set ? codeToolsFor(body.tool_set) : body.workspace_tools ? WORKSPACE_FUNCTIONS : null;
     const providerMessages = body.web_search === true ? [
       // The client adds this policy for direct development calls; avoid paying
       // for the same long instructions twice on authenticated cloud requests.
@@ -81,11 +90,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({ model: body.model, messages: cacheHaiku ? withPromptCache(providerMessages) : providerMessages, stream: true,
         ...(cacheHaiku ? { session_id: body.conversation_id, stream_options: { include_usage: true } } : {}),
         ...webSearchOptions(body.web_search),
-        ...(body.workspace_tools ? { tools: [
-          ...(body.web_search ? webSearchOptions(true).tools : []),
-          { type: 'function', function: { name: 'workspace_list_files', description: 'List supported project files and folders in the selected Glow workspace. Call before choosing files to inspect.', parameters: { type: 'object', properties: {}, additionalProperties: false } } },
-          { type: 'function', function: { name: 'workspace_read_file', description: 'Read one supported file from the selected workspace. Use a relative_path returned by workspace_list_files.', parameters: { type: 'object', properties: { relative_path: { type: 'string', maxLength: 500 } }, required: ['relative_path'], additionalProperties: false } } },
-        ] } : {}),
+        ...(functionTools ? { tools: [...(body.web_search ? webSearchOptions(true).tools : []), ...functionTools] } : {}),
         max_tokens: maxOutput,
         temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
     });

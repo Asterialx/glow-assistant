@@ -9,7 +9,8 @@ source=source.replace('import { getModel } from "../models";','const getModel = 
  .replace('import { DESIGN_MODE_SYSTEM } from "../designMode";','const DESIGN_MODE_SYSTEM = "design";')
  .replace('import { betaAuthEnabled, supabase } from "../../auth/client";','const betaAuthEnabled = false; const supabase = null;')
  .replace('import { messagesFitTransport } from "../../../api/messageValidation.js";','const messagesFitTransport = () => true;')
- .replace('import { WORKSPACE_TOOL_DEFINITIONS } from "../workspaceTools";','const WORKSPACE_TOOL_DEFINITIONS = [];');
+ .replace('import { WORKSPACE_TOOL_DEFINITIONS } from "../workspaceTools";','const WORKSPACE_TOOL_DEFINITIONS = [];')
+ .replace('import { CODE_TOOL_SETS } from "../../../api/agentTools.js";','const CODE_TOOL_SETS = {};');
 for(const [specifier,path] of [['../attachments','../src/lib/attachments.ts'],['../../../api/researchPolicy.js','../api/researchPolicy.js'],['../types','../src/lib/types.ts'],['../utils','../src/lib/utils.ts'],['../studyPlan','../src/lib/studyPlan.ts'],['./uiPrompt','../src/lib/llm/uiPrompt.ts'],['../../auth/accountStorage','../src/auth/accountStorage.ts']]) {
  source=source.replaceAll(`from "${specifier}"`,`from ${JSON.stringify(new URL(path,import.meta.url).href)}`);
 }

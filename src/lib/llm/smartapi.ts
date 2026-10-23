@@ -12,6 +12,7 @@ import { appendSearchSources } from "../searchSources";
 import { splitSearchSources } from "../searchSources";
 import { GENERATED_FILE_PROMPT } from "../generatedFile";
 import { WORKSPACE_TOOL_DEFINITIONS } from "../workspaceTools";
+import { CODE_TOOL_SETS } from "../../../api/agentTools.js";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
@@ -214,7 +215,7 @@ export async function streamChatCompletion(
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string; webSearch?: boolean; workspaceTools?: boolean },
+  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string; webSearch?: boolean; workspaceTools?: boolean; toolSet?: "code_agent" | "code_plan" },
 ): Promise<void> {
   const model = getModel(modelId);
   const url = `${opts?.webSearch && import.meta.env.DEV ? "/openrouter" : getBaseUrl()}/chat/completions`;
@@ -250,6 +251,8 @@ export async function streamChatCompletion(
         ? { workspace_tools: true }
         : { tools: WORKSPACE_TOOL_DEFINITIONS }) : {}),
       ...(opts?.webSearch && opts?.workspaceTools && betaAuthEnabled && !import.meta.env.DEV ? { workspace_tools: true } : {}),
+      // The server owns the agent tool schemas and takes only the set name; direct dev calls send them.
+      ...(opts?.toolSet ? (betaAuthEnabled && !import.meta.env.DEV ? { tool_set: opts.toolSet } : { tools: CODE_TOOL_SETS[opts.toolSet] }) : {}),
       ...(betaAuthEnabled && !import.meta.env.DEV ? {
         conversation_id: opts?.conversationId,
         scope: opts?.scope,

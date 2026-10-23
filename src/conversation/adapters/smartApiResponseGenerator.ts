@@ -8,6 +8,11 @@ import { listWorkspaceFiles, readWorkspaceFile } from "../../lib/workspace";
 import { prepareAttachment } from "../../lib/attachments";
 import { redactPii } from "../../lib/tauri";
 import type { Locale } from "../../lib/i18n";
+import { runAgent } from "../../lib/agent/loop";
+import { createToolExecutor } from "../../lib/agent/tools";
+import { appendAgentTrace } from "../../lib/agent/trace";
+import type { AgentMode, Autonomy } from "../../lib/agent/policy";
+import { useAgentStore } from "../../stores/agentStore";
 import {
   clarifyPrompt, courseworkRequestBefore, formatQuestions, generateCoursework, isAwaitingCourseworkAnswer,
   isCourseworkRequest, parseClarification,
@@ -31,6 +36,8 @@ export type LegacyGenerationOptions = {
   locale: Locale;
   workspaceTools?: boolean;
   agentPlan?: boolean;
+  /** Glow Code: run the tool-using agent loop on the selected project folder. */
+  agent?: { mode: AgentMode; autonomy: Autonomy; taskId: string };
   onAgentStatus?: (status: string) => void;
 };
 
@@ -83,6 +90,45 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
     const cleanHistory = history.map(message => message.role === "assistant"
       ? { ...message, content: splitSearchSources(message.content).text }
       : message);
+    if (generation.agent) {
+      const { mode, autonomy, taskId } = generation.agent;
+      const tools = createToolExecutor(taskId);
+      const agentPayload = buildChatPayload(generation.mode, cleanHistory, [generation.systemExtra, workflow].filter(Boolean).join("\n\n"), generation.memory, false, generation.modelId, generation.designMode, false, mode === "plan");
+      const store = () => useAgentStore.getState();
+      store().begin();
+      try {
+        const result = await runAgent(agentPayload, {
+          async turn(messages, toolSet, onToken) {
+            let calls: { id: string; name: string; arguments: string }[] = [];
+            let usage: { inputTokens: number; outputTokens: number; costUnits: number } | undefined;
+            let streamError: Error | undefined;
+            await streamChatCompletion(generation.modelId, messages, {
+              onToken,
+              onDone: (done) => { usage = done; },
+              onError: (error) => { streamError = error; },
+              onToolCalls: (next) => { calls = next; },
+            }, signal, { temperature: generation.temperature, maxTokens: 8000, conversationId: history.at(-1)?.conversation_id, scope: generation.mode, webSearch: false, toolSet });
+            if (streamError) throw streamError;
+            return { calls, usage };
+          },
+          exec: tools.exec,
+          classifyCommand: tools.classifyCommand,
+          confirm: (request) => store().ask(request),
+          drainExtraMessages: tools.drainExtraMessages,
+          onToken: callbacks.onToken,
+          onStep: (step) => { store().upsertStep(step); if (step.status === "running") generation.onAgentStatus?.(step.summary); },
+          onTasks: (next) => store().setTasks(next),
+        }, { mode, autonomy, signal });
+        const notice = result.stopped === "max_turns" ? "Остановлено: достигнут лимит шагов. Напишите «продолжай», чтобы продолжить."
+          : result.stopped === "budget" ? "Остановлено: исчерпан бюджет токенов задачи. Напишите «продолжай», чтобы продолжить." : "";
+        callbacks.onToken(`${notice ? `\n\n_${notice}_` : ""}${appendAgentTrace("", { v: 1, taskId, stopped: result.stopped, steps: result.steps, tasks: result.tasks, changedFiles: result.changedFiles })}`);
+        if (result.stopped === "error") throw new Error(result.error || "Агент остановился из-за ошибки.");
+        callbacks.onDone(result.usage);
+      } finally {
+        store().finish();
+      }
+      return;
+    }
     const initialPayload = buildChatPayload(
       generation.mode,
       cleanHistory,

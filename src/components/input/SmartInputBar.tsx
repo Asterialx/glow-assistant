@@ -60,6 +60,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
   const setMode = useModeStore((s) => s.setMode);
   const mode = useModeStore((s) => s.mode);
   const taskMode = useWorkspaceStore((s) => s.taskMode);
+  const autonomy = useAgentStore((s) => s.autonomy);
   const designMode = useModeStore((s) => s.designMode);
   const setDesignMode = useModeStore((s) => s.setDesignMode);
   const chromeAgentActive = useModeStore((s) => s.chromeAgentActive);
@@ -901,7 +902,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
           </button>
           {workspaceEnabled && <button type="button" disabled={disabled} aria-label={locale === "ru" ? "Работать без папки" : "Work without a folder"} className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]" onClick={async () => { await clearWorkspace(); setWorkspaceEnabled(false); setWorkspaceName(null); setWorkspaceTaskStatus(""); }}><X size={12} /></button>}
         </div>
-        <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? "Plan" : "Work"}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только планирование" : "Planning only") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : (locale === "ru" ? "Папка подключена" : "Folder connected")}</span></span>
+        <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? (locale === "ru" ? "План" : "Plan") : (locale === "ru" ? "Авто" : "Auto")}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только чтение и план" : "Read-only planning") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : autonomy === "autopilot" ? (locale === "ru" ? "Автопилот" : "Autopilot") : autonomy === "tasks" ? (locale === "ru" ? "Подтверждение задач" : "Task approval") : (locale === "ru" ? "Спрашивает о важном" : "Asks about important actions")}</span></span>
       </div>}
       {downloadInfoOpen && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDownloadInfoOpen(false); }}>
@@ -923,3 +924,4 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
   );
 }
 import { accountStorage as localStorage } from "../../auth/accountStorage";
+import { useAgentStore } from "../../stores/agentStore";

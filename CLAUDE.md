@@ -10,7 +10,8 @@ AI-рабочее пространство на русском: чат, Artifact
 - **Desktop:** Tauri 2 (`src-tauri/`), Rust-команды в `src-tauri/src/commands.rs` (workspace_*, export_save_file, mcp, game mode).
 - **Серверный API:** Vercel, файлы `api/*.js` (`ai.js` — прокси к OpenRouter с резервом токенов, `invite.js` — приглашения, `webSearch.js` — лимиты поиска).
 - **База:** Supabase, миграции `supabase/migrations/`, edge-функция `supabase/functions/glow-invite/`.
-- **Тесты:** `node --test tests/*.mjs` (105 тестов). Rust: `cargo test` в `src-tauri`.
+- **Тесты:** `node --test tests/*.mjs` (140 тестов). Rust: `cargo test --lib` в `src-tauri` (23 теста).
+- **Glow Code (агент разработки, фаза 1):** режим «Работа» с подключённой папкой запускает цикл агента. Режимы Авто и План (`workspaceStore.taskMode`: `work`/`plan`), три уровня автономии (`agentStore.autonomy`: autopilot, important, tasks). Цикл: `src/lib/agent/loop.ts`; решения о правах: `src/lib/agent/policy.ts` и `src-tauri/src/policy.rs` (Rust проверяет всё повторно, `approved` ставит только UI); инструменты: `src-tauri/src/code_tools.rs` (`code_list/read/search/edit/create/delete/run`, откат через снимки в app data); схемы инструментов на сервере: `api/agentTools.js` (клиент шлёт только `tool_set`); след шагов в ответе: блок `glow-agent` (`src/lib/agent/trace.ts`); UI: `src/components/agent/`. Не сделано: git-инструменты, подагенты, MCP (фазы 2–4 плана).
 
 ## Ключевые файлы
 - `src/conversation/ConversationEngine.ts` — отправка сообщения, создание чата, ветки, стриминг ответа.

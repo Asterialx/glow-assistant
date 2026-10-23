@@ -48,6 +48,10 @@ import { shouldSearchWeb } from "../../lib/webSearchIntent";
 import { splitSearchSources } from "../../lib/searchSources";
 import { extractGeneratedFiles, generatedFileFromArtifact, stripGeneratedFileFences, type GeneratedFile } from "../../lib/generatedFile";
 import { useWorkspaceStore } from "../../stores/workspaceStore";
+import { useAgentStore } from "../../stores/agentStore";
+import { AgentConfirmDialog } from "../agent/AgentConfirmDialog";
+import { agentInstructions } from "../../lib/agent/tools";
+import type { AgentMode } from "../../lib/agent/policy";
 import { isDesktopApp, listWorkspaceFiles, writeWorkspaceFile } from "../../lib/workspace";
 import { exportGeneratedFile } from "../../lib/fileExport";
 
@@ -231,6 +235,9 @@ export function AppShell() {
       ? "PLAN MODE: inspect available source files if needed and propose a clear actionable plan. Ask only necessary questions. Do not execute the plan, create artifacts, produce glow-file blocks or claim files were saved. Wait for the user to switch to Work before implementation."
       : workspaceEnabled ? "WORK MODE: complete the user's task using the selected workspace when relevant." : "WORK MODE WITHOUT A FOLDER: complete the task using the conversation, attachments and web search if needed. You have no access to local files. Provide requested deliverables as glow-file artifacts for preview and download; never claim to save them to a local folder."
       : "";
+    // With a folder connected, Work runs the Glow Code agent; Plan is its read-only mode.
+    const agent = workspaceEnabled ? { mode: (useWorkspaceStore.getState().taskMode === "plan" ? "plan" : "auto") as AgentMode, autonomy: useAgentStore.getState().autonomy, taskId: crypto.randomUUID() } : undefined;
+    const modeInstructions = agent ? [agentInstructions(agent.mode, agent.autonomy)] : [workspaceInstructions, taskInstructions];
     const memory = memoryPaused || localStorage.getItem("glow.memoryFromChats") !== "1" ? [] : await memoryFactsForPrompt();
     const feedback = feedbackPreferenceHints();
     // The experimental catalog must not imply tools that the model cannot call.
@@ -239,10 +246,11 @@ export function AppShell() {
       mode,
       locale,
       agentPlan,
-      modelId: splitAttachments(userText).files.some(file => file.image) || branchPath.some(message => splitAttachments(message.content).files.some(file => file.image)) ? "anthropic/claude-haiku-5.5" : selectedModelId,
+      modelId: agent || splitAttachments(userText).files.some(file => file.image) || branchPath.some(message => splitAttachments(message.content).files.some(file => file.image)) ? "anthropic/claude-haiku-5.5" : selectedModelId,
       temperature,
       maxTokens,
-      systemExtra: [project?.system_prompt, custom, feedback, extensions, artifactContext, workspaceInstructions, taskInstructions].filter(Boolean).join("\n\n"),
+      systemExtra: [project?.system_prompt, custom, feedback, extensions, artifactContext, ...modeInstructions].filter(Boolean).join("\n\n"),
+      ...(agent ? { agent } : {}),
       memory,
       designMode,
       webSearch: webSearch || shouldSearchWeb(userText),
@@ -626,6 +634,7 @@ export function AppShell() {
 
   return (
     <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
+      <AgentConfirmDialog locale={locale} />
       {syncError && <div role="status" className="fixed left-1/2 top-12 z-[110] w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm break-words">{syncError}</div>}
       {sidebarOpen && (
         <>

@@ -41,6 +41,9 @@ import {
 import { VoiceNotePlayer } from "../audio/VoiceNotePlayer";
 import { splitAttachments, preserveAttachments } from "../../lib/attachments";
 import { splitSearchSources } from "../../lib/searchSources";
+import { splitAgentTrace } from "../../lib/agent/trace";
+import { AgentRun } from "../agent/AgentRun";
+import { useAgentStore } from "../../stores/agentStore";
 import { SearchSources } from "./SearchSources";
 import { FileAttachment, DocumentActivity, attachmentNames } from "./FileAttachment";
 import { generatedFileFromArtifact } from "../../lib/generatedFile";
@@ -124,6 +127,7 @@ export function ChatPane({
   const designMode = useModeStore((s) => s.designMode);
   const agentMode = useModeStore((s) => s.mode) === "code";
   const workspaceTaskStatus = useWorkspaceStore((s) => s.taskStatus);
+  const agentRunning = useAgentStore((s) => s.running);
   const empty = messages.length === 0;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [speakingId, setSpeakingId] = useState<string | null>(null);
@@ -376,7 +380,8 @@ export function ChatPane({
               );
             }
 
-            const { text: visibleContent, sources } = splitSearchSources(m.content);
+            const { text: withoutTrace, trace: agentTrace } = splitAgentTrace(m.content);
+            const { text: visibleContent, sources } = splitSearchSources(withoutTrace);
             const visibleMessage = visibleContent === m.content ? m : { ...m, content: visibleContent };
             const display = getAssistantDisplay(visibleContent, isStreaming);
             const messageArts = artifacts.filter((a) => a.message_id === m.id);
@@ -390,6 +395,7 @@ export function ChatPane({
             const parentMessage = messages.find(message => message.id === m.parent_id && message.role === "user") || [...messages.slice(0, idx)].reverse().find(message => message.role === "user");
             const hasFiles = !!parentMessage && splitAttachments(parentMessage.content).files.length > 0;
             const widgets = widgetsByMessage[m.id] || [];
+            const liveAgent = isStreaming && isLast && agentRunning;
             const prose =
               (visibleContent.startsWith("Error:") ? "" : display.content) ||
               (showBuilding
@@ -423,6 +429,8 @@ export function ChatPane({
                     </span>
                   </div>
                 )}
+
+                {(agentTrace || liveAgent) && <AgentRun locale={locale} trace={agentTrace} live={liveAgent} />}
 
                 <div
                   className={cn(

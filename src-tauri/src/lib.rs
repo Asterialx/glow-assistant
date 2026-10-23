@@ -1,7 +1,9 @@
+mod code_tools;
 mod commands;
 mod game_mode;
 mod mcp;
 mod pii;
+mod policy;
 mod state;
 
 use state::AppState;
@@ -35,6 +37,15 @@ pub fn run() {
             commands::workspace_read_file,
             commands::workspace_write_file,
             commands::export_save_file,
+            code_tools::code_list,
+            code_tools::code_read,
+            code_tools::code_search,
+            code_tools::code_edit,
+            code_tools::code_create,
+            code_tools::code_delete,
+            code_tools::code_run,
+            code_tools::code_classify_command,
+            code_tools::code_restore_checkpoint,
         ])
         .setup(|app| {
             let handle = app.handle().clone();
