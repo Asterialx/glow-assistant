@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Plus,
   Code2,
-  Briefcase,
   MessageCircle,
   Folder,
   SlidersHorizontal,
@@ -28,6 +27,17 @@ import { createProject } from "../../db";
 import { conversationService } from "../../conversation/conversationService";
 import { useAccount } from "../../auth/AccountContext";
 import { betaAuthEnabled, supabase } from "../../auth/client";
+
+/** A briefcase drawn like the lucide tab icons (same grid and stroke), with a flat body and a handle. */
+function BriefcaseIcon({ size = 13, strokeWidth = 1.7 }: { size?: number; strokeWidth?: number }) {
+  return (
+    <svg width={size} height={size} className="shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="8" width="18" height="12" rx="2.5" />
+      <path d="M9 8V6.5A1.5 1.5 0 0 1 10.5 5h3A1.5 1.5 0 0 1 15 6.5V8" />
+      <path d="M3 13h18" />
+    </svg>
+  );
+}
 
 interface Props {
   onNewChat: () => void;
@@ -204,7 +214,7 @@ export function ClaudeSidebar({
         <div className="relative grid h-9 w-[264px] grid-cols-3 rounded-full bg-[var(--bg)] p-0.5" role="group" aria-label={locale === "ru" ? "Режим Glow" : "Glow mode"}>
           {([
             { id: "home" as const, label: locale === "ru" ? "Чат" : "Chat", icon: MessageCircle },
-            { id: "work" as const, label: locale === "ru" ? "Работа" : "Work", icon: Briefcase },
+            { id: "work" as const, label: locale === "ru" ? "Работа" : "Work", icon: BriefcaseIcon },
             { id: "dev" as const, label: locale === "ru" ? "Код" : "Code", icon: Code2 },
           ]).map(({ id, label, icon: Icon }) => {
             const active = id === "home" ? mode !== "code" : mode === "code" && codeKind === id;
@@ -238,7 +248,7 @@ export function ClaudeSidebar({
                     : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                 )}
               >
-                <Icon size={13} strokeWidth={1.7} style={active && id !== "home" ? { color: id === "dev" ? "var(--kind-dev)" : "var(--kind-work)" } : undefined} />
+                <Icon size={13} strokeWidth={1.7} />
                 {label}
               </button>
             );

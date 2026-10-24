@@ -352,7 +352,7 @@ export function ChatPane({
                         <div className="mt-2 flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            className="flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] text-[var(--fg-muted)] hover:bg-[var(--bg-hover)]"
+                            className="flex h-8 w-8 items-center justify-center rounded-xl text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
                             title="Cancel"
                             onClick={cancelEdit}
                           >
@@ -485,7 +485,7 @@ export function ChatPane({
                         key={artifact.id}
                         type="button"
                         onClick={closeArtifacts}
-                        className="my-3 inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-sm text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
+                        className="my-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-[var(--fg-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
                       >
                         <PanelRight size={14} className="text-[var(--accent)]" />
                         {locale === "ru" ? "Артефакт открыт в рабочей области · Вернуть в чат" : "Artifact is open in Workspace · Return to chat"}
@@ -513,7 +513,7 @@ export function ChatPane({
                   <button
                     type="button"
                     onClick={() => onOpenArtifact(panelArt.id)}
-                    className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-[13px] font-medium text-[var(--fg)] shadow-sm transition-colors hover:bg-[var(--bg-hover)]"
+                    className="mt-1 inline-flex w-fit items-center gap-2 rounded-xl px-3 py-2 text-[13px] font-medium text-[var(--fg)] transition-colors hover:bg-[var(--bg-hover)]"
                   >
                     <PanelRight size={15} strokeWidth={1.7} className="text-[var(--accent)]" />
                     <span>{t(locale, "openArtifact")}</span>

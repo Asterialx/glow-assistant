@@ -621,7 +621,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
                   <button
                     type="button"
                     onClick={cancelRecording}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] hover:bg-[var(--bg-hover)]"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
                     title="Cancel"
                   >
                     <X size={16} strokeWidth={1.8} />
@@ -734,7 +734,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
                 <button
                   type="button"
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--bg)] text-[var(--fg)] shadow-sm transition-colors",
+                    "flex h-8 w-8 items-center justify-center rounded-xl text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)]",
                     "hover:bg-[var(--bg-hover)]",
                     menuOpen && "bg-[var(--bg-hover)]",
                   )}
@@ -761,6 +761,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
               <ModelSelector />
 
               <div className="ml-auto flex items-center gap-0.5">
+                {mode === "code" && <ModeSelect />}
                 <div
                   className="relative"
                   ref={micMenuRef}
@@ -904,13 +905,10 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
       {mode === "code" && <div className="mx-auto mt-3 flex max-w-[720px] flex-wrap items-center justify-between gap-2 px-0 text-[12px] text-[var(--fg-muted)]">
         <div className="flex min-w-0 items-center gap-1">
           <button type="button" disabled={disabled} onClick={selectWorkFolder} className="flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] disabled:opacity-50" title={workspaceName || undefined}>
-            <FolderOpen size={14} /><span className="max-w-[220px] truncate">{workspaceEnabled && workspaceName ? workspaceName : codeKind === "dev" ? (locale === "ru" ? "Выбрать проект" : "Choose project") : locale === "ru" ? "Выбрать папку" : "Choose folder"}</span><ChevronDown size={12} />
+            <FolderOpen size={14} /><span className="max-w-[220px] truncate">{workspaceEnabled && workspaceName ? workspaceName : locale === "ru" ? "Выбрать папку" : "Choose folder"}</span><ChevronDown size={12} />
           </button>
           {workspaceEnabled && <button type="button" disabled={disabled} aria-label={locale === "ru" ? "Работать без папки" : "Work without a folder"} className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]" onClick={async () => { await clearWorkspace(); setWorkspaceEnabled(false); setWorkspaceName(null); setWorkspaceTaskStatus(""); }}><X size={12} /></button>}
         </div>
-        {codeKind === "dev"
-          ? null /* the project bar above the chat already shows the mode and the autonomy level */
-          :<span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? "Plan" : "Work"}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только планирование" : "Planning only") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : (locale === "ru" ? "Папка подключена" : "Folder connected")}</span></span>}
       </div>}
       {downloadInfoOpen && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDownloadInfoOpen(false); }}>
@@ -933,3 +931,4 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
 }
 import { accountStorage as localStorage } from "../../auth/accountStorage";
 import { useAgentStore } from "../../stores/agentStore";
+import { ModeSelect } from "./ModeSelect";
