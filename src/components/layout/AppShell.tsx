@@ -35,7 +35,7 @@ import {
   payloadsToWidgets,
   syncStudyProgress,
 } from "../../lib/widgetParse";
-import { PanelLeft, Search, X } from "lucide-react";
+import { PanelLeft, PanelRight, Search, X } from "lucide-react";
 import { feedbackPreferenceHints } from "../../lib/feedbackProfile";
 import { useExtensionsStore } from "../../lib/extensions/registry";
 import { conversationService, type LegacyGenerationOptions } from "../../conversation/conversationService";
@@ -52,6 +52,7 @@ import { useAgentStore } from "../../stores/agentStore";
 import { AgentConfirmDialog } from "../agent/AgentConfirmDialog";
 import { idPrefixFor } from "../../lib/codeKind";
 import { ProjectBar } from "../agent/ProjectBar";
+import { AgentPanel } from "../agent/AgentPanel";
 import { cn } from "../../lib/utils";
 import { agentInstructions } from "../../lib/agent/tools";
 import type { AgentMode } from "../../lib/agent/policy";
@@ -117,6 +118,11 @@ export function AppShell() {
   const [webSearching, setWebSearching] = useState(false);
   const workspaceStopRequested = useRef(false);
   const setWorkspaceTaskStatus = useWorkspaceStore((s) => s.setTaskStatus);
+  const setTaskMode = useWorkspaceStore((s) => s.setTaskMode);
+  const agentPanelOpen = useAgentStore((s) => s.panelOpen);
+  const openAgentPanel = useAgentStore((s) => s.openPanel);
+  const closeAgentPanel = useAgentStore((s) => s.closePanel);
+  const setAgentPlan = useAgentStore((s) => s.setPlan);
 
   useEffect(() => {
     if (!ready || !cloudDataEnabled) return;
@@ -264,6 +270,12 @@ export function AppShell() {
       workspaceTools: workspaceEnabled && !devKind,
       ...(mode === "code" ? { codeKind: devKind ? "dev" as const : "work" as const, onAgentStatus: setWorkspaceTaskStatus } : {}),
     };
+  };
+
+  /** Shows the end state of a task for a few seconds, then clears it unless a new task already replaced it. */
+  const showFinalStatus = (text: string) => {
+    setWorkspaceTaskStatus(text);
+    window.setTimeout(() => { if (useWorkspaceStore.getState().taskStatus === text) setWorkspaceTaskStatus(""); }, 4000);
   };
 
   const runWithSearchStatus = async <T,>(search: boolean, operation: () => Promise<T>): Promise<T> => {
@@ -518,6 +530,8 @@ export function AppShell() {
 
     const generation = await createGenerationOptions(content);
     workspaceStopRequested.current = false;
+    // A status left over from the previous task must not show up in this one.
+    setWorkspaceTaskStatus("");
     if (saveGeneratedToWorkspace) setWorkspaceTaskStatus(locale === "ru"
       ? generation.webSearch ? "Ищу материалы и актуальные источники…" : "Готовлю рабочую задачу…"
       : generation.webSearch ? "Researching materials and current sources…" : "Preparing the task…");
@@ -534,12 +548,12 @@ export function AppShell() {
     if (!result) { setWorkspaceTaskStatus(""); return; }
     if (workspaceStopRequested.current) {
       workspaceStopRequested.current = false;
-      setWorkspaceTaskStatus(locale === "ru" ? "Задача остановлена · уже созданные файлы сохранены" : "Task stopped · files already created are saved");
+      showFinalStatus(locale === "ru" ? "Задача остановлена · уже созданные файлы сохранены" : "Task stopped · files already created are saved");
       await loadConversation(result.conversationId);
       return;
     }
     // The failed answer is already shown in the chat, so no second banner here.
-    if (result.error) { setWorkspaceTaskStatus(`${locale === "ru" ? "Задача прервана" : "Task interrupted"} · ${result.error.message}`); return; }
+    if (result.error) { showFinalStatus(`${locale === "ru" ? "Задача прервана" : "Task interrupted"} · ${result.error.message}`); return; }
     if (result.usage && result.assistantMessage.content.trim()) void notifyReply(result.assistantMessage.id, result.assistantMessage.status);
     if (!result.error) {
       const assistantText = splitSearchSources(result.assistantMessage.content).text;
@@ -548,10 +562,11 @@ export function AppShell() {
       if (saveGeneratedToWorkspace) {
         let hasFile = false;
         try { hasFile = extractGeneratedFiles(assistantText).length > 0; } catch { /* The artifact handler reports malformed files. */ }
-        if (!hasFile) setWorkspaceTaskStatus(locale === "ru" ? "Готово" : "Done");
+        if (!hasFile) showFinalStatus(locale === "ru" ? "Готово" : "Done");
       }
+      if (generation.agentPlan && mode === "code") { setAgentPlan(assistantText); openAgentPanel("plan"); }
       await extractMemory(assistantText);
-      if (mode === "code" && !saveGeneratedToWorkspace) setWorkspaceTaskStatus(generation.agentPlan ? (locale === "ru" ? "План готов" : "Plan ready") : (locale === "ru" ? "Готово" : "Done"));
+      if (mode === "code" && !saveGeneratedToWorkspace) showFinalStatus(generation.agentPlan ? (locale === "ru" ? "План готов" : "Plan ready") : (locale === "ru" ? "Готово" : "Done"));
     }
     await loadConversation(result.conversationId);
   };
@@ -727,6 +742,17 @@ export function AppShell() {
             </span>
           )}
           <div className="ml-auto pr-2 text-[12px] text-[var(--fg-faint)]">{mode === "code" ? (codeKind === "dev" ? "Glow Code" : "Glow Work") : "Glow"}</div>
+          {mode === "code" && codeKind === "dev" && (
+            <button
+              type="button"
+              className={cn("rounded-lg p-2 text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]", agentPanelOpen && "bg-[var(--bg-hover)] text-[var(--fg)]")}
+              onClick={() => (agentPanelOpen ? closeAgentPanel() : openAgentPanel())}
+              aria-label={locale === "ru" ? "Панель агента" : "Agent panel"}
+              aria-pressed={agentPanelOpen}
+            >
+              <PanelRight size={16} strokeWidth={1.7} />
+            </button>
+          )}
         </header>
         {mode === "code" && codeKind === "dev" && <ProjectBar locale={locale} />}
 
@@ -763,6 +789,9 @@ export function AppShell() {
             webSearching={webSearching}
             onStop={handleStop}
           />
+          {mode === "code" && codeKind === "dev" && agentPanelOpen && (
+            <AgentPanel locale={locale} onExecutePlan={() => { setTaskMode("work"); setAgentPlan(""); void handleSend(locale === "ru" ? "Выполни этот план." : "Carry out this plan."); }} />
+          )}
           {artifactsOpen && (
             <ArtifactsPanel
               artifacts={artifacts}

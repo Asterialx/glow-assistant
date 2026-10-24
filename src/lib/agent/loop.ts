@@ -7,7 +7,7 @@ export type Usage = { inputTokens: number; outputTokens: number; costUnits: numb
 export type TaskStatus = "pending" | "in_progress" | "done";
 export type Task = { id: string; title: string; status: TaskStatus };
 export type StepStatus = "running" | "done" | "error" | "denied";
-export type Step = { id: string; name: string; summary: string; status: StepStatus; detail?: string; diff?: string; ms?: number };
+export type Step = { id: string; name: string; summary: string; status: StepStatus; detail?: string; diff?: string; output?: string; ms?: number };
 export type ConfirmRequest = { id: string; kind: "command" | "delete" | "many_files" | "git" | "task"; title: string; reason: string };
 export type ConfirmAnswer = "once" | "task" | "deny";
 
@@ -183,8 +183,10 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
         const output = await deps.exec(call.name, args, approved);
         const diff = call.name === "code_edit" && output && typeof (output as { diff?: unknown }).diff === "string" ? String((output as { diff: string }).diff) : undefined;
         if ((call.name === "code_edit" || call.name === "code_create" || call.name === "code_delete") && typeof args.path === "string") changed.add(args.path.replace(/\\/g, "/").toLowerCase());
+        const run = call.name === "code_run" ? output as { stdout?: string; stderr?: string } | null : null;
+        const printed = run ? [run.stdout, run.stderr].filter(Boolean).join("\n").trim() : "";
         const exitCode = call.name === "code_run" ? (output as { exit_code?: number | null } | null)?.exit_code : undefined;
-        record({ ...step, status: call.name === "code_run" && exitCode !== 0 ? "error" : "done", ...(diff ? { diff } : {}), ...(exitCode !== undefined ? { detail: exitCode === null ? "прервана" : `код ${exitCode}` } : {}), ms: Date.now() - started });
+        record({ ...step, status: call.name === "code_run" && exitCode !== 0 ? "error" : "done", ...(diff ? { diff } : {}), ...(printed ? { output: printed } : {}), ...(exitCode !== undefined ? { detail: exitCode === null ? "прервана" : `код ${exitCode}` } : {}), ms: Date.now() - started });
         await answer(output);
       } catch (error) {
         record({ ...step, status: "error", detail: failure(error), ms: Date.now() - started });

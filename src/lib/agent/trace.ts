@@ -9,7 +9,7 @@ const MAX_STEPS = 80;
 const MAX_DIFF = 3000;
 
 export function appendAgentTrace(content: string, trace: AgentTrace): string {
-  const steps = trace.steps.slice(0, MAX_STEPS).map((step) => ({ ...step, ...(step.diff ? { diff: step.diff.slice(0, MAX_DIFF) } : {}), ...(step.detail ? { detail: step.detail.slice(0, 300) } : {}) }));
+  const steps = trace.steps.slice(0, MAX_STEPS).map((step) => ({ ...step, output: undefined, ...(step.diff ? { diff: step.diff.slice(0, MAX_DIFF) } : {}), ...(step.detail ? { detail: step.detail.slice(0, 300) } : {}) }));
   return `${content.trimEnd()}\n\n${OPEN}${JSON.stringify({ ...trace, steps })}${CLOSE}`;
 }
 

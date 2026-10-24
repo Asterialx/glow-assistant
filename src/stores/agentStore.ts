@@ -15,6 +15,13 @@ type AgentState = {
   steps: Step[];
   tasks: Task[];
   pending: PendingConfirm | null;
+  /** The side panel of the Code tab: the console of run commands and the plan. */
+  panelOpen: boolean;
+  panelTab: "console" | "plan";
+  plan: string;
+  openPanel: (tab?: "console" | "plan") => void;
+  closePanel: () => void;
+  setPlan: (plan: string) => void;
   begin: () => void;
   finish: () => void;
   upsertStep: (step: Step) => void;
@@ -36,6 +43,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   steps: [],
   tasks: [],
   pending: null,
+  panelOpen: false,
+  panelTab: "console",
+  plan: "",
+  openPanel: (tab) => set((state) => ({ panelOpen: true, panelTab: tab ?? state.panelTab })),
+  closePanel: () => set({ panelOpen: false }),
+  setPlan: (plan) => set({ plan }),
   begin: () => set({ running: true, steps: [], tasks: [], pending: null }),
   finish: () => {
     // A run that ends with a question still open (stop button) must not leave it hanging.
@@ -46,7 +59,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     const index = state.steps.findIndex((item) => item.id === step.id);
     const steps = state.steps.slice();
     if (index >= 0) steps[index] = step; else steps.push(step);
-    return { steps };
+    // The first command of a run opens the console so its output is visible as it happens.
+    const open = step.name === "code_run" && index < 0 && !state.panelOpen;
+    return { steps, ...(open ? { panelOpen: true, panelTab: "console" as const } : {}) };
   }),
   setTasks: (tasks) => set({ tasks }),
   ask: (request) => new Promise<ConfirmAnswer>((resolve) => {
