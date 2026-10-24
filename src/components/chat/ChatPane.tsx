@@ -270,10 +270,10 @@ export function ChatPane({
           <div className="mb-3 flex items-center justify-center gap-3">
             {agentMode
               ? codeKind === "dev"
-                ? <span className="flex h-10 w-10 items-center justify-center rounded-xl border font-mono text-[18px] font-semibold" style={{ color: "var(--kind-dev)", borderColor: "color-mix(in srgb, var(--kind-dev) 45%, transparent)", background: "color-mix(in srgb, var(--kind-dev) 12%, transparent)" }} aria-hidden>{">_"}</span>
-                : <span className="flex h-10 w-10 items-center justify-center rounded-xl border" style={{ color: "var(--kind-work)", borderColor: "color-mix(in srgb, var(--kind-work) 45%, transparent)", background: "color-mix(in srgb, var(--kind-work) 12%, transparent)" }} aria-hidden><Briefcase size={20} strokeWidth={1.8} /></span>
+                ? <span className="flex h-10 w-10 items-center justify-center rounded-xl font-mono text-[17px] font-semibold" style={{ color: "var(--kind-dev)", background: "color-mix(in srgb, var(--kind-dev) 14%, transparent)" }} aria-hidden>{">_"}</span>
+                : <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ color: "var(--kind-work)", background: "color-mix(in srgb, var(--kind-work) 14%, transparent)" }} aria-hidden><Briefcase size={20} strokeWidth={1.8} /></span>
               : <span className="glow-asterisk text-[var(--accent)]" aria-hidden>✻</span>}
-            <h1 className={cn("text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]", agentMode && codeKind === "dev" ? "font-mono text-[1.7rem]" : "font-[family-name:var(--font-display)]")}>
+            <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
               {agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Что делаем в проекте?" : "What shall we do in the project?") : locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
             </h1>
           </div>

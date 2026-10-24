@@ -570,14 +570,15 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
 
   return (
     <div
-      className={cn("glow-composer px-4 pb-5", centered ? "pt-0" : "pt-2")}
+      className={cn("glow-composer px-4 pb-5 md:px-8", centered ? "pt-0" : "pt-2")}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
         setFiles((f) => [...f, ...Array.from(e.dataTransfer.files)]);
       }}
     >
-      <div className={cn("mx-auto", centered ? "max-w-[720px]" : "max-w-3xl")}>
+      {/* One column for the messages, the project bar and the composer, so their edges line up. */}
+      <div className="mx-auto max-w-[720px]">
         {preparing && <DocumentActivity phase="reading" locale={locale} />}
         {mode === "code" && workspaceTaskStatus && (
           <div className="mb-2 flex min-w-0 items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 text-[12px]" role="status" aria-live="polite">
@@ -662,8 +663,8 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
               value={draft}
               disabled={disabled}
               rows={1}
-              placeholder={mode === "code" ? (codeKind === "dev" ? (taskMode === "plan" ? (locale === "ru" ? "> опишите, что спланировать…" : "> describe what to plan…") : (locale === "ru" ? "> опишите задачу для агента…" : "> describe the task for the agent…")) : taskMode === "plan" ? (locale === "ru" ? "Что нужно спланировать?" : "What would you like to plan?") : (locale === "ru" ? "Какую задачу выполнить?" : "What would you like to get done?")) : centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
-              className={`max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)] ${mode === "code" && codeKind === "dev" ? "font-mono text-[14px]" : "text-[15px]"}`}
+              placeholder={mode === "code" ? (codeKind === "dev" ? (taskMode === "plan" ? (locale === "ru" ? "Что нужно спланировать в проекте?" : "What should be planned in the project?") : (locale === "ru" ? "Опишите задачу для агента" : "Describe the task for the agent")) : taskMode === "plan" ? (locale === "ru" ? "Что нужно спланировать?" : "What would you like to plan?") : (locale === "ru" ? "Какую задачу выполнить?" : "What would you like to get done?")) : centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
+              className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
               onChange={(e) => {
                 setDraft(e.target.value);
                 resize();
@@ -900,9 +901,9 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
           )}
         </div>
       </div>
-      {mode === "code" && <div className="mx-auto mt-3 flex max-w-[720px] flex-wrap items-center justify-between gap-2 px-2 text-[12px] text-[var(--fg-muted)]">
+      {mode === "code" && <div className="mx-auto mt-3 flex max-w-[720px] flex-wrap items-center justify-between gap-2 px-0 text-[12px] text-[var(--fg-muted)]">
         <div className="flex min-w-0 items-center gap-1">
-          <button type="button" disabled={disabled} onClick={selectWorkFolder} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--bg-hover)] disabled:opacity-50" title={workspaceName || undefined}>
+          <button type="button" disabled={disabled} onClick={selectWorkFolder} className="flex min-w-0 items-center gap-2 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] disabled:opacity-50" title={workspaceName || undefined}>
             <FolderOpen size={14} /><span className="max-w-[220px] truncate">{workspaceEnabled && workspaceName ? workspaceName : codeKind === "dev" ? (locale === "ru" ? "Выбрать проект" : "Choose project") : locale === "ru" ? "Выбрать папку" : "Choose folder"}</span><ChevronDown size={12} />
           </button>
           {workspaceEnabled && <button type="button" disabled={disabled} aria-label={locale === "ru" ? "Работать без папки" : "Work without a folder"} className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]" onClick={async () => { await clearWorkspace(); setWorkspaceEnabled(false); setWorkspaceName(null); setWorkspaceTaskStatus(""); }}><X size={12} /></button>}

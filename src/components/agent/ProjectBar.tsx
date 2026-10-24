@@ -40,27 +40,27 @@ export function ProjectBar({ locale }: { locale: Locale }) {
       disabled={running}
       aria-pressed={taskMode === value}
       onClick={() => setTaskMode(value)}
-      className={cn("rounded-md px-2.5 py-1 transition-colors disabled:opacity-60", taskMode === value ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm" : "text-[var(--fg-muted)] hover:text-[var(--fg)]")}
+      className={cn("rounded-md px-3 py-1 transition-colors disabled:opacity-60", taskMode === value ? "bg-[var(--bg-elevated)] text-[var(--fg)] shadow-sm" : "text-[var(--fg-muted)] hover:bg-[var(--bg-elevated)] hover:text-[var(--fg)]")}
     >{label}</button>
   );
 
   return (
-    <div className="shrink-0 border-b border-[var(--border)] bg-[var(--bg)]" role="region" aria-label={ru ? "Проект" : "Project"}>
-      <div className="h-[2px] w-full" style={{ background: "linear-gradient(90deg, var(--kind-dev), transparent 70%)" }} />
-      <div className="flex min-h-9 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-1 font-mono text-[12px] text-[var(--fg-muted)]">
+    <div className="shrink-0 px-4 md:px-8" role="region" aria-label={ru ? "Проект" : "Project"}>
+      {/* Same column as the messages and the composer, so everything starts on one line. */}
+      <div className="mx-auto flex min-h-10 w-full max-w-[720px] flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-[var(--fg-muted)]">
         <button
           type="button"
           disabled={running}
           onClick={() => window.dispatchEvent(new Event("glow:pick-work-folder"))}
-          className="inline-flex min-w-0 items-center gap-1.5 rounded-md px-1.5 py-1 hover:bg-[var(--bg-hover)] disabled:opacity-60"
+          className="inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)] disabled:opacity-60"
           title={ru ? "Сменить проект" : "Change project"}
         >
-          <FolderOpen size={13} strokeWidth={1.8} style={{ color: "var(--kind-dev)" }} />
+          <FolderOpen size={14} strokeWidth={1.8} />
           <span className={cn("max-w-[260px] truncate", connected ? "text-[var(--fg)]" : "text-[var(--fg-faint)]")}>{connected ? folder : ru ? "проект не выбран" : "no project"}</span>
         </button>
         {branch && (
-          <span className="inline-flex items-center gap-1.5" title={ru ? "Ветка git" : "Git branch"}>
-            <GitBranch size={13} strokeWidth={1.8} style={{ color: "var(--kind-dev)" }} />
+          <span className="inline-flex items-center gap-1.5 px-2" title={ru ? "Ветка git" : "Git branch"}>
+            <GitBranch size={13} strokeWidth={1.8} />
             <span className={cn("max-w-[220px] truncate", branch.startsWith("glow/") ? "text-[var(--kind-dev)]" : "text-[var(--fg)]")}>{branch}</span>
           </span>
         )}

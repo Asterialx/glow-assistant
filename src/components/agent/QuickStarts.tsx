@@ -37,8 +37,7 @@ export function QuickStarts({ kind, locale }: { kind: CodeKind; locale: Locale }
             setDraft(prompt[index]);
             window.setTimeout(() => document.querySelector("textarea")?.focus(), 0);
           }}
-          className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--bg-elevated)] px-3.5 py-2 text-[13px] text-[var(--fg-muted)] transition-colors hover:border-[color-mix(in_srgb,var(--accent-color)_55%,transparent)] hover:text-[var(--fg)]"
-          style={{ ["--accent-color" as string]: accent }}
+          className="inline-flex items-center gap-2 rounded-full bg-[var(--bg-elevated)] px-3.5 py-2 text-[13px] text-[var(--fg-muted)] transition-colors hover:bg-[var(--bg-hover)] hover:text-[var(--fg)]"
         >
           <Icon size={14} strokeWidth={1.8} style={{ color: accent }} />
           {label[index]}

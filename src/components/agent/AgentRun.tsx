@@ -52,12 +52,12 @@ function StepRow({ step }: { step: Step }) {
   const subject = stepSubject(step.name, step.summary);
   return (
     <li>
-      <button type="button" disabled={!step.diff} onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left enabled:hover:bg-[var(--bg-hover)]">
+      <button type="button" disabled={!step.diff} onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-2 rounded-lg px-1.5 py-1 text-left transition-colors enabled:hover:bg-[var(--bg-hover)]">
         <StepIcon status={step.status} />
-        <span className="inline-flex w-[74px] shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px]" style={{ color: "var(--kind-dev)", background: "color-mix(in srgb, var(--kind-dev) 12%, transparent)" }}>
-          <Icon size={11} strokeWidth={2} />{tag.label}
+        <span className="inline-flex w-[76px] shrink-0 items-center gap-1.5 text-[12px] text-[var(--fg-faint)]">
+          <Icon size={12} strokeWidth={1.9} />{tag.label}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[var(--fg)]" title={step.summary}>{subject}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-[var(--fg)]" title={step.summary}>{subject}</span>
         {step.detail && <span className={cn("shrink-0 text-[11px]", step.status === "error" ? "text-red-400" : "text-[var(--fg-faint)]")}>{step.detail}</span>}
         {step.ms !== undefined && step.status !== "running" && <span className="shrink-0 text-[11px] text-[var(--fg-faint)]">{duration(step.ms)}</span>}
         {step.diff && <ChevronRight size={13} className={cn("shrink-0 text-[var(--fg-faint)] transition-transform", open && "rotate-90")} />}
@@ -99,11 +99,10 @@ export function AgentRun({ locale, trace, live }: Props) {
   };
 
   return (
-    <section aria-label={ru ? "Действия агента" : "Agent activity"} className="space-y-2 rounded-xl border border-l-[3px] border-[var(--border)] bg-[var(--bg-elevated)] p-3 font-mono text-[12.5px] text-[var(--fg-muted)]" style={{ borderLeftColor: "var(--kind-dev)" }}>
-      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.08em] text-[var(--fg-faint)]">
-        <span style={{ color: "var(--kind-dev)" }}>●</span>
-        <span>glow code</span>
-        <span className="ml-auto normal-case tracking-normal">{ru ? `шагов: ${steps.length}` : `${steps.length} steps`}{live && <span className="glow-caret" aria-hidden />}</span>
+    <section aria-label={ru ? "Действия агента" : "Agent activity"} className="space-y-2 rounded-2xl bg-[var(--bg-elevated)] p-3 text-[13px] text-[var(--fg-muted)]">
+      <div className="flex items-center gap-2 px-1 text-[12px] text-[var(--fg-faint)]">
+        <span>{ru ? "Действия агента" : "Agent activity"}</span>
+        <span className="ml-auto">{ru ? `шагов: ${steps.length}` : `${steps.length} steps`}{live && <span className="glow-caret" aria-hidden />}</span>
       </div>
       {tasks.length > 0 && <ul className="space-y-1 border-b border-[var(--border)] pb-2 text-[var(--fg)]">{tasks.map((task) => <TaskRow key={task.id} task={task} />)}</ul>}
       {steps.length > 0 && <ul className="max-h-72 space-y-0.5 overflow-y-auto">{steps.map((step) => <StepRow key={step.id} step={step} />)}</ul>}

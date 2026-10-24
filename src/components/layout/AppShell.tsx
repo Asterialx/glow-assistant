@@ -726,10 +726,9 @@ export function AppShell() {
               </button>
             </span>
           )}
-          <div className={cn("ml-auto pr-2 text-[12px]", mode === "code" && codeKind === "dev" ? "font-mono text-[var(--kind-dev)]" : mode === "code" ? "text-[var(--kind-work)]" : "text-[var(--fg-faint)]")}>{mode === "code" ? (codeKind === "dev" ? "glow code" : "Glow Work") : "Glow"}</div>
+          <div className="ml-auto pr-2 text-[12px] text-[var(--fg-faint)]">{mode === "code" ? (codeKind === "dev" ? "Glow Code" : "Glow Work") : "Glow"}</div>
         </header>
         {mode === "code" && codeKind === "dev" && <ProjectBar locale={locale} />}
-        {mode === "code" && codeKind === "work" && <div className="h-[2px] w-full shrink-0" style={{ background: "linear-gradient(90deg, var(--kind-work), transparent 70%)" }} />}
 
         <div className="flex min-h-0 flex-1">
           <ChatPane
