@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { AlertTriangle, Check, ChevronRight, CircleDashed, LoaderCircle, ShieldX, Undo2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, CircleDashed, FilePlus, FileText, FolderTree, GitBranch, GitCommit, GitCompare, History, LoaderCircle, Pencil, Search, ShieldX, SquareTerminal, Trash2, Undo2, X, type LucideIcon } from "lucide-react";
 import type { Locale } from "../../lib/i18n";
 import type { Step, Task } from "../../lib/agent/loop";
 import type { AgentTrace } from "../../lib/agent/trace";
 import { restoreCheckpoint, type RestoreResult } from "../../lib/agent/tools";
+import { stepSubject } from "../../lib/agent/policy";
 import { useAgentStore } from "../../stores/agentStore";
 import { cn } from "../../lib/utils";
 
@@ -26,14 +27,39 @@ function Diff({ text }: { text: string }) {
   );
 }
 
+const TAGS: Record<string, { label: string; icon: LucideIcon }> = {
+  code_list: { label: "List", icon: FolderTree },
+  code_read: { label: "Read", icon: FileText },
+  doc_read: { label: "Read", icon: FileText },
+  code_search: { label: "Search", icon: Search },
+  code_edit: { label: "Edit", icon: Pencil },
+  code_create: { label: "Create", icon: FilePlus },
+  code_delete: { label: "Delete", icon: Trash2 },
+  code_run: { label: "Run", icon: SquareTerminal },
+  git_status: { label: "Git", icon: GitBranch },
+  git_diff: { label: "Git", icon: GitCompare },
+  git_log: { label: "Git", icon: History },
+  git_branch: { label: "Git", icon: GitBranch },
+  git_commit: { label: "Git", icon: GitCommit },
+};
+
+const duration = (ms?: number) => (ms === undefined ? "" : ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+
 function StepRow({ step }: { step: Step }) {
   const [open, setOpen] = useState(false);
+  const tag = TAGS[step.name] ?? { label: step.name, icon: SquareTerminal };
+  const Icon = tag.icon;
+  const subject = stepSubject(step.name, step.summary);
   return (
     <li>
       <button type="button" disabled={!step.diff} onClick={() => setOpen((value) => !value)} className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left enabled:hover:bg-[var(--bg-hover)]">
         <StepIcon status={step.status} />
-        <span className="min-w-0 flex-1 truncate">{step.summary}</span>
+        <span className="inline-flex w-[74px] shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px]" style={{ color: "var(--kind-dev)", background: "color-mix(in srgb, var(--kind-dev) 12%, transparent)" }}>
+          <Icon size={11} strokeWidth={2} />{tag.label}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[var(--fg)]" title={step.summary}>{subject}</span>
         {step.detail && <span className={cn("shrink-0 text-[11px]", step.status === "error" ? "text-red-400" : "text-[var(--fg-faint)]")}>{step.detail}</span>}
+        {step.ms !== undefined && step.status !== "running" && <span className="shrink-0 text-[11px] text-[var(--fg-faint)]">{duration(step.ms)}</span>}
         {step.diff && <ChevronRight size={13} className={cn("shrink-0 text-[var(--fg-faint)] transition-transform", open && "rotate-90")} />}
       </button>
       {open && step.diff && <Diff text={step.diff} />}
@@ -54,7 +80,8 @@ function TaskRow({ task }: { task: Task }) {
 export function AgentRun({ locale, trace, live }: Props) {
   const ru = locale === "ru";
   const store = useAgentStore();
-  const steps = live ? store.steps : trace?.steps ?? [];
+  // The task list has its own block above, so the "update tasks" calls are not repeated in the step list.
+  const steps = (live ? store.steps : trace?.steps ?? []).filter((step) => step.name !== "update_tasks");
   const tasks = live ? store.tasks : trace?.tasks ?? [];
   const [restored, setRestored] = useState<RestoreResult | null>(null);
   const [undoing, setUndoing] = useState(false);
@@ -72,7 +99,12 @@ export function AgentRun({ locale, trace, live }: Props) {
   };
 
   return (
-    <section aria-label={ru ? "Действия агента" : "Agent activity"} className="space-y-2 rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] p-3 text-[13px] text-[var(--fg-muted)]">
+    <section aria-label={ru ? "Действия агента" : "Agent activity"} className="space-y-2 rounded-xl border border-l-[3px] border-[var(--border)] bg-[var(--bg-elevated)] p-3 font-mono text-[12.5px] text-[var(--fg-muted)]" style={{ borderLeftColor: "var(--kind-dev)" }}>
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.08em] text-[var(--fg-faint)]">
+        <span style={{ color: "var(--kind-dev)" }}>●</span>
+        <span>glow code</span>
+        <span className="ml-auto normal-case tracking-normal">{ru ? `шагов: ${steps.length}` : `${steps.length} steps`}{live && <span className="glow-caret" aria-hidden />}</span>
+      </div>
       {tasks.length > 0 && <ul className="space-y-1 border-b border-[var(--border)] pb-2 text-[var(--fg)]">{tasks.map((task) => <TaskRow key={task.id} task={task} />)}</ul>}
       {steps.length > 0 && <ul className="max-h-72 space-y-0.5 overflow-y-auto">{steps.map((step) => <StepRow key={step.id} step={step} />)}</ul>}
       {trace && trace.stopped !== "done" && trace.stopped !== "aborted" && (

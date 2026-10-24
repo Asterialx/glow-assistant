@@ -238,7 +238,7 @@ export function ClaudeSidebar({
                     : "text-[var(--fg-muted)] hover:text-[var(--fg)]",
                 )}
               >
-                <Icon size={13} strokeWidth={1.7} />
+                <Icon size={13} strokeWidth={1.7} style={active && id !== "home" ? { color: id === "dev" ? "var(--kind-dev)" : "var(--kind-work)" } : undefined} />
                 {label}
               </button>
             );

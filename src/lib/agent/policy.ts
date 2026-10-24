@@ -55,6 +55,23 @@ export async function decideTool(name: string, args: Record<string, unknown>, co
   return { kind: "deny", reason: "Неизвестный инструмент." };
 }
 
+/**
+ * What a step list row shows after its tool tag. `describeCall` writes a Russian sentence ("Читаю math.js");
+ * the tag already says what the tool does, so the verb is dropped and a few phrases are shortened.
+ */
+export function stepSubject(name: string, summary: string): string {
+  const rest = summary.replace(/^\S+\s+/, "").trim();
+  switch (name) {
+    case "git_status": return "status";
+    case "git_log": return "log";
+    case "git_diff": return rest.replace(/^изменения\s*/, "") || "diff";
+    case "git_branch": return rest.replace(/^ветку\s+/, "") || rest;
+    case "code_list": { const folder = rest.replace(/^папку\s+/, ""); return folder === "проекта" ? "./" : `${folder}/`; }
+    case "doc_read": return rest.replace(/^документ\s+/, "") || rest;
+    default: return rest || summary;
+  }
+}
+
 /** One short line for the step list. */
 export function describeCall(name: string, args: Record<string, unknown>): string {
   const text = (value: unknown, fallback = "") => (typeof value === "string" ? value : fallback);

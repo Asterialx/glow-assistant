@@ -128,15 +128,19 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
     const onOpenWorkMode = () => { void openWorkMode(); };
     const onShowWorkDownload = () => setDownloadInfoOpen(true);
     const onChangeWorkFolder = () => { void connectWorkspace(); };
+    // The project bar asks for a folder through the same path as the button here, including the access notice.
+    const onPickWorkFolder = () => { selectWorkFolder(); };
+    window.addEventListener("glow:pick-work-folder", onPickWorkFolder);
     window.addEventListener("glow:open-work-mode", onOpenWorkMode);
     window.addEventListener("glow:show-work-download", onShowWorkDownload);
     window.addEventListener("glow:change-work-folder", onChangeWorkFolder);
     return () => {
+      window.removeEventListener("glow:pick-work-folder", onPickWorkFolder);
       window.removeEventListener("glow:open-work-mode", onOpenWorkMode);
       window.removeEventListener("glow:show-work-download", onShowWorkDownload);
       window.removeEventListener("glow:change-work-folder", onChangeWorkFolder);
     };
-  }, [connectWorkspace, openWorkMode]);
+  }, [connectWorkspace, openWorkMode, selectWorkFolder]);
 
   const [micOpen, setMicOpen] = useState(false);
   const [micHover, setMicHover] = useState(false);
@@ -658,8 +662,8 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
               value={draft}
               disabled={disabled}
               rows={1}
-              placeholder={mode === "code" ? (taskMode === "plan" ? (locale === "ru" ? "Что нужно спланировать?" : "What would you like to plan?") : (locale === "ru" ? "Какую задачу выполнить?" : "What would you like to get done?")) : centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
-              className="max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 text-[15px] leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)]"
+              placeholder={mode === "code" ? (codeKind === "dev" ? (taskMode === "plan" ? (locale === "ru" ? "> опишите, что спланировать…" : "> describe what to plan…") : (locale === "ru" ? "> опишите задачу для агента…" : "> describe the task for the agent…")) : taskMode === "plan" ? (locale === "ru" ? "Что нужно спланировать?" : "What would you like to plan?") : (locale === "ru" ? "Какую задачу выполнить?" : "What would you like to get done?")) : centered ? t(locale, "taskPlaceholder") : t(locale, "placeholder")}
+              className={`max-h-[160px] min-h-[28px] w-full resize-none bg-transparent px-1 leading-relaxed text-[var(--fg)] outline-none placeholder:text-[var(--fg-faint)] ${mode === "code" && codeKind === "dev" ? "font-mono text-[14px]" : "text-[15px]"}`}
               onChange={(e) => {
                 setDraft(e.target.value);
                 resize();
@@ -904,8 +908,8 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
           {workspaceEnabled && <button type="button" disabled={disabled} aria-label={locale === "ru" ? "Работать без папки" : "Work without a folder"} className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]" onClick={async () => { await clearWorkspace(); setWorkspaceEnabled(false); setWorkspaceName(null); setWorkspaceTaskStatus(""); }}><X size={12} /></button>}
         </div>
         {codeKind === "dev"
-          ? <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? (locale === "ru" ? "План" : "Plan") : (locale === "ru" ? "Авто" : "Auto")}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только чтение и план" : "Read-only planning") : !workspaceEnabled ? (locale === "ru" ? "Выберите папку проекта" : "Choose a project folder") : autonomy === "autopilot" ? (locale === "ru" ? "Автопилот" : "Autopilot") : autonomy === "tasks" ? (locale === "ru" ? "Подтверждение задач" : "Task approval") : (locale === "ru" ? "Спрашивает о важном" : "Asks about important actions")}</span></span>
-          : <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? "Plan" : "Work"}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только планирование" : "Planning only") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : (locale === "ru" ? "Папка подключена" : "Folder connected")}</span></span>}
+          ? null /* the project bar above the chat already shows the mode and the autonomy level */
+          :<span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? "Plan" : "Work"}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только планирование" : "Planning only") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : (locale === "ru" ? "Папка подключена" : "Folder connected")}</span></span>}
       </div>}
       {downloadInfoOpen && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDownloadInfoOpen(false); }}>

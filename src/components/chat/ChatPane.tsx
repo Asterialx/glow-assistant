@@ -20,6 +20,7 @@ import {
   PanelRight,
   ArrowDown,
   Globe,
+  Briefcase,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -43,6 +44,7 @@ import { splitAttachments, preserveAttachments } from "../../lib/attachments";
 import { splitSearchSources } from "../../lib/searchSources";
 import { splitAgentTrace } from "../../lib/agent/trace";
 import { AgentRun } from "../agent/AgentRun";
+import { QuickStarts } from "../agent/QuickStarts";
 import { useAgentStore } from "../../stores/agentStore";
 import { SearchSources } from "./SearchSources";
 import { FileAttachment, DocumentActivity, attachmentNames } from "./FileAttachment";
@@ -266,8 +268,12 @@ export function ChatPane({
       <div className="glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-center px-4">
         <div className="glow-empty-intro mb-7 max-w-[620px] text-center">
           <div className="mb-3 flex items-center justify-center gap-3">
-            {agentMode ? <img src="/glow-work-mark.svg" alt="" className="h-10 w-10" /> : <span className="glow-asterisk text-[var(--accent)]" aria-hidden>✻</span>}
-            <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
+            {agentMode
+              ? codeKind === "dev"
+                ? <span className="flex h-10 w-10 items-center justify-center rounded-xl border font-mono text-[18px] font-semibold" style={{ color: "var(--kind-dev)", borderColor: "color-mix(in srgb, var(--kind-dev) 45%, transparent)", background: "color-mix(in srgb, var(--kind-dev) 12%, transparent)" }} aria-hidden>{">_"}</span>
+                : <span className="flex h-10 w-10 items-center justify-center rounded-xl border" style={{ color: "var(--kind-work)", borderColor: "color-mix(in srgb, var(--kind-work) 45%, transparent)", background: "color-mix(in srgb, var(--kind-work) 12%, transparent)" }} aria-hidden><Briefcase size={20} strokeWidth={1.8} /></span>
+              : <span className="glow-asterisk text-[var(--accent)]" aria-hidden>✻</span>}
+            <h1 className={cn("text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]", agentMode && codeKind === "dev" ? "font-mono text-[1.7rem]" : "font-[family-name:var(--font-display)]")}>
               {agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Что делаем в проекте?" : "What shall we do in the project?") : locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
             </h1>
           </div>
@@ -275,6 +281,7 @@ export function ChatPane({
         </div>
         <div className="w-full">
           <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} centered />
+          {agentMode && <QuickStarts kind={codeKind} locale={locale} />}
         </div>
       </div>
     );

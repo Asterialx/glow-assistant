@@ -282,3 +282,13 @@ body {
   background: transparent;
 }
 
+
+
+/* Mode accents: Work is amber, Code is teal. Chat keeps the app accent. */
+:root {
+  --kind-work: #d9993d;
+  --kind-dev: #2fb3a0;
+}
+@keyframes glow-caret-blink { 50% { opacity: 0; } }
+.glow-caret { display: inline-block; width: 0.55ch; height: 1.1em; margin-left: 2px; vertical-align: text-bottom; background: var(--kind-dev); animation: glow-caret-blink 1s steps(1) infinite; }
+@media (prefers-reduced-motion: reduce) { .glow-caret { animation: none; } }

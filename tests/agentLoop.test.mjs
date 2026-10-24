@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runAgent } from '../src/lib/agent/loop.ts';
 import { compactMessages, clipText } from '../src/lib/agent/context.ts';
+import { stepSubject } from '../src/lib/agent/policy.ts';
 
 const call = (id, name, args = {}) => ({ id, name, arguments: JSON.stringify(args) });
 const usage = (n = 100) => ({ inputTokens: n, outputTokens: 10, costUnits: 0 });
@@ -258,6 +259,18 @@ test('old tool results shrink while recent ones and the call pairing stay intact
   assert.equal(messages[2].content.startsWith('RESULT 0'), true, 'the original history is not modified');
   const short = messages.slice(0, 5);
   assert.equal(compactMessages(short, 10), short, 'nothing old enough means the same array comes back');
+});
+
+test('step rows show a short subject after the tool tag instead of the Russian sentence', () => {
+  const cases = [
+    ['code_read', 'Читаю src/a.ts', 'src/a.ts'], ['code_run', 'Запускаю npm test', 'npm test'], ['code_edit', 'Правлю math.js', 'math.js'],
+    ['code_search', 'Ищу «sum»', '«sum»'], ['code_list', 'Смотрю папку проекта', './'], ['code_list', 'Смотрю папку src', 'src/'],
+    ['git_status', 'Смотрю состояние git', 'status'], ['git_log', 'Смотрю историю коммитов', 'log'],
+    ['git_diff', 'Смотрю изменения', 'diff'], ['git_diff', 'Смотрю изменения a.ts', 'a.ts'],
+    ['git_branch', 'Создаю ветку glow/fix-sum', 'glow/fix-sum'], ['git_commit', 'Коммит: Fix sum', 'Fix sum'],
+    ['doc_read', 'Читаю документ report.pdf', 'report.pdf'], ['unknown_tool', 'Single', 'Single'],
+  ];
+  for (const [name, summary, expected] of cases) assert.equal(stepSubject(name, summary), expected, `${name}: ${summary}`);
 });
 
 test('clipText keeps the beginning and the end of long output', () => {
