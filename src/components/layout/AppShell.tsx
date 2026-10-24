@@ -50,6 +50,7 @@ import { extractGeneratedFiles, generatedFileFromArtifact, stripGeneratedFileFen
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentConfirmDialog } from "../agent/AgentConfirmDialog";
+import { idPrefixFor } from "../../lib/codeKind";
 import { agentInstructions } from "../../lib/agent/tools";
 import type { AgentMode } from "../../lib/agent/policy";
 import { isDesktopApp, listWorkspaceFiles, writeWorkspaceFile } from "../../lib/workspace";
@@ -70,6 +71,7 @@ export function AppShell() {
     document.documentElement.lang = locale;
   }, [locale]);
   const mode = useModeStore((s) => s.mode);
+  const codeKind = useModeStore((s) => s.codeKind);
   const gameModeActive = useModeStore((s) => s.gameModeActive);
   const setGameModeActive = useModeStore((s) => s.setGameModeActive);
   const memoryPaused = useModeStore((s) => s.memoryPaused);
@@ -235,9 +237,11 @@ export function AppShell() {
       ? "PLAN MODE: inspect available source files if needed and propose a clear actionable plan. Ask only necessary questions. Do not execute the plan, create artifacts, produce glow-file blocks or claim files were saved. Wait for the user to switch to Work before implementation."
       : workspaceEnabled ? "WORK MODE: complete the user's task using the selected workspace when relevant." : "WORK MODE WITHOUT A FOLDER: complete the task using the conversation, attachments and web search if needed. You have no access to local files. Provide requested deliverables as glow-file artifacts for preview and download; never claim to save them to a local folder."
       : "";
-    // With a folder connected, Work runs the Glow Code agent; Plan is its read-only mode.
-    const agent = workspaceEnabled ? { mode: (useWorkspaceStore.getState().taskMode === "plan" ? "plan" : "auto") as AgentMode, autonomy: useAgentStore.getState().autonomy, taskId: crypto.randomUUID() } : undefined;
-    const modeInstructions = agent ? [agentInstructions(agent.mode, agent.autonomy)] : [workspaceInstructions, taskInstructions];
+    // Code runs the Glow Code agent on the connected folder (Plan is its read-only mode); Work keeps documents and coursework.
+    const devKind = mode === "code" && useModeStore.getState().codeKind === "dev";
+    const agent = devKind && workspaceEnabled ? { mode: (useWorkspaceStore.getState().taskMode === "plan" ? "plan" : "auto") as AgentMode, autonomy: useAgentStore.getState().autonomy, taskId: crypto.randomUUID() } : undefined;
+    const noFolderCode = "You are Glow Code, a coding assistant. No project folder is connected, so you cannot read or change files or run commands: answer from the conversation, and when real files are involved tell the user to choose a project folder with the button under the input box. Reply in the user's language (Russian by default).";
+    const modeInstructions = agent ? [agentInstructions(agent.mode, agent.autonomy)] : devKind ? [noFolderCode] : [workspaceInstructions, taskInstructions];
     const memory = memoryPaused || localStorage.getItem("glow.memoryFromChats") !== "1" ? [] : await memoryFactsForPrompt();
     const feedback = feedbackPreferenceHints();
     // The experimental catalog must not imply tools that the model cannot call.
@@ -255,8 +259,8 @@ export function AppShell() {
       designMode,
       webSearch: webSearch || shouldSearchWeb(userText),
       webAuto: mode !== "med",
-      workspaceTools: workspaceEnabled,
-      ...(mode === "code" ? { onAgentStatus: setWorkspaceTaskStatus } : {}),
+      workspaceTools: workspaceEnabled && !devKind,
+      ...(mode === "code" ? { codeKind: devKind ? "dev" as const : "work" as const, onAgentStatus: setWorkspaceTaskStatus } : {}),
     };
   };
 
@@ -489,7 +493,8 @@ export function AppShell() {
     const parentId =
       parentOverride !== undefined ? parentOverride : (branchPath.at(-1)?.id ?? null);
 
-    const saveGeneratedToWorkspace = mode === "code" && isDesktopApp() && useWorkspaceStore.getState().enabled && useWorkspaceStore.getState().taskMode === "work";
+    // Saving finished documents into the folder belongs to Work; the Code agent writes files through its own tools.
+    const saveGeneratedToWorkspace = mode === "code" && codeKind === "work" && isDesktopApp() && useWorkspaceStore.getState().enabled && useWorkspaceStore.getState().taskMode === "work";
     let content = text;
     if (files?.length) {
       setPreparingFiles(true);
@@ -521,6 +526,8 @@ export function AppShell() {
       generation,
       ...(parentOverride !== undefined ? { parentId } : {}),
       titleSource: text,
+      // Code chats get their own id prefix so Work and Code keep separate histories.
+      ...(mode === "code" ? { idPrefix: idPrefixFor(codeKind) } : {}),
     }));
     if (!result) { setWorkspaceTaskStatus(""); return; }
     if (workspaceStopRequested.current) {
@@ -717,7 +724,7 @@ export function AppShell() {
               </button>
             </span>
           )}
-          <div className="ml-auto pr-2 text-[12px] text-[var(--fg-faint)]">{mode === "code" ? "Glow Work" : "Glow"}</div>
+          <div className="ml-auto pr-2 text-[12px] text-[var(--fg-faint)]">{mode === "code" ? (codeKind === "dev" ? "Glow Code" : "Glow Work") : "Glow"}</div>
         </header>
 
         <div className="flex min-h-0 flex-1">

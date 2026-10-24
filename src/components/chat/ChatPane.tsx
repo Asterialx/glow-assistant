@@ -126,6 +126,7 @@ export function ChatPane({
   const activeArtifactId = useChatStore((s) => s.activeArtifactId);
   const designMode = useModeStore((s) => s.designMode);
   const agentMode = useModeStore((s) => s.mode) === "code";
+  const codeKind = useModeStore((s) => s.codeKind);
   const workspaceTaskStatus = useWorkspaceStore((s) => s.taskStatus);
   const agentRunning = useAgentStore((s) => s.running);
   const empty = messages.length === 0;
@@ -267,10 +268,10 @@ export function ChatPane({
           <div className="mb-3 flex items-center justify-center gap-3">
             {agentMode ? <img src="/glow-work-mark.svg" alt="" className="h-10 w-10" /> : <span className="glow-asterisk text-[var(--accent)]" aria-hidden>✻</span>}
             <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
-              {agentMode ? (locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
+              {agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Что делаем в проекте?" : "What shall we do in the project?") : locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
             </h1>
           </div>
-          <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{agentMode ? (locale === "ru" ? "Поручите задачу Glow. Подключите папку или начните без неё." : "Give Glow a task. Connect a folder or start without one.") : t(locale, "taskSubtitle")}</p>
+          <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Выберите папку проекта: агент прочитает код, внесёт правки, запустит тесты и сделает коммит." : "Choose a project folder: the agent reads the code, makes changes, runs tests and commits.") : locale === "ru" ? "Поручите задачу Glow. Подключите папку или начните без неё." : "Give Glow a task. Connect a folder or start without one.") : t(locale, "taskSubtitle")}</p>
         </div>
         <div className="w-full">
           <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} centered />

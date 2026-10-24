@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Plus,
   Code2,
+  Briefcase,
   MessageCircle,
   Folder,
   SlidersHorizontal,
@@ -21,6 +22,7 @@ import { useUiStore } from "../../stores/uiStore";
 import { useChatStore } from "../../stores/chatStore";
 import { t } from "../../lib/i18n";
 import { cn } from "../../lib/utils";
+import { conversationKind } from "../../lib/codeKind";
 import type { Conversation } from "../../lib/types";
 import { createProject } from "../../db";
 import { conversationService } from "../../conversation/conversationService";
@@ -42,6 +44,8 @@ export function ClaudeSidebar({
 }: Props) {
   const mode = useModeStore((s) => s.mode);
   const setMode = useModeStore((s) => s.setMode);
+  const codeKind = useModeStore((s) => s.codeKind);
+  const setCodeKind = useModeStore((s) => s.setCodeKind);
   const locale = useUiStore((s) => s.locale);
   const userName = useUiStore((s) => s.userName);
   const account = useAccount();
@@ -67,10 +71,12 @@ export function ClaudeSidebar({
     () =>
       conversations.filter(
         (c) =>
+          // Work and Code share one storage scope; each tab shows only its own chats.
+          (mode !== "code" || conversationKind(c.id) === codeKind) &&
           (!activeProjectId || c.project_id === activeProjectId) &&
           c.title.toLowerCase().includes(q.toLowerCase()),
       ),
-    [conversations, activeProjectId, q],
+    [conversations, activeProjectId, q, mode, codeKind],
   );
 
   const ctxConv = conversations.find((c) => c.id === ctxId) || null;
@@ -195,18 +201,19 @@ export function ClaudeSidebar({
       </div>
 
       <div className="flex justify-center px-3 pt-3">
-        <div className="relative grid h-9 w-[204px] grid-cols-2 rounded-full bg-[var(--bg)] p-0.5" role="group" aria-label={locale === "ru" ? "Режим Glow" : "Glow mode"}>
+        <div className="relative grid h-9 w-[264px] grid-cols-3 rounded-full bg-[var(--bg)] p-0.5" role="group" aria-label={locale === "ru" ? "Режим Glow" : "Glow mode"}>
           {([
             { id: "home" as const, label: locale === "ru" ? "Чат" : "Chat", icon: MessageCircle },
-            { id: "code" as const, label: locale === "ru" ? "Работа" : "Work", icon: Code2 },
+            { id: "work" as const, label: locale === "ru" ? "Работа" : "Work", icon: Briefcase },
+            { id: "dev" as const, label: locale === "ru" ? "Код" : "Code", icon: Code2 },
           ]).map(({ id, label, icon: Icon }) => {
-            const active = id === "home" ? mode !== "code" : mode === "code";
+            const active = id === "home" ? mode !== "code" : mode === "code" && codeKind === id;
             return (
               <button
                 key={id}
                 type="button"
                 aria-pressed={active}
-                title={id === "code" && locale === "ru" ? "Агентское пространство Glow" : undefined}
+                title={locale === "ru" ? (id === "work" ? "Документы, курсовые, файлы" : id === "dev" ? "Агент для разработки в папке проекта" : undefined) : undefined}
                 onClick={() => {
                   if (id === "home") {
                     setMode("home");
@@ -214,7 +221,11 @@ export function ClaudeSidebar({
                     setWorkspaceTaskStatus("");
                   } else {
                     if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) {
+                      const switching = mode === "code" && codeKind !== id;
+                      setCodeKind(id);
                       window.dispatchEvent(new Event("glow:open-work-mode"));
+                      // The open chat belongs to the other tab: start a fresh one here.
+                      if (switching) onNewChat();
                     } else {
                       window.dispatchEvent(new Event("glow:show-work-download"));
                     }

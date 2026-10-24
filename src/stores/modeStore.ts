@@ -1,9 +1,13 @@
 import { create } from "zustand";
 import type { AppMode } from "../lib/types";
+import { parseCodeKind, type CodeKind } from "../lib/codeKind";
 
 interface ModeState {
   mode: AppMode;
   setMode: (mode: AppMode) => void;
+  /** Inside the `code` scope: documents ("work") or the coding agent ("dev"). */
+  codeKind: CodeKind;
+  setCodeKind: (kind: CodeKind) => void;
   gameModeActive: boolean;
   setGameModeActive: (v: boolean) => void;
   memoryPaused: boolean;
@@ -21,6 +25,11 @@ export const useModeStore = create<ModeState>((set) => ({
   setMode: (mode) => {
     localStorage.setItem("glow.mode", mode);
     set({ mode });
+  },
+  codeKind: parseCodeKind(localStorage.getItem("glow.codeKind")),
+  setCodeKind: (codeKind) => {
+    localStorage.setItem("glow.codeKind", codeKind);
+    set({ codeKind });
   },
   gameModeActive: false,
   setGameModeActive: (gameModeActive) =>

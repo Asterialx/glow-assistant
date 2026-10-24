@@ -38,6 +38,8 @@ export type LegacyGenerationOptions = {
   agentPlan?: boolean;
   /** Glow Code: run the tool-using agent loop on the selected project folder. */
   agent?: { mode: AgentMode; autonomy: Autonomy; taskId: string };
+  /** Inside the code scope: documents ("work") or the coding agent ("dev"). Coursework belongs to Work only. */
+  codeKind?: "work" | "dev";
   onAgentStatus?: (status: string) => void;
 };
 
@@ -52,7 +54,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
     const currentText = history.filter(message => message.role === "user").at(-1)?.content || "";
     const webTools = generation.webSearch || (generation.webAuto === true && generation.mode !== "med");
     const answeringCoursework = isAwaitingCourseworkAnswer(history);
-    if (generation.mode === "code" && !generation.agentPlan && (answeringCoursework || isCourseworkRequest(currentText))) {
+    if (generation.mode === "code" && generation.codeKind !== "dev" && !generation.agentPlan && (answeringCoursework || isCourseworkRequest(currentText))) {
       // Coursework is built chapter by chapter, then returned as one docx glow-file.
       let usageTotal = { inputTokens: 0, outputTokens: 0, costUnits: 0 };
       const complete = async (messages: { role: "system" | "user"; content: string }[], maxTokens: number) => {

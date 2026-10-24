@@ -35,6 +35,27 @@ async function begin(f) {
   while (!f.callbacks) await new Promise(resolve=>setImmediate(resolve));
   return { pending };
 }
+async function newChatId(idPrefix) {
+  const f=fixture(); const created=[];
+  f.repository.createConversation=async(_,__,___,id)=>{created.push(id);return {id,title:'New chat'};};
+  f.repository.renameConversation=async()=>{};
+  const pending=f.engine.send({scope:'code',content:'Hello',modelId:'model',generation:{},...(idPrefix===undefined?{}:{idPrefix})});
+  while (!f.callbacks) await new Promise(resolve=>setImmediate(resolve));
+  f.callbacks.onDone(); await pending;
+  return {id:created[0],active:f.engine.getState().activeConversationId};
+}
+test('a new Code chat gets the Code prefix and Work chats keep plain ids', async () => {
+  const code=await newChatId('dev_');
+  assert.match(code.id,/^dev_\d+$/);
+  assert.equal(code.active,code.id);
+  assert.match((await newChatId('')).id,/^\d+$/);
+  assert.match((await newChatId(undefined)).id,/^\d+$/);
+});
+test('sending into an existing chat never changes its id', async () => {
+  const f=fixture(); const {pending}=await begin(f);
+  f.callbacks.onDone(); await pending;
+  assert.equal(f.engine.getState().activeConversationId,'chat');
+});
 test('failed save settles generation and preserves the answer in memory', async () => {
   const f=fixture(true); const {pending}=await begin(f);
   f.callbacks.onDone();

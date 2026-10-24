@@ -61,6 +61,7 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
   const mode = useModeStore((s) => s.mode);
   const taskMode = useWorkspaceStore((s) => s.taskMode);
   const autonomy = useAgentStore((s) => s.autonomy);
+  const codeKind = useModeStore((s) => s.codeKind);
   const designMode = useModeStore((s) => s.designMode);
   const setDesignMode = useModeStore((s) => s.setDesignMode);
   const chromeAgentActive = useModeStore((s) => s.chromeAgentActive);
@@ -898,11 +899,13 @@ export function SmartInputBar({ onSend, disabled, preparing, centered, onStop }:
       {mode === "code" && <div className="mx-auto mt-3 flex max-w-[720px] flex-wrap items-center justify-between gap-2 px-2 text-[12px] text-[var(--fg-muted)]">
         <div className="flex min-w-0 items-center gap-1">
           <button type="button" disabled={disabled} onClick={selectWorkFolder} className="flex min-w-0 items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-[var(--bg-hover)] disabled:opacity-50" title={workspaceName || undefined}>
-            <FolderOpen size={14} /><span className="max-w-[220px] truncate">{workspaceEnabled && workspaceName ? workspaceName : locale === "ru" ? "Выбрать папку" : "Choose folder"}</span><ChevronDown size={12} />
+            <FolderOpen size={14} /><span className="max-w-[220px] truncate">{workspaceEnabled && workspaceName ? workspaceName : codeKind === "dev" ? (locale === "ru" ? "Выбрать проект" : "Choose project") : locale === "ru" ? "Выбрать папку" : "Choose folder"}</span><ChevronDown size={12} />
           </button>
           {workspaceEnabled && <button type="button" disabled={disabled} aria-label={locale === "ru" ? "Работать без папки" : "Work without a folder"} className="rounded-lg p-1.5 hover:bg-[var(--bg-hover)]" onClick={async () => { await clearWorkspace(); setWorkspaceEnabled(false); setWorkspaceName(null); setWorkspaceTaskStatus(""); }}><X size={12} /></button>}
         </div>
-        <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? (locale === "ru" ? "План" : "Plan") : (locale === "ru" ? "Авто" : "Auto")}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только чтение и план" : "Read-only planning") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : autonomy === "autopilot" ? (locale === "ru" ? "Автопилот" : "Autopilot") : autonomy === "tasks" ? (locale === "ru" ? "Подтверждение задач" : "Task approval") : (locale === "ru" ? "Спрашивает о важном" : "Asks about important actions")}</span></span>
+        {codeKind === "dev"
+          ? <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? (locale === "ru" ? "План" : "Plan") : (locale === "ru" ? "Авто" : "Auto")}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только чтение и план" : "Read-only planning") : !workspaceEnabled ? (locale === "ru" ? "Выберите папку проекта" : "Choose a project folder") : autonomy === "autopilot" ? (locale === "ru" ? "Автопилот" : "Autopilot") : autonomy === "tasks" ? (locale === "ru" ? "Подтверждение задач" : "Task approval") : (locale === "ru" ? "Спрашивает о важном" : "Asks about important actions")}</span></span>
+          : <span className="flex items-center gap-2"><span className="text-[var(--fg)]">{taskMode === "plan" ? "Plan" : "Work"}</span><span className="text-[var(--fg-faint)]">{taskMode === "plan" ? (locale === "ru" ? "Только планирование" : "Planning only") : !workspaceEnabled ? (locale === "ru" ? "Без папки" : "No folder") : (locale === "ru" ? "Папка подключена" : "Folder connected")}</span></span>}
       </div>}
       {downloadInfoOpen && (
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/55 p-4" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setDownloadInfoOpen(false); }}>

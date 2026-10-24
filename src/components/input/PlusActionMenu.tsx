@@ -33,6 +33,7 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
   const locale = useUiStore((s) => s.locale);
   const ru = locale === "ru";
   const mode = useModeStore((s) => s.mode);
+  const codeKind = useModeStore((s) => s.codeKind);
   const taskMode = useWorkspaceStore((s) => s.taskMode);
   const setTaskMode = useWorkspaceStore((s) => s.setTaskMode);
   const autonomy = useAgentStore((s) => s.autonomy);
@@ -76,11 +77,11 @@ export function PlusActionMenu({ fileRef, onClose }: Props) {
     <div ref={rootRef} className="absolute bottom-full left-0 z-50 mb-2 flex items-end gap-1.5">
       <div className="w-[min(300px,calc(100vw-48px))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)] py-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.14)]">
         {mode === "code" && <>
-          <MenuRow icon={<Briefcase size={16} />} label={ru ? "Авто" : "Auto"} active={taskMode === "work"} trailing={taskMode === "work" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("work"); onClose(); }} onMouseEnter={() => setSub(null)} />
-          {taskMode === "work" && (["autopilot", "important", "tasks"] as const).map((level) => (
+          <MenuRow icon={<Briefcase size={16} />} label={codeKind === "dev" ? (ru ? "Авто" : "Auto") : "Work"} active={taskMode === "work"} trailing={taskMode === "work" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("work"); onClose(); }} onMouseEnter={() => setSub(null)} />
+          {codeKind === "dev" && taskMode === "work" && (["autopilot", "important", "tasks"] as const).map((level) => (
             <MenuRow key={level} icon={<span className="w-4" />} label={level === "autopilot" ? (ru ? "Автопилот: спросит только про удаление" : "Autopilot: asks only before deleting") : level === "important" ? (ru ? "Спрашивать о важном" : "Ask about important actions") : (ru ? "Подтверждать каждую задачу" : "Approve every task")} active={autonomy === level} trailing={autonomy === level ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setAutonomy(level); onClose(); }} onMouseEnter={() => setSub(null)} />
           ))}
-          <MenuRow icon={<ScrollText size={16} />} label={ru ? "План" : "Plan"} active={taskMode === "plan"} trailing={taskMode === "plan" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("plan"); onClose(); }} onMouseEnter={() => setSub(null)} />
+          <MenuRow icon={<ScrollText size={16} />} label={codeKind === "dev" && ru ? "План" : "Plan"} active={taskMode === "plan"} trailing={taskMode === "plan" ? <Check size={14} className="text-[var(--accent)]" /> : undefined} onClick={() => { setTaskMode("plan"); onClose(); }} onMouseEnter={() => setSub(null)} />
           <div className="my-1.5 border-t border-[var(--border)]" />
         </>}
         {<MenuRow

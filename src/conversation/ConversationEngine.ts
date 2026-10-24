@@ -16,6 +16,8 @@ type SendInput<TGeneration> = {
   projectId?: string | null;
   parentId?: string | null;
   titleSource?: string;
+  /** Put in front of the id of a chat created by this send; it decides which tab the chat belongs to. */
+  idPrefix?: string;
 };
 
 type RegenerateInput<TGeneration> = {
@@ -98,8 +100,8 @@ export class ConversationEngine<TGeneration> {
     return this.createConversation(scope, projectId, "New chat");
   }
 
-  async createConversation(scope: AppMode, projectId: string | null, title = "New chat"): Promise<Conversation> {
-    const conversation = await this.repository.createConversation(scope, projectId, title);
+  async createConversation(scope: AppMode, projectId: string | null, title = "New chat", idPrefix = ""): Promise<Conversation> {
+    const conversation = await this.repository.createConversation(scope, projectId, title, idPrefix ? `${idPrefix}${this.createId()}` : undefined);
     await this.refresh(scope);
     this.setState({ activeConversationId: conversation.id, messages: [], branchPath: [] });
     return conversation;
@@ -110,7 +112,7 @@ export class ConversationEngine<TGeneration> {
     // Show the message and a waiting placeholder at once; storage writes follow in the background of the UI.
     const existing = input.conversationId ? null : this.state.conversations.find((item) => item.id === this.state.activeConversationId) ?? null;
     const created = !input.conversationId && !existing;
-    const conversationId = input.conversationId ?? existing?.id ?? this.createId();
+    const conversationId = input.conversationId ?? existing?.id ?? `${input.idPrefix ?? ""}${this.createId()}`;
     const parentId = input.parentId === undefined ? this.state.branchPath.at(-1)?.id ?? null : input.parentId;
     const userMessage: Message = {
       id: this.createId(),
