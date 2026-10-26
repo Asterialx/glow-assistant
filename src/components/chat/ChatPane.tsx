@@ -265,9 +265,9 @@ export function ChatPane({
 
   if (empty) {
     return (
-      <div className="glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-center px-4">
+      <div className={cn("glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-4", agentMode && codeKind === "dev" ? "pt-[calc(clamp(72px,24vh,240px)-2.5rem)]" : "pt-[clamp(72px,24vh,240px)]")}>
         <div className="glow-empty-intro mb-7 max-w-[620px] text-center">
-          <div className="mb-3 flex items-center justify-center gap-3">
+          <div className="mb-3 flex h-10 items-center justify-center gap-3">
             {agentMode
               ? codeKind === "dev"
                 ? <span className="flex h-10 w-10 items-center justify-center rounded-xl font-mono text-[17px] font-semibold" style={{ color: "var(--kind-dev)", background: "color-mix(in srgb, var(--kind-dev) 14%, transparent)" }} aria-hidden>{">_"}</span>
@@ -277,7 +277,7 @@ export function ChatPane({
               {agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Что делаем в проекте?" : "What shall we do in the project?") : locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
             </h1>
           </div>
-          <p className="text-[14px] leading-6 text-[var(--fg-muted)]">{agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Выберите папку проекта: агент прочитает код, внесёт правки, запустит тесты и сделает коммит." : "Choose a project folder: the agent reads the code, makes changes, runs tests and commits.") : locale === "ru" ? "Поручите задачу Glow. Подключите папку или начните без неё." : "Give Glow a task. Connect a folder or start without one.") : t(locale, "taskSubtitle")}</p>
+          <p className="min-h-12 text-[14px] leading-6 text-[var(--fg-muted)]">{agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Выберите папку проекта: агент прочитает код, внесёт правки, запустит тесты и сделает коммит." : "Choose a project folder: the agent reads the code, makes changes, runs tests and commits.") : locale === "ru" ? "Поручите задачу Glow. Подключите папку или начните без неё." : "Give Glow a task. Connect a folder or start without one.") : t(locale, "taskSubtitle")}</p>
         </div>
         <div className="w-full">
           <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} centered />
