@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+import { normalizeMath } from "../../lib/math";
 import type { Artifact, Message, UiWidget } from "../../lib/types";
 import { InlineWidgets } from "../widgets/InlineWidgets";
 import { GenUiArtifact } from "../widgets/GenUiArtifact";
@@ -21,6 +22,7 @@ import {
   ArrowDown,
   Globe,
   Briefcase,
+  MessageCircle,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -127,7 +129,8 @@ export function ChatPane({
   const closeArtifacts = useUiStore((s) => s.closeArtifacts);
   const activeArtifactId = useChatStore((s) => s.activeArtifactId);
   const designMode = useModeStore((s) => s.designMode);
-  const agentMode = useModeStore((s) => s.mode) === "code";
+  const mode = useModeStore((s) => s.mode);
+  const agentMode = mode === "code";
   const codeKind = useModeStore((s) => s.codeKind);
   const workspaceTaskStatus = useWorkspaceStore((s) => s.taskStatus);
   const agentRunning = useAgentStore((s) => s.running);
@@ -265,14 +268,14 @@ export function ChatPane({
 
   if (empty) {
     return (
-      <div className={cn("glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-4", agentMode && codeKind === "dev" ? "pt-[calc(clamp(72px,24vh,240px)-2.5rem)]" : "pt-[clamp(72px,24vh,240px)]")}>
+      <div className={cn("glow-empty-chat flex min-h-0 flex-1 flex-col items-center justify-start overflow-y-auto px-4", agentMode && codeKind === "dev" ? "pt-[calc(clamp(96px,30vh,300px)-2.5rem)]" : "pt-[clamp(96px,30vh,300px)]")}>
         <div className="glow-empty-intro mb-7 max-w-[620px] text-center">
           <div className="mb-3 flex h-10 items-center justify-center gap-3">
             {agentMode
               ? codeKind === "dev"
                 ? <span className="flex h-10 w-10 items-center justify-center rounded-xl font-mono text-[17px] font-semibold" style={{ color: "var(--kind-dev)", background: "color-mix(in srgb, var(--kind-dev) 14%, transparent)" }} aria-hidden>{">_"}</span>
                 : <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ color: "var(--kind-work)", background: "color-mix(in srgb, var(--kind-work) 14%, transparent)" }} aria-hidden><Briefcase size={20} strokeWidth={1.8} /></span>
-              : <span className="glow-asterisk text-[var(--accent)]" aria-hidden>✻</span>}
+              : <span className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 14%, transparent)" }} aria-hidden><MessageCircle size={20} strokeWidth={1.8} /></span>}
             <h1 className="font-[family-name:var(--font-display)] text-[2rem] font-medium tracking-[-0.02em] text-[var(--fg)]">
               {agentMode ? (codeKind === "dev" ? (locale === "ru" ? "Что делаем в проекте?" : "What shall we do in the project?") : locale === "ru" ? "Над чем поработаем?" : "What shall we work on?") : t(locale, "taskTitle")}
             </h1>
@@ -281,7 +284,7 @@ export function ChatPane({
         </div>
         <div className="w-full">
           <SmartInputBar onSend={onSend} disabled={streaming || preparingFiles} preparing={preparingFiles} onStop={streaming ? onStop : undefined} centered />
-          {agentMode && <QuickStarts kind={codeKind} locale={locale} />}
+          {(agentMode || mode === "home") && <QuickStarts kind={agentMode ? codeKind : "chat"} locale={locale} />}
         </div>
       </div>
     );
@@ -448,13 +451,13 @@ export function ChatPane({
                   {showThinking ? null : prose ? (
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
+                      rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
                       components={{
                         a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
                         table: ({ node: _node, ...props }) => <div className="chat-table-scroll"><table {...props} /></div>,
                       }}
                     >
-                      {prose}
+                      {normalizeMath(prose)}
                     </ReactMarkdown>
                   ) : null}
                   {display.buildingHtml && (

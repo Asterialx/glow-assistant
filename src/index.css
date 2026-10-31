@@ -292,3 +292,9 @@ body {
 @keyframes glow-caret-blink { 50% { opacity: 0; } }
 .glow-caret { display: inline-block; width: 0.55ch; height: 1.1em; margin-left: 2px; vertical-align: text-bottom; background: var(--kind-dev); animation: glow-caret-blink 1s steps(1) infinite; }
 @media (prefers-reduced-motion: reduce) { .glow-caret { animation: none; } }
+
+/* Formulas: the chat wraps text anywhere, which would tear a formula apart; keep it whole and scroll wide ones. */
+.prose-chat .katex { overflow-wrap: normal; word-break: normal; white-space: nowrap; font-size: 1.08em; }
+.prose-chat .katex-display { margin: 1em 0; padding: 0.35em 0; overflow-x: auto; overflow-y: hidden; }
+.prose-chat .katex-display > .katex { white-space: normal; }
+.prose-chat .katex-error { color: var(--fg-muted); font-family: var(--font-mono, monospace); }

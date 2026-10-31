@@ -1,4 +1,4 @@
-import { Bug, FileText, FlaskConical, FolderSearch, FolderTree,GraduationCap, Presentation, Table2, type LucideIcon } from "lucide-react";
+import { Bug, FileText, FlaskConical, FolderSearch, FolderTree, GraduationCap, Languages, Lightbulb, Newspaper, PenLine, Presentation, Table2, type LucideIcon } from "lucide-react";
 import type { Locale } from "../../lib/i18n";
 import type { CodeKind } from "../../lib/codeKind";
 import { useChatStore } from "../../stores/chatStore";
@@ -6,7 +6,15 @@ import { useChatStore } from "../../stores/chatStore";
 type Start = { icon: LucideIcon; label: [string, string]; prompt: [string, string] };
 
 /** [ru, en] pairs. Prompts that end with a colon wait for the user to finish the sentence. */
-const STARTS: Record<CodeKind, Start[]> = {
+export type StartKind = CodeKind | "chat";
+
+const STARTS: Record<StartKind, Start[]> = {
+  chat: [
+    { icon: Lightbulb, label: ["Объяснить простыми словами", "Explain simply"], prompt: ["Объясни простыми словами: ", "Explain in simple words: "] },
+    { icon: PenLine, label: ["Написать текст", "Write a text"], prompt: ["Напиши текст: ", "Write a text: "] },
+    { icon: Languages, label: ["Перевести", "Translate"], prompt: ["Переведи на английский: ", "Translate to Russian: "] },
+    { icon: Newspaper, label: ["Что нового", "What's new"], prompt: ["Что нового сегодня в мире?", "What's new in the world today?"] },
+  ],
   dev: [
     { icon: FolderTree, label: ["Объяснить проект", "Explain the project"], prompt: ["Объясни структуру проекта и как его запускать", "Explain the structure of the project and how to run it"] },
     { icon: Bug, label: ["Исправить баги", "Fix bugs"], prompt: ["Найди баги в проекте и исправь их", "Find the bugs in the project and fix them"] },
@@ -22,10 +30,10 @@ const STARTS: Record<CodeKind, Start[]> = {
 };
 
 /** One-click starters under the empty composer; they only fill the draft, the user still presses send. */
-export function QuickStarts({ kind, locale }: { kind: CodeKind; locale: Locale }) {
+export function QuickStarts({ kind, locale }: { kind: StartKind; locale: Locale }) {
   const setDraft = useChatStore((state) => state.setDraft);
   const index = locale === "ru" ? 0 : 1;
-  const accent = kind === "dev" ? "var(--kind-dev)" : "var(--kind-work)";
+  const accent = kind === "dev" ? "var(--kind-dev)" : kind === "work" ? "var(--kind-work)" : "var(--accent)";
   return (
     <div className="mx-auto mt-4 flex max-w-[720px] flex-wrap justify-center gap-2" aria-label={locale === "ru" ? "Быстрый старт" : "Quick start"}>
       {STARTS[kind].map(({ icon: Icon, label, prompt }) => (
