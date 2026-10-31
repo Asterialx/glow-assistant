@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { normalizeMath } from "../../lib/math";
+import { CodeBlock } from "./CodeBlock";
 import type { Artifact, Message, UiWidget } from "../../lib/types";
 import { InlineWidgets } from "../widgets/InlineWidgets";
 import { GenUiArtifact } from "../widgets/GenUiArtifact";
@@ -455,6 +456,7 @@ export function ChatPane({
                       components={{
                         a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
                         table: ({ node: _node, ...props }) => <div className="chat-table-scroll"><table {...props} /></div>,
+                        pre: ({ node: _node, children }) => <CodeBlock>{children}</CodeBlock>,
                       }}
                     >
                       {normalizeMath(prose)}
