@@ -10,6 +10,10 @@ export type StepStatus = "running" | "done" | "error" | "denied";
 export type Step = { id: string; name: string; summary: string; status: StepStatus; detail?: string; diff?: string; output?: string; ms?: number };
 export type ConfirmRequest = { id: string; kind: "command" | "delete" | "many_files" | "git" | "task"; title: string; reason: string };
 export type ConfirmAnswer = "once" | "task" | "deny";
+export type QuestionOption = { label: string; description?: string };
+export type Question = { question: string; header?: string; multiSelect: boolean; options: QuestionOption[] };
+/** What the user picked per question: option labels and/or their own text. `null` means the questions were skipped. */
+export type QuestionAnswers = { selected: string[]; other?: string }[] | null;
 
 export interface AgentDeps {
   /** Streams one model turn; text goes to onToken, requested tools come back as calls. */
@@ -18,6 +22,8 @@ export interface AgentDeps {
   classifyCommand(command: string): Promise<CommandClass>;
   gitBranch?(): Promise<string>;
   confirm(request: ConfirmRequest): Promise<ConfirmAnswer>;
+  /** Shows multiple-choice questions and resolves with the answers; absent in headless runs. */
+  askQuestions?(questions: Question[]): Promise<QuestionAnswers>;
   /** Messages a tool wants added after its result, for example pictures read from a document. */
   drainExtraMessages?(): ChatMessage[];
   onToken(token: string): void;
@@ -56,6 +62,22 @@ function parseTasks(value: unknown): Task[] | string {
   if (new Set(tasks.map((task) => task.id)).size !== tasks.length) return "id задач должны быть уникальны.";
   if (tasks.filter((task) => task.status === "in_progress").length > 1) return "Одновременно может быть только одна задача in_progress.";
   return tasks;
+}
+
+function parseQuestions(value: unknown): Question[] | string {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 4) return "questions должен быть списком из 1–4 вопросов.";
+  const questions: Question[] = [];
+  for (const item of value) {
+    const q = item as { question?: unknown; header?: unknown; multi_select?: unknown; options?: unknown } | null;
+    if (!q || typeof q.question !== "string" || !q.question.trim() || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) return "Каждый вопрос: question и 2–4 варианта options.";
+    const options: QuestionOption[] = [];
+    for (const option of q.options as { label?: unknown; description?: unknown }[]) {
+      if (!option || typeof option.label !== "string" || !option.label.trim()) return "У каждого варианта должен быть label.";
+      options.push({ label: option.label.slice(0, 80), ...(typeof option.description === "string" && option.description ? { description: option.description.slice(0, 200) } : {}) });
+    }
+    questions.push({ question: q.question.slice(0, 200), ...(typeof q.header === "string" && q.header ? { header: q.header.slice(0, 20) } : {}), multiSelect: q.multi_select === true, options });
+  }
+  return questions;
 }
 
 /** The agent loop: ask the model, run the tools it requests under the policy, feed results back. */
@@ -135,6 +157,22 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
 
       const step: Step = { id: call.id, name: call.name, summary: describeCall(call.name, args), status: "running" };
       const started = Date.now();
+      if (call.name === "ask_user") {
+        const questions = parseQuestions(args.questions);
+        if (typeof questions === "string") { await answer({ error: questions }); continue; }
+        if (!deps.askQuestions) { await answer({ error: "Здесь нельзя задавать вопросы: примите разумные решения сами и перечислите допущения." }); continue; }
+        record(step);
+        const answers = await deps.askQuestions(questions);
+        if (options.signal?.aborted) return result("aborted");
+        if (!answers) {
+          record({ ...step, status: "done", detail: "пропущено", ms: Date.now() - started });
+          await answer({ skipped: true, note: "Пользователь пропустил вопросы: выберите разумные варианты сами и перечислите допущения." });
+          continue;
+        }
+        record({ ...step, status: "done", detail: "получены ответы", ms: Date.now() - started });
+        await answer({ answers: questions.map((question, index) => ({ question: question.question, selected: answers[index]?.selected ?? [], ...(answers[index]?.other ? { other: answers[index]!.other } : {}) })) });
+        continue;
+      }
       if (call.name === "update_tasks") {
         const next = parseTasks(args.tasks);
         if (typeof next === "string") { await answer({ error: next }); continue; }

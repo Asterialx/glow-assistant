@@ -50,6 +50,7 @@ import { extractGeneratedFiles, generatedFileFromArtifact, stripGeneratedFileFen
 import { useWorkspaceStore } from "../../stores/workspaceStore";
 import { useAgentStore } from "../../stores/agentStore";
 import { AgentConfirmDialog } from "../agent/AgentConfirmDialog";
+import { AgentQuestions } from "../agent/AgentQuestions";
 import { idPrefixFor } from "../../lib/codeKind";
 import { ProjectBar } from "../agent/ProjectBar";
 import { AgentPanel } from "../agent/AgentPanel";
@@ -659,6 +660,7 @@ export function AppShell() {
   return (
     <div className="flex h-full bg-[var(--bg)] text-[var(--fg)]">
       <AgentConfirmDialog locale={locale} />
+      <AgentQuestions locale={locale} />
       {syncError && <div role="status" className="fixed left-1/2 top-12 z-[110] w-max max-w-[calc(100%-2rem)] -translate-x-1/2 rounded-xl border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-2 text-sm break-words">{syncError}</div>}
       {sidebarOpen && (
         <>

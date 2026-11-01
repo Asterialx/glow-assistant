@@ -176,6 +176,30 @@ test('other levels do not interrupt for tasks, and invalid task lists are reject
   assert.equal(result.tasks.length, 1);
 });
 
+test('ask_user shows the questions, waits, and hands the picked answers to the model', async () => {
+  const questions = [{ question: 'Какой стек?', header: 'Стек', options: [{ label: 'Node' }, { label: 'Python', description: 'Flask' }] }, { question: 'Что включить?', multi_select: true, options: [{ label: 'Вход' }, { label: 'Графики' }] }];
+  const { deps, seen } = harness({ turns: [{ calls: [call('q', 'ask_user', { questions })] }, { text: 'ok' }] });
+  let shown;
+  deps.askQuestions = async (list) => { shown = list; return [{ selected: ['Node'] }, { selected: ['Вход', 'Графики'], other: 'ещё экспорт' }]; };
+  const result = await runAgent(user, deps, { mode: 'auto', autonomy: 'important' });
+  assert.deepEqual(shown.map(item => [item.question, item.multiSelect, item.options.length]), [['Какой стек?', false, 2], ['Что включить?', true, 2]]);
+  assert.deepEqual(tools(seen, 1)[0].answers, [{ question: 'Какой стек?', selected: ['Node'] }, { question: 'Что включить?', selected: ['Вход', 'Графики'], other: 'ещё экспорт' }]);
+  assert.equal(seen.exec.length, 0);
+  assert.equal(result.steps[0].status, 'done');
+});
+
+test('skipped or impossible questions tell the model to decide itself; bad question lists are rejected', async () => {
+  const good = call('g', 'ask_user', { questions: [{ question: 'A?', options: [{ label: 'x' }, { label: 'y' }] }] });
+  const bad = call('b', 'ask_user', { questions: [{ question: 'A?', options: [{ label: 'x' }] }] });
+  const skipped = harness({ turns: [{ calls: [good] }, { text: 'ok' }] });
+  skipped.deps.askQuestions = async () => null;
+  await runAgent(user, skipped.deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(tools(skipped.seen, 1)[0].skipped, true);
+  const headless = harness({ turns: [{ calls: [good] }, { calls: [bad] }, { text: 'ok' }] });
+  await runAgent(user, headless.deps, { mode: 'auto', autonomy: 'important' });
+  assert.match(tools(headless.seen, 1)[0].error, /нельзя задавать вопросы/);
+  assert.match(tools(headless.seen, 2).at(-1).error, /2–4 варианта/);
+});
 test('tool errors and malformed calls are returned to the model instead of crashing the run', async () => {
   const { deps, seen } = harness({
     turns: [{ calls: [call('1', 'code_read', { path: 'missing.ts' }), { id: '2', name: 'code_read', arguments: '{bad' }, call('3', 'rm_everything')] }, { text: 'ok' }],

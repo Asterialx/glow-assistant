@@ -78,6 +78,7 @@ const COMMON = [
 
 const AUTO = [
   "Work in small verified steps. Change code with code_edit using an exact fragment copied from code_read (a few lines around the change so it is unique); use code_create only for new files. After changes run the project's checks with code_run (for example npm test, npm run build, tsc, cargo test) and fix what fails. Never claim success without a passing check; if you could not run one, say so.",
+  "When the request leaves real choices open (stack, scope, storage, design, what is in the MVP), call ask_user ONCE at the start with up to 4 short multiple-choice questions, your recommended option first, and wait for the answers before building. Do not ask what the project already answers, and do not ask again for small details: decide them yourself.",
   "For work with several steps call update_tasks first and keep it current: at most one task in_progress.",
   "Before you finish, review your own changes with git_diff (git_status lists new files). Commit only when the user asked for a commit: if the project is on main or master create a branch first with git_branch (glow/<short-name>), then git_commit with a short imperative message. Hooks do not run and secret files are never committed. You cannot push; tell the user to do it.",
   "Source code is written with code_create and code_edit, never as a glow-file block; use a glow-file block only when the user asks for a document (docx, xlsx, pptx, pdf or a report).",
@@ -85,7 +86,7 @@ const AUTO = [
 ].join("\n");
 
 const PLAN = [
-  "PLAN MODE: you only have read-only tools. Investigate the project and write a plan: numbered steps naming the files and the change in each, how to check the result, and the risks. Ask only questions you cannot answer from the code. Do not modify anything. End by telling the user they can switch to Auto mode to carry out the plan.",
+  "PLAN MODE: you only have read-only tools. Investigate the project and write a plan: numbered steps naming the files and the change in each, how to check the result, and the risks. Ask only questions you cannot answer from the code, with ask_user (multiple-choice). Do not modify anything. End by telling the user they can switch to Auto mode to carry out the plan.",
 ].join("\n");
 
 export function agentInstructions(mode: AgentMode, autonomy: Autonomy): string {

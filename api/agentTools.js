@@ -46,6 +46,23 @@ const READ_ONLY = [
       },
     },
   }, ['tasks']),
+  fn('ask_user', 'Ask the user up to 4 multiple-choice questions and wait for the answers. Use it when the request leaves real choices open (stack, scope, data storage, design) before you build; do not ask what you can find out from the project. Give 2 to 4 short options per question, put your recommended option first. The user can also type their own answer.', {
+    questions: {
+      type: 'array', minItems: 1, maxItems: 4,
+      items: {
+        type: 'object', additionalProperties: false, required: ['question', 'options'],
+        properties: {
+          question: text(200, 'The full question, ending with a question mark.'),
+          header: text(20, 'A one or two word label for the question.'),
+          multi_select: { type: 'boolean', description: 'True when several options can be chosen.' },
+          options: {
+            type: 'array', minItems: 2, maxItems: 4,
+            items: { type: 'object', additionalProperties: false, required: ['label'], properties: { label: text(80, 'Short option text.'), description: text(200, 'What choosing it means.') } },
+          },
+        },
+      },
+    },
+  }, ['questions']),
 ];
 
 const WRITE = [

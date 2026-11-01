@@ -1,11 +1,13 @@
 import { create } from "zustand";
 import { accountStorage as localStorage } from "../auth/accountStorage";
-import type { ConfirmAnswer, ConfirmRequest, Step, Task } from "../lib/agent/loop";
+import type { ConfirmAnswer, ConfirmRequest, Question, QuestionAnswers, Step, Task } from "../lib/agent/loop";
 import type { Autonomy } from "../lib/agent/policy";
 
 const LEVELS: Autonomy[] = ["autopilot", "important", "tasks"];
 
 type PendingConfirm = { request: ConfirmRequest; resolve: (answer: ConfirmAnswer) => void };
+
+type PendingQuestions = { questions: Question[]; resolve: (answers: QuestionAnswers) => void };
 
 type AgentState = {
   autonomy: Autonomy;
@@ -15,6 +17,10 @@ type AgentState = {
   steps: Step[];
   tasks: Task[];
   pending: PendingConfirm | null;
+  /** Multiple-choice questions the agent is waiting on. */
+  questions: PendingQuestions | null;
+  askQuestions: (questions: Question[]) => Promise<QuestionAnswers>;
+  answerQuestions: (answers: QuestionAnswers) => void;
   /** The side panel of the Code tab: the console of run commands and the plan. */
   panelOpen: boolean;
   panelTab: "console" | "plan";
@@ -43,17 +49,29 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   steps: [],
   tasks: [],
   pending: null,
+  questions: null,
+  askQuestions: (questions) => new Promise<QuestionAnswers>((resolve) => {
+    if (get().questions) { resolve(null); return; }
+    set({ questions: { questions, resolve } });
+  }),
+  answerQuestions: (answers) => {
+    const open = get().questions;
+    if (!open) return;
+    set({ questions: null });
+    open.resolve(answers);
+  },
   panelOpen: false,
   panelTab: "console",
   plan: "",
   openPanel: (tab) => set((state) => ({ panelOpen: true, panelTab: tab ?? state.panelTab })),
   closePanel: () => set({ panelOpen: false }),
   setPlan: (plan) => set({ plan }),
-  begin: () => set({ running: true, steps: [], tasks: [], pending: null }),
+  begin: () => set({ running: true, steps: [], tasks: [], pending: null, questions: null }),
   finish: () => {
     // A run that ends with a question still open (stop button) must not leave it hanging.
     get().pending?.resolve("deny");
-    set({ running: false, pending: null });
+    get().questions?.resolve(null);
+    set({ running: false, pending: null, questions: null });
   },
   upsertStep: (step) => set((state) => {
     const index = state.steps.findIndex((item) => item.id === step.id);
