@@ -7,8 +7,8 @@ import handler from '../api/ai.js';
 const names = (tools) => tools.map(tool => tool.function.name);
 
 test('plan set is read-only and the agent set adds writes and commands', () => {
-  assert.deepEqual(names(CODE_TOOL_SETS.code_plan), ['code_list', 'code_read', 'code_search', 'doc_read', 'git_status', 'git_diff', 'git_log', 'update_tasks', 'ask_user']);
-  assert.deepEqual(names(CODE_TOOL_SETS.code_agent).slice(9), ['code_edit', 'code_create', 'code_delete', 'code_run', 'git_branch', 'git_commit']);
+  assert.deepEqual(names(CODE_TOOL_SETS.code_plan), ['code_list', 'code_read', 'code_search', 'doc_read', 'git_status', 'git_diff', 'git_log', 'code_preview', 'update_tasks', 'ask_user']);
+  assert.deepEqual(names(CODE_TOOL_SETS.code_agent).slice(10), ['code_edit', 'code_create', 'code_delete', 'code_run', 'git_branch', 'git_commit']);
   const plan = names(CODE_TOOL_SETS.code_plan);
   assert.equal(plan.includes('git_commit') || plan.includes('git_branch'), false, 'planning can read git but never change it');
   for (const tool of CODE_TOOL_SETS.code_agent) assert.match(tool.function.name, /^[a-z0-9_]{1,64}$/);

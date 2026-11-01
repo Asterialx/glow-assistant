@@ -531,6 +531,32 @@ pub async fn code_run(state: State<'_, AppState>, command: String, approved: boo
         .map_err(|_| "Не удалось выполнить команду.".to_string())?
 }
 
+/// The page the agent wants to show: an existing .html file inside the root, never anything else.
+pub fn preview_target(root: &Path, path: &str) -> Result<PathBuf, String> {
+    let rel = relative(path, false)?;
+    blocked(&rel, false)?;
+    let file = resolve_existing(root, &rel)?;
+    let is_page = file.is_file() && file.extension().and_then(|ext| ext.to_str()).is_some_and(|ext| ext.eq_ignore_ascii_case("html") || ext.eq_ignore_ascii_case("htm"));
+    if !is_page { return Err("Открыть в браузере можно только существующий HTML-файл проекта.".into()); }
+    Ok(file)
+}
+
+/// Opens a project page in the user's default browser so they can look at it.
+#[tauri::command]
+pub fn code_preview(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let file = preview_target(&root_of(&state)?, &path)?;
+    // The path is a separate argument, so it is never parsed by a shell.
+    #[cfg(target_os = "windows")]
+    let mut command = { let mut command = Command::new("explorer.exe"); command.arg(&file); command };
+    #[cfg(target_os = "macos")]
+    let mut command = { let mut command = Command::new("open"); command.arg(&file); command };
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    let mut command = { let mut command = Command::new("xdg-open"); command.arg(&file); command };
+    command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    command.spawn().map_err(|_| "Не удалось открыть браузер.".to_string())?;
+    Ok(display(&file))
+}
+
 /// Lets the UI ask the policy before it shows a confirmation dialog.
 #[tauri::command]
 pub fn code_classify_command(command: String) -> Decision {
@@ -554,6 +580,17 @@ pub fn code_restore_checkpoint(app: AppHandle, state: State<'_, AppState>, task_
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn preview_opens_only_html_inside_the_project() {
+        let (_guards, root, _) = workspace();
+        fs::write(root.join("index.html"), "<p>hi</p>").unwrap();
+        fs::write(root.join("notes.txt"), "x").unwrap();
+        assert!(preview_target(&root, "index.html").is_ok());
+        assert!(preview_target(&root, "notes.txt").is_err());
+        assert!(preview_target(&root, "missing.html").is_err());
+        assert!(preview_target(&root, "../index.html").is_err());
+    }
 
     /// A throwaway workspace plus a separate folder for its checkpoints; both are deleted on drop.
     fn workspace() -> (Vec<tempfile::TempDir>, PathBuf, PathBuf) {

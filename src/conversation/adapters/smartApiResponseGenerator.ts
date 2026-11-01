@@ -108,13 +108,20 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
           async turn(messages, toolSet, onToken) {
             let calls: { id: string; name: string; arguments: string }[] = [];
             let usage: { inputTokens: number; outputTokens: number; costUnits: number } | undefined;
-            let streamError: Error | undefined;
-            await streamChatCompletion(generation.modelId, messages, {
-              onToken,
-              onDone: (done) => { usage = done; },
-              onError: (error) => { streamError = error; },
-              onToolCalls: (next) => { calls = next; },
-            }, signal, { temperature: generation.temperature, maxTokens: 8000, conversationId: history.at(-1)?.conversation_id, scope: generation.mode, webSearch: false, toolSet });
+            let streamError = undefined as Error | undefined;
+            // The per-minute request limit is transient: wait it out instead of aborting a long task.
+            for (let attempt = 0; attempt < 3; attempt++) {
+              streamError = undefined;
+              await streamChatCompletion(generation.modelId, messages, {
+                onToken,
+                onDone: (done) => { usage = done; },
+                onError: (error) => { streamError = error; },
+                onToolCalls: (next) => { calls = next; },
+              }, signal, { temperature: generation.temperature, maxTokens: 8000, conversationId: history.at(-1)?.conversation_id, scope: generation.mode, webSearch: false, toolSet });
+              const failure = streamError as Error | undefined;
+              if (!failure || signal?.aborted || !/Please wait a minute/i.test(failure.message)) break;
+              await new Promise((resolve) => setTimeout(resolve, 20_000));
+            }
             if (streamError) throw streamError;
             return { calls, usage };
           },
@@ -122,6 +129,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
           classifyCommand: tools.classifyCommand,
           gitBranch: tools.gitBranch,
           confirm: (request) => store().ask(request),
+          askQuestions: (questions) => store().askQuestions(questions),
           drainExtraMessages: tools.drainExtraMessages,
           onToken: callbacks.onToken,
           onStep: (step) => { store().upsertStep(step); if (step.status === "running") generation.onAgentStatus?.(step.summary); },

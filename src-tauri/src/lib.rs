@@ -44,6 +44,7 @@ pub fn run() {
             code_tools::code_edit,
             code_tools::code_create,
             code_tools::code_delete,
+            code_tools::code_preview,
             code_tools::code_run,
             code_tools::code_classify_command,
             code_tools::code_restore_checkpoint,

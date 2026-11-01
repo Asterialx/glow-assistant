@@ -37,6 +37,9 @@ const READ_ONLY = [
     max_count: { type: 'integer', minimum: 1, maximum: 30 },
     path: text(500, 'Only commits that touched this file.'),
   }),
+  fn('code_preview', 'Open an .html file of the project in the user\'s default web browser so they can see it. You get no screenshot back; use it after the checks pass for pages the user asked for.', {
+    path: text(500, 'HTML file relative to the project root, for example index.html.'),
+  }, ['path']),
   fn('update_tasks', 'Show the user your task list and keep it current: call it before you start and whenever a task changes status. At most one task is in_progress.', {
     tasks: {
       type: 'array', maxItems: 12,

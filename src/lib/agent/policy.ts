@@ -2,7 +2,7 @@ export type AgentMode = "auto" | "plan";
 /** autopilot asks only before deleting; important asks about everything risky; tasks also approves each task. */
 export type Autonomy = "autopilot" | "important" | "tasks";
 
-export const READ_TOOLS = ["code_list", "code_read", "code_search", "doc_read", "git_status", "git_diff", "git_log", "update_tasks", "ask_user"] as const;
+export const READ_TOOLS = ["code_list", "code_read", "code_search", "doc_read", "git_status", "git_diff", "git_log", "update_tasks", "ask_user", "code_preview"] as const;
 export const WRITE_TOOLS = ["code_edit", "code_create", "code_delete", "code_run", "git_branch", "git_commit"] as const;
 export const MAX_FILES_PER_TASK = 10;
 
@@ -91,6 +91,7 @@ export function describeCall(name: string, args: Record<string, unknown>): strin
     case "git_commit": return `Коммит: ${text(args.message).split("\n")[0].slice(0, 70)}`;
     case "update_tasks": return "Обновляю список задач";
     case "ask_user": return "Задаю вопросы";
+    case "code_preview": return `Открываю в браузере ${text(args.path, "страницу")}`;
     default: return name;
   }
 }

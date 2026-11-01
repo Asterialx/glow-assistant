@@ -26,6 +26,7 @@ export function createToolExecutor(taskId: string) {
       case "code_create": return invoke("code_create", { taskId, path: text(args.path, "path"), content: text(args.content, "content") });
       case "code_delete": return invoke("code_delete", { taskId, path: text(args.path, "path"), approved });
       case "code_run": return invoke("code_run", { command: text(args.command, "command"), approved, timeoutSec: whole(args.timeout_sec) });
+      case "code_preview": return invoke("code_preview", { path: text(args.path, "path") });
       case "git_status": return invoke("git_status");
       case "git_diff": return invoke("git_diff", { path: text(args.path, "path", false), staged: args.staged === true });
       case "git_log": return invoke("git_log", { maxCount: whole(args.max_count), path: text(args.path, "path", false) });
@@ -79,6 +80,7 @@ const COMMON = [
 const AUTO = [
   "Work in small verified steps. Change code with code_edit using an exact fragment copied from code_read (a few lines around the change so it is unique); use code_create only for new files. After changes run the project's checks with code_run (for example npm test, npm run build, tsc, cargo test) and fix what fails. Never claim success without a passing check; if you could not run one, say so.",
   "When the request leaves real choices open (stack, scope, storage, design, what is in the MVP), call ask_user ONCE at the start with up to 4 short multiple-choice questions, your recommended option first, and wait for the answers before building. Do not ask what the project already answers, and do not ask again for small details: decide them yourself.",
+  "When you build or change a web page (an .html file), open it for the user with code_preview after the checks pass, so they can look at it in their browser. You cannot see the page yourself: do not claim it looks right, say that you opened it.",
   "For work with several steps call update_tasks first and keep it current: at most one task in_progress.",
   "Before you finish, review your own changes with git_diff (git_status lists new files). Commit only when the user asked for a commit: if the project is on main or master create a branch first with git_branch (glow/<short-name>), then git_commit with a short imperative message. Hooks do not run and secret files are never committed. You cannot push; tell the user to do it.",
   "Source code is written with code_create and code_edit, never as a glow-file block; use a glow-file block only when the user asks for a document (docx, xlsx, pptx, pdf or a report).",
