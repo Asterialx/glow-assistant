@@ -41,12 +41,20 @@ function parseTrace(raw: unknown): AgentTrace | null {
 
 /** Splits the trace block off the end of a stored answer. A damaged block is dropped, never shown raw. */
 export function splitAgentTrace(content: string): { text: string; trace: AgentTrace | null } {
-  const start = content.lastIndexOf(`\n\n${OPEN}`);
-  if (start < 0) return { text: content, trace: null };
-  if (!content.endsWith(CLOSE)) return { text: content.slice(0, start), trace: null };
+  // Line endings may be CRLF after storage or sync, so the fence is matched loosely.
+  let fence: RegExpExecArray | null = null;
+  for (const match of content.matchAll(/\r?\n\r?\n```glow-agent[ \t]*\r?\n/g)) fence = match;
+  if (!fence) return { text: content, trace: null };
+  const text = content.slice(0, fence.index);
+  const body = content.slice(fence.index + fence[0].length);
+  const close = body.search(/\r?\n```/);
+  if (close < 0) return { text, trace: null };
+  // A note appended after the block (for example why the task stopped) stays visible.
+  const after = body.slice(close).replace(/^\r?\n```/, "").trim();
+  const visible = after ? `${text}\n\n${after}` : text;
   try {
-    return { text: content.slice(0, start), trace: parseTrace(JSON.parse(content.slice(start + 2 + OPEN.length, -CLOSE.length))) };
+    return { text: visible, trace: parseTrace(JSON.parse(body.slice(0, close))) };
   } catch {
-    return { text: content.slice(0, start), trace: null };
+    return { text: visible, trace: null };
   }
 }

@@ -42,6 +42,21 @@ test('invalid steps and tasks are filtered and oversized diffs are capped', () =
   assert.deepEqual(restored.tasks.map(task => task.id), ['t1']);
 });
 
+test('the block is hidden with CRLF line endings, a trailing note and a cut-off tail', () => {
+  const stored = appendAgentTrace('Готово.', trace);
+  const crlf = splitAgentTrace(stored.replace(/\n/g, '\r\n'));
+  assert.equal(crlf.text, 'Готово.');
+  assert.deepEqual(crlf.trace, trace);
+  const noted = splitAgentTrace(`${stored}\n\n_Задача прервана: ошибка_`);
+  assert.equal(noted.text, 'Готово.\n\n_Задача прервана: ошибка_');
+  assert.deepEqual(noted.trace, trace);
+  const big = { ...trace, steps: Array.from({ length: 40 }, (_, i) => ({ id: `s${i}`, name: 'code_edit', summary: `Правлю f${i}.js`, status: 'done', diff: '+x\n'.repeat(1500), ms: i })) };
+  const long = appendAgentTrace('Итог', big);
+  assert.equal(splitAgentTrace(long).text, 'Итог');
+  assert.equal(splitAgentTrace(long.slice(0, long.length - 5000)).text, 'Итог');
+  assert.equal(splitAgentTrace(long.slice(0, long.length - 5000)).trace, null);
+});
+
 test('a run that failed keeps its trace so the changes can still be undone', () => {
   const failed = { ...trace, stopped: 'error' };
   assert.equal(splitAgentTrace(appendAgentTrace('Часть ответа', failed)).trace.stopped, 'error');
