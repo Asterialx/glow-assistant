@@ -45,8 +45,11 @@ export type LegacyGenerationOptions = {
 
 /** A full HTML page or a long document does not fit the default 4096-token answer and gets cut off mid-file. */
 const BUILD_REQUEST = /html|сайт|веб-?страниц|лендинг|мини-?игр|игр[уаые]|сап[её]р|морской бой|приложени|калькулятор|\bgame\b|\bapp\b/i;
-function outputBudget(generation: { mode: string; designMode: boolean; maxTokens: number }, request = ""): number {
-  return generation.mode === "code" || generation.designMode || BUILD_REQUEST.test(request) ? Math.max(generation.maxTokens, 12000) : generation.maxTokens;
+/** Solving a whole file of tasks, or answering about an attached document, runs far past 4096 tokens. */
+const HAS_FILES = /```glow-attachments/;
+function outputBudget(generation: { mode: string; designMode: boolean; maxTokens: number }, request = "", hasFiles = false): number {
+  if (hasFiles) return 16384;
+  return generation.mode === "code" || generation.designMode || BUILD_REQUEST.test(request) ? Math.max(generation.maxTokens, 12000) : Math.max(generation.maxTokens, 8192);
 }
 
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
@@ -168,7 +171,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
         onToolCalls: (next) => { calls = next; },
       }, signal, {
         temperature: generation.temperature,
-        maxTokens: outputBudget(generation, currentText),
+        maxTokens: outputBudget(generation, currentText, history.some((message) => HAS_FILES.test(message.content))),
         conversationId: history.at(-1)?.conversation_id,
         scope: generation.mode,
         webSearch: webTools,

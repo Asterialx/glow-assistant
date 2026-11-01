@@ -210,12 +210,15 @@ export function sanitizeContentForApi(content: string, role: string): string {
   return text.trim();
 }
 
+const MAX_CONTINUATIONS = 2;
+const CONTINUE_PROMPT = "Продолжи ровно с того места, где ответ оборвался: без повторов, без вступления и без пояснений о продолжении.";
+
 export async function streamChatCompletion(
   modelId: string,
   messages: ChatMessage[],
   callbacks: StreamCallbacks,
   signal?: AbortSignal,
-  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string; webSearch?: boolean; workspaceTools?: boolean; toolSet?: "code_agent" | "code_plan" },
+  opts?: { temperature?: number; maxTokens?: number; conversationId?: string; scope?: string; webSearch?: boolean; workspaceTools?: boolean; toolSet?: "code_agent" | "code_plan"; continuations?: number },
 ): Promise<void> {
   const model = getModel(modelId);
   const url = `${opts?.webSearch && import.meta.env.DEV ? "/openrouter" : getBaseUrl()}/chat/completions`;
@@ -388,6 +391,21 @@ export async function streamChatCompletion(
     if (!output.trim() && toolCalls.size === 0) {
       throw new Error("Модель вернула пустой ответ. Повторите запрос вручную; автоматический повтор отключён.");
     }
+    // A long answer that ran into the token limit continues by itself, up to twice, instead of just stopping mid-sentence.
+    const headTokens = providerOutputTokens ?? estimateTokens(output);
+    let extraUsage = { inputTokens: 0, outputTokens: 0, costUnits: 0 };
+    const continued = opts?.continuations ?? 0;
+    if (finishReason === "length" && toolCalls.size === 0 && continued < MAX_CONTINUATIONS && !signal?.aborted) {
+      let tail = "";
+      let usage: typeof extraUsage | undefined;
+      await streamChatCompletion(modelId, [...messages, { role: "assistant", content: output }, { role: "user", content: CONTINUE_PROMPT }], {
+        onToken: (token) => { tail += token; callbacks.onToken(token); },
+        onDone: (next) => { usage = next; },
+        onError: () => { /* Keep what we have; the cut-off check below reports it. */ },
+      }, signal, { ...opts, webSearch: false, continuations: continued + 1 });
+      output += tail;
+      if (usage) { extraUsage = usage; finishReason = "stop"; }
+    }
     // Code or a file cut mid-block would become a half-built artifact whose buttons never work.
     const cutOff = finishReason === "length" || (!finishReason && !sawDone);
     if (cutOff && toolCalls.size === 0 && (output.match(/```/g)?.length ?? 0) % 2 === 1) {
@@ -403,12 +421,12 @@ export async function streamChatCompletion(
       callbacks.onToken(metadata);
     }
 
-    const outputTokens = providerOutputTokens ?? estimateTokens(output);
+    const outputTokens = headTokens + extraUsage.outputTokens;
     const mult = model?.costMultiplier ?? 1;
     callbacks.onDone({
-      inputTokens,
+      inputTokens: inputTokens + extraUsage.inputTokens,
       outputTokens,
-      costUnits: ((inputTokens + outputTokens) / 1000) * mult,
+      costUnits: ((inputTokens + outputTokens + extraUsage.inputTokens) / 1000) * mult,
     });
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
