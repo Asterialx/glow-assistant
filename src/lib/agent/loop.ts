@@ -68,14 +68,16 @@ function parseQuestions(value: unknown): Question[] | string {
   if (!Array.isArray(value) || value.length < 1 || value.length > 4) return "questions должен быть списком из 1–4 вопросов.";
   const questions: Question[] = [];
   for (const item of value) {
-    const q = item as { question?: unknown; header?: unknown; multi_select?: unknown; options?: unknown } | null;
+    const q = item as { question?: unknown; header?: unknown; multi_select?: unknown; multiSelect?: unknown; options?: unknown } | null;
     if (!q || typeof q.question !== "string" || !q.question.trim() || !Array.isArray(q.options) || q.options.length < 2 || q.options.length > 4) return "Каждый вопрос: question и 2–4 варианта options.";
     const options: QuestionOption[] = [];
-    for (const option of q.options as { label?: unknown; description?: unknown }[]) {
-      if (!option || typeof option.label !== "string" || !option.label.trim()) return "У каждого варианта должен быть label.";
+    // Models sometimes send plain strings instead of {label, description} objects; both are fine.
+    for (const raw of q.options as unknown[]) {
+      const option = typeof raw === "string" ? { label: raw, description: undefined } : (raw as { label?: unknown; description?: unknown } | null);
+      if (!option || typeof option.label !== "string" || !option.label.trim()) return "У каждого варианта должен быть label. Пример: {\"questions\":[{\"question\":\"Какой стек?\",\"options\":[{\"label\":\"Node\"},{\"label\":\"Python\"}]}]}";
       options.push({ label: option.label.slice(0, 80), ...(typeof option.description === "string" && option.description ? { description: option.description.slice(0, 200) } : {}) });
     }
-    questions.push({ question: q.question.slice(0, 200), ...(typeof q.header === "string" && q.header ? { header: q.header.slice(0, 20) } : {}), multiSelect: q.multi_select === true, options });
+    questions.push({ question: q.question.slice(0, 200), ...(typeof q.header === "string" && q.header ? { header: q.header.slice(0, 20) } : {}), multiSelect: q.multi_select === true || q.multiSelect === true, options });
   }
   return questions;
 }
@@ -159,7 +161,11 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
       const started = Date.now();
       if (call.name === "ask_user") {
         const questions = parseQuestions(args.questions);
-        if (typeof questions === "string") { await answer({ error: questions }); continue; }
+        if (typeof questions === "string") {
+          record({ ...step, status: "error", detail: "неверный формат вопросов", ms: Date.now() - started });
+          await answer({ error: questions });
+          continue;
+        }
         if (!deps.askQuestions) { await answer({ error: "Здесь нельзя задавать вопросы: примите разумные решения сами и перечислите допущения." }); continue; }
         record(step);
         const answers = await deps.askQuestions(questions);

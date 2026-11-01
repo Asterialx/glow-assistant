@@ -188,6 +188,18 @@ test('ask_user shows the questions, waits, and hands the picked answers to the m
   assert.equal(result.steps[0].status, 'done');
 });
 
+test('ask_user accepts plain-string options and shows a badly formed call as an error step', async () => {
+  const plain = harness({ turns: [{ calls: [call('p', 'ask_user', { questions: [{ question: 'A?', options: ['x', 'y'] }] })] }, { text: 'ok' }] });
+  let shown;
+  plain.deps.askQuestions = async (list) => { shown = list; return [{ selected: ['x'] }]; };
+  await runAgent(user, plain.deps, { mode: 'auto', autonomy: 'important' });
+  assert.deepEqual(shown[0].options, [{ label: 'x' }, { label: 'y' }]);
+  const bad = harness({ turns: [{ calls: [call('b', 'ask_user', { questions: [{ question: 'A?', options: [{ nope: 1 }, { label: 'y' }] }] })] }, { text: 'ok' }] });
+  const result = await runAgent(user, bad.deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(result.steps[0].status, 'error');
+  assert.match(tools(bad.seen, 1)[0].error, /Пример/);
+});
+
 test('skipped or impossible questions tell the model to decide itself; bad question lists are rejected', async () => {
   const good = call('g', 'ask_user', { questions: [{ question: 'A?', options: [{ label: 'x' }, { label: 'y' }] }] });
   const bad = call('b', 'ask_user', { questions: [{ question: 'A?', options: [{ label: 'x' }] }] });

@@ -131,7 +131,8 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
         const finished = mode === "auto" ? await tools.finish().catch(() => ({ changed: [] as string[] })) : { changed: [] as string[] };
         const changedFiles = finished.changed.length ? finished.changed : result.changedFiles;
         const notice = result.stopped === "max_turns" ? "Остановлено: достигнут лимит шагов. Напишите «продолжай», чтобы продолжить."
-          : result.stopped === "budget" ? "Остановлено: исчерпан бюджет токенов задачи. Напишите «продолжай», чтобы продолжить." : "";
+          : result.stopped === "budget" ? "Остановлено: исчерпан бюджет токенов задачи. Напишите «продолжай», чтобы продолжить."
+          : result.stopped === "error" ? `Задача прервана: ${(result.error || "ошибка модели").slice(0, 300)}` : "";
         callbacks.onToken(`${notice ? `\n\n_${notice}_` : ""}${appendAgentTrace("", { v: 1, taskId, stopped: result.stopped, steps: result.steps, tasks: result.tasks, changedFiles })}`);
         if (result.stopped === "error") throw new Error(result.error || "Агент остановился из-за ошибки.");
         callbacks.onDone(result.usage);
