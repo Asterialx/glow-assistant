@@ -10,7 +10,7 @@ import { redactPii } from "../../lib/tauri";
 import type { Locale } from "../../lib/i18n";
 import { runAgent } from "../../lib/agent/loop";
 import { createToolExecutor } from "../../lib/agent/tools";
-import { appendAgentTrace } from "../../lib/agent/trace";
+import { appendAgentTrace, splitAgentTrace } from "../../lib/agent/trace";
 import type { AgentMode, Autonomy } from "../../lib/agent/policy";
 import { useAgentStore } from "../../stores/agentStore";
 import {
@@ -92,13 +92,18 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
       return;
     }
     const workflow = skillInstructions(currentText, [...BUILTIN_SKILLS, ...useSkillsStore.getState().custom]);
-    const cleanHistory = history.map(message => message.role === "assistant"
-      ? { ...message, content: splitSearchSources(message.content).text }
-      : message);
+    // The step trace of a finished agent task is for the user's screen only: re-sending its diffs on
+    // every later step costs thousands of tokens, so the model gets just the list of changed files.
+    const cleanHistory = history.map(message => {
+      if (message.role !== "assistant") return message;
+      const { text, trace } = splitAgentTrace(message.content);
+      const files = trace?.changedFiles.length ? `\n\n[Агент изменил файлы: ${trace.changedFiles.slice(0, 20).join(", ")}]` : "";
+      return { ...message, content: `${splitSearchSources(text).text}${files}` };
+    });
     if (generation.agent) {
       const { mode, autonomy, taskId } = generation.agent;
       const tools = createToolExecutor(taskId);
-      const agentPayload = buildChatPayload(generation.mode, cleanHistory, [generation.systemExtra, workflow].filter(Boolean).join("\n\n"), generation.memory, false, generation.modelId, generation.designMode, false, mode === "plan");
+      const agentPayload = buildChatPayload(generation.mode, cleanHistory, [generation.systemExtra, workflow].filter(Boolean).join("\n\n"), generation.memory, false, generation.modelId, generation.designMode, false, mode === "plan", true);
       const store = () => useAgentStore.getState();
       // A failed checkpoint must not block the task: edits still keep their own per-file snapshots.
       if (mode === "auto") await tools.begin().catch(() => undefined);

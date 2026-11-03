@@ -105,6 +105,7 @@ export function buildChatPayload(
   designMode = false,
   webSearch = false,
   agentPlan = false,
+  codeAgent = false,
 ): ChatMessage[] {
   const model = modelId ? getModel(modelId) : null;
   const identity = model
@@ -130,7 +131,8 @@ export function buildChatPayload(
   if (designMode) {
     // Designer persona overrides chatty assistant habits for this turn
     systemParts.push(DESIGN_MODE_SYSTEM);
-  } else {
+  } else if (!codeAgent) {
+    // The coding agent has no chat widgets, so the UI prompt would only be paid for on every step.
     systemParts.push(COMPACT_UI_PROMPT);
   }
   if (webSearch) systemParts.push(researchPolicy());

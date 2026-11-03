@@ -297,6 +297,23 @@ test('old tool results shrink while recent ones and the call pairing stay intact
   assert.equal(compactMessages(short, 10), short, 'nothing old enough means the same array comes back');
 });
 
+test('whole files in the arguments of old calls shrink but stay valid JSON and recent calls are untouched', () => {
+  const big = JSON.stringify({ path: 'src/app.js', content: 'y'.repeat(9000) });
+  const messages = [{ role: 'user', content: 'task' }];
+  for (let index = 0; index < 14; index++) {
+    messages.push({ role: 'assistant', content: null, tool_calls: [{ id: `c${index}`, type: 'function', function: { name: 'code_create', arguments: big } }] });
+    messages.push({ role: 'tool', tool_call_id: `c${index}`, name: 'code_create', content: '{"ok":true}' });
+  }
+  const compact = compactMessages(messages, 10);
+  const calls = compact.filter(message => message.role === 'assistant').map(message => message.tool_calls[0].function.arguments);
+  for (const raw of calls.slice(0, 4)) {
+    const parsed = JSON.parse(raw);
+    assert.equal(parsed.path, 'src/app.js');
+    assert.ok(raw.length < 400, 'old file content is cut');
+  }
+  assert.ok(calls.slice(4).every(raw => raw === big), 'recent calls keep their full arguments');
+});
+
 test('step rows show a short subject after the tool tag instead of the Russian sentence', () => {
   const cases = [
     ['code_read', 'Читаю src/a.ts', 'src/a.ts'], ['code_run', 'Запускаю npm test', 'npm test'], ['code_edit', 'Правлю math.js', 'math.js'],
