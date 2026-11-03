@@ -13,6 +13,11 @@ const WORKSPACE_FUNCTIONS = [
   { type: 'function', function: { name: 'workspace_read_file', description: 'Read one supported file from the selected workspace. Use a relative_path returned by workspace_list_files.', parameters: { type: 'object', properties: { relative_path: { type: 'string', maxLength: 500 } }, required: ['relative_path'], additionalProperties: false } } },
 ];
 
+// The only model served by abliteration.ai (OpenAI-compatible); everything else goes through OpenRouter.
+// It is listed only when its key is configured, and the database allows each user 5 requests a day on it.
+export const ABLITERATION_MODEL = 'abliterated-model-large-flash';
+const ABLITERATION_URL = 'https://api.abliteration.ai/v1/chat/completions';
+
 export function resolveAiPath(req) {
   const pathname = new URL(req.url || '/', 'http://localhost').pathname;
   if (pathname.startsWith('/api/ai/')) return pathname.slice('/api/ai/'.length).replace(/\/$/, '');
@@ -41,6 +46,7 @@ export default async function handler(req, res) {
     { id: 'z-ai/glm-5.3-flash', display_name: 'GLM 5.3 Flash', modality: 'chat', access_tier: 'paid' },
     { id: 'anthropic/claude-haiku-5.5', display_name: 'Claude Haiku 5.5', modality: 'chat', access_tier: 'paid' },
   { id: 'openai/gpt-6-luna', display_name: 'GPT 6 Luna', modality: 'chat', access_tier: 'paid' },
+    ...(process.env.ABLITERATION_API_KEY ? [{ id: ABLITERATION_MODEL, display_name: 'Abliterated Large Flash', modality: 'chat', access_tier: 'paid' }] : []),
   ];
   if (path === 'models' && req.method === 'GET') {
     return res.status(200).json({ data: models });
@@ -65,34 +71,45 @@ export default async function handler(req, res) {
   let streamingResponse = false;
   const usageCollector = createUsageCollector();
   const maxOutput = Math.max(16, Math.min(Number(body.max_tokens) || 4096, 16384));
+  const external = body.model === ABLITERATION_MODEL;
+  // That provider has no OpenRouter web search: the option is dropped rather than rejected.
+  const webSearch = body.web_search === true && !external;
   try {
     const lease = await client.rpc('glow_acquire_generation', { p_scope: body.scope, p_conversation: body.conversation_id, p_token: leaseToken });
     if (lease.error) return fail(403, 'Conversation access denied');
     if (!lease.data) return fail(409, 'A previous answer is still finishing. Please try again shortly.');
     leased = true;
     // Search adds retrieved context beyond the submitted conversation.
-    const searchContextReserve = body.web_search === true ? 80000 : 0;
+    const searchContextReserve = webSearch ? 80000 : 0;
     const rejection = await admitRequest(budgetClient, user.id, leaseToken, reservationFor(body.messages,maxOutput) + searchContextReserve,body.model);
     if (rejection) return fail(rejection.status, rejection.message);
     admitted = true;
     const cacheHaiku = body.model === 'anthropic/claude-haiku-5.5';
     // A named code tool set wins over the document workspace tools; the client never sends schemas.
     const functionTools = body.tool_set ? codeToolsFor(body.tool_set) : body.workspace_tools ? WORKSPACE_FUNCTIONS : null;
-    const providerMessages = body.web_search === true ? [
+    const providerMessages = webSearch ? [
       // The client adds this policy for direct development calls; avoid paying
       // for the same long instructions twice on authenticated cloud requests.
       ...(body.messages.some(message => message.role === 'system' && typeof message.content === 'string' && message.content.includes('Current research timestamp:')) ? [] : [{ role:'system', content:researchPolicy() }]),
       ...body.messages,
     ] : body.messages;
-    const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const temperature = Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7;
+    const upstream = external
+      ? await fetch(ABLITERATION_URL, {
+        method: 'POST', signal: abort.signal,
+        headers: { Authorization: `Bearer ${process.env.ABLITERATION_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: body.model, messages: providerMessages, stream: true, stream_options: { include_usage: true },
+          ...(functionTools ? { tools: functionTools } : {}), max_tokens: maxOutput, temperature }),
+      })
+      : await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', signal: abort.signal,
       headers: { Authorization: `Bearer ${providerKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model: body.model, messages: cacheHaiku ? withPromptCache(providerMessages) : providerMessages, stream: true,
         ...(cacheHaiku ? { session_id: body.conversation_id, stream_options: { include_usage: true } } : {}),
-        ...webSearchOptions(body.web_search),
-        ...(functionTools ? { tools: [...(body.web_search ? webSearchOptions(true).tools : []), ...functionTools] } : {}),
+        ...webSearchOptions(webSearch),
+        ...(functionTools ? { tools: [...(webSearch ? webSearchOptions(true).tools : []), ...functionTools] } : {}),
         max_tokens: maxOutput,
-        temperature: Number.isFinite(body.temperature) ? Math.max(0, Math.min(body.temperature, 2)) : 0.7, reasoning: { effort: 'low' } }),
+        temperature, reasoning: { effort: 'low' } }),
     });
     if (!upstream.ok) { rejectedByProvider = true; return fail(502, 'Provider unavailable. Try again later.'); }
     if (!upstream.body) return fail(502, 'Provider unavailable. Try again later.');

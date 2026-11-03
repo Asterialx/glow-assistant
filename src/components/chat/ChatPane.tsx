@@ -621,6 +621,10 @@ function friendlyError(locale: "en" | "ru", content: string): string {
     return locale === "ru" ? "Лимит запросов Glow исчерпан. Обратитесь к администратору для пополнения."
       : "Your Glow request allowance is exhausted. Contact the administrator to replenish it.";
   }
+  if (/Daily limit for this model reached/i.test(content)) {
+    return locale === "ru" ? "Дневной лимит этой модели исчерпан (5 запросов в день). Выберите другую модель или попробуйте завтра."
+      : "This model's daily limit (5 requests) has been reached. Pick another model or try again tomorrow.";
+  }
   if (/Daily beta request limit reached/i.test(content)) {
     return locale === "ru" ? "Дневной лимит Glow исчерпан. Попробуйте завтра."
       : "Glow's daily request limit has been reached. Try again tomorrow.";

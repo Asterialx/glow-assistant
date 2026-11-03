@@ -10,6 +10,7 @@ export async function admitRequest(client, userId, requestId, reservation, model
     rate: [429, 'Too many requests. Please wait a minute'],
     concurrent: [409, 'A previous answer is still finishing. Please try again shortly.'],
     budget: [429, 'Daily beta request limit reached. Try again tomorrow'],
+    model_limit: [429, 'Daily limit for this model reached. Try again tomorrow'],
     disabled: [503, 'AI temporarily unavailable'],
   };
   if (data === 'accepted') return null;

@@ -46,6 +46,7 @@ export function loadModelCatalog(): Promise<ModelInfo[]> {
           { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash", tier: "cheap" as const },
           { id: "anthropic/claude-haiku-5.5", name: "Claude Haiku 5.5", tier: "balanced" as const },
           { id: "openai/gpt-6-luna", name: "GPT 6 Luna", tier: "balanced" as const },
+          { id: "abliterated-model-large-flash", name: "Abliterated Flash · 5/день", tier: "balanced" as const },
         ];
         activeCatalog = allowed.filter(entry => (payload.data ?? []).some(model => model.id === entry.id)).map((entry, index): ModelInfo => ({
           id: entry.id,
