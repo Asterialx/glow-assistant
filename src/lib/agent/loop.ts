@@ -47,6 +47,7 @@ export interface AgentResult { stopped: StopReason; usage: Usage; steps: Step[];
 const RESULT_LIMIT = 8_000;
 const MAX_CALLS_PER_TURN = 6;
 const REPEAT_LIMIT = 3;
+const MAX_NUDGES = 2;
 const KNOWN = new Set<string>([...READ_TOOLS, ...WRITE_TOOLS]);
 
 const failure = (error: unknown): string => (typeof error === "string" ? error : error instanceof Error ? error.message : String(error));
@@ -94,6 +95,7 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
   const repeats = new Map<string, number>();
   let tasks: Task[] = [];
   let spoke = false;
+  let nudges = 0;
   let stepNumber = 0;
   const toolSet = options.mode === "plan" ? "code_plan" : "code_agent";
   const result = (stopped: StopReason, error?: string): AgentResult => ({ stopped, usage, steps, tasks, changedFiles: [...changed], ...(error ? { error } : {}) });
@@ -122,16 +124,26 @@ export async function runAgent(history: ChatMessage[], deps: AgentDeps, options:
     } catch (error) {
       return result("error", failure(error));
     }
-    const { calls, usage: turnUsage } = reply;
+    const { usage: turnUsage } = reply;
+    // Extra or repeated calls are dropped instead of aborting the task; the model asks again next turn.
+    const seenIds = new Set<string>();
+    const calls = reply.calls.filter((call) => !seenIds.has(call.id) && seenIds.add(call.id)).slice(0, MAX_CALLS_PER_TURN);
     if (produced) spoke = true;
     if (turnUsage) {
       usage.inputTokens += turnUsage.inputTokens;
       usage.outputTokens += turnUsage.outputTokens;
       usage.costUnits += turnUsage.costUnits;
     }
-    if (!calls.length) return result("done");
+    if (!calls.length) {
+      // A silent stop right after a tool result (often a failed one) looks like a crash to the user: nudge the model to continue or summarize.
+      if (!produced && messages[messages.length - 1]?.role === "tool" && nudges < MAX_NUDGES) {
+        nudges++;
+        messages.push({ role: "user", content: "Вы остановились, ничего не написав. Если задача выполнена, коротко опишите результат. Если последнее действие не удалось, исправьте причину и продолжайте инструментами." });
+        continue;
+      }
+      return result("done");
+    }
     if (options.signal?.aborted) return result("aborted");
-    if (calls.length > MAX_CALLS_PER_TURN || new Set(calls.map((call) => call.id)).size !== calls.length) throw new Error("Модель запросила слишком много действий за один ход.");
     messages.push({ role: "assistant", content: null, tool_calls: calls.map((call) => ({ id: call.id, type: "function", function: { name: call.name, arguments: call.arguments } })) });
 
     for (const call of calls) {

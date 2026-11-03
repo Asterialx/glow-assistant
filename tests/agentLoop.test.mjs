@@ -274,6 +274,26 @@ test('a model failure mid-task still returns the steps and changed files so the 
   assert.equal(result.steps.length, 1);
 });
 
+test('a silent stop after a tool result is nudged to continue once per silence', async () => {
+  const { deps, seen } = harness({ turns: [{ calls: [call('1', 'code_create', { path: 'README.md', content: 'x' })] }, {}, { calls: [call('2', 'code_edit', { path: 'README.md', old_string: 'x', new_string: 'y' })] }, { text: 'Готово' }] });
+  const result = await runAgent(user, deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(result.stopped, 'done');
+  assert.equal(seen.text, 'Готово');
+  assert.ok(seen.messages.at(-1).some(message => message.role === 'user' && /остановились/.test(message.content)));
+  const stubborn = harness({ turns: [{ calls: [call('1', 'code_list')] }, {}] });
+  const stopped = await runAgent(user, stubborn.deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(stopped.stopped, 'done');
+  assert.equal(stubborn.seen.messages.length, 3, 'tool turn, silent turn, one nudged retry that stays silent');
+});
+
+test('more calls than allowed in one turn are trimmed instead of aborting the task', async () => {
+  const many = Array.from({ length: 8 }, (_, index) => call(`c${index}`, 'code_list', { path: `dir${index}` }));
+  const { deps, seen } = harness({ turns: [{ calls: many }, { text: 'Готово' }] });
+  const result = await runAgent(user, deps, { mode: 'auto', autonomy: 'important' });
+  assert.equal(result.stopped, 'done');
+  assert.equal(seen.exec.length, 6);
+});
+
 test('assistant text from different turns is separated by a blank line', async () => {
   const { deps, seen } = harness({ turns: [{ text: 'Смотрю.', calls: [call('1', 'code_list')] }, { text: 'Готово.' }] });
   await runAgent(user, deps, { mode: 'auto', autonomy: 'important' });
