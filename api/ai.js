@@ -99,6 +99,8 @@ export default async function handler(req, res) {
         method: 'POST', signal: abort.signal,
         headers: { Authorization: `Bearer ${process.env.ABLITERATION_API_KEY}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: body.model, messages: providerMessages, stream: true, stream_options: { include_usage: true },
+          // Without this the model spends the whole output budget on a hidden reasoning trace and returns no text.
+          reasoning_effort: 'none',
           ...(functionTools ? { tools: functionTools } : {}), max_tokens: maxOutput, temperature }),
       })
       : await fetch('https://openrouter.ai/api/v1/chat/completions', {
@@ -111,7 +113,11 @@ export default async function handler(req, res) {
         max_tokens: maxOutput,
         temperature, reasoning: { effort: 'low' } }),
     });
-    if (!upstream.ok) { rejectedByProvider = true; return fail(502, 'Provider unavailable. Try again later.'); }
+    if (!upstream.ok) {
+      rejectedByProvider = true;
+      console.error('provider rejected', body.model, upstream.status, (await upstream.text().catch(() => '')).slice(0, 300));
+      return fail(502, 'Provider unavailable. Try again later.');
+    }
     if (!upstream.body) return fail(502, 'Provider unavailable. Try again later.');
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
@@ -121,7 +127,8 @@ export default async function handler(req, res) {
       if (res.destroyed) break;
       if (!res.write(chunk)) await waitForDrain(res);
     }
-  } catch {
+  } catch (error) {
+    console.error('generation failed', body.model, error?.message);
     if (!res.headersSent) fail(502, 'Generation interrupted. Try again.');
   } finally {
     clearTimeout(timer);

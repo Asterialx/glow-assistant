@@ -90,6 +90,7 @@ test('the abliterated model is sent to its own provider with its own key and wit
     assert.equal(upstream.headers.Authorization, 'Bearer ablit-secret');
     assert.equal(upstream.body.model, ABLIT);
     assert.deepEqual(upstream.body.stream_options, { include_usage: true });
+    assert.equal(upstream.body.reasoning_effort, 'none');
     for (const field of ['reasoning', 'plugins', 'tools', 'session_id']) assert.ok(!(field in upstream.body), `${field} must not be sent`);
     assert.ok(!JSON.stringify(upstream).includes('openrouter-secret'));
     assert.ok(res.chunks.join('').includes('"content":"ok"'));
