@@ -21,7 +21,7 @@ import {
   updateArtifact,
   upsertWidget,
 } from "../../db";
-import { onGameMode, redactPii, setMcpEnabled } from "../../lib/tauri";
+import { onGameMode, setMcpEnabled } from "../../lib/tauri";
 import { extractPdfText, fileToBase64 } from "../../lib/pdfExtract";
 import { nowMs, uid } from "../../lib/utils";
 import type { Artifact, ArtifactRevision, Message, UiWidget } from "../../lib/types";
@@ -267,7 +267,7 @@ export function AppShell() {
       memory,
       designMode,
       webSearch: webSearch || shouldSearchWeb(userText),
-      webAuto: mode !== "med",
+      webAuto: true,
       workspaceTools: workspaceEnabled && !devKind,
       ...(mode === "code" ? { codeKind: devKind ? "dev" as const : "work" as const, onAgentStatus: setWorkspaceTaskStatus } : {}),
     };
@@ -525,10 +525,6 @@ export function AppShell() {
       finally { setPreparingFiles(false); }
     }
 
-    if (mode === "med") {
-      content = (await redactPii(content)).text;
-    }
-
     const generation = await createGenerationOptions(content);
     workspaceStopRequested.current = false;
     // A status left over from the previous task must not show up in this one.
@@ -607,8 +603,7 @@ export function AppShell() {
   };
 
   const handleEditBranch = async (message: Message, editedText: string) => {
-    let content = editedText.trim();
-    if (mode === "med") content = (await redactPii(content)).text;
+    const content = editedText.trim();
     const generation = await createGenerationOptions(content);
     const result = await runWithSearchStatus(generation.webSearch, () => conversationService.editAndResend({
       scope: mode,

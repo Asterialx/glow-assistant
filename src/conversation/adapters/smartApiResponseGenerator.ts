@@ -6,7 +6,7 @@ import { splitSearchSources } from "../../lib/searchSources";
 import { WORKSPACE_TOOL_DEFINITIONS } from "../../lib/workspaceTools";
 import { listWorkspaceFiles, readWorkspaceFile } from "../../lib/workspace";
 import { prepareAttachment } from "../../lib/attachments";
-import { redactPii } from "../../lib/tauri";
+import type { AppMode } from "../../lib/types";
 import type { Locale } from "../../lib/i18n";
 import { runAgent } from "../../lib/agent/loop";
 import { createToolExecutor } from "../../lib/agent/tools";
@@ -23,7 +23,7 @@ import {
  * Provider-specific payload construction stays outside ConversationEngine.
  */
 export type LegacyGenerationOptions = {
-  mode: "home" | "code" | "med";
+  mode: AppMode;
   modelId: string;
   temperature: number;
   maxTokens: number;
@@ -55,7 +55,7 @@ function outputBudget(generation: { mode: string; designMode: boolean; maxTokens
 export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOptions> = {
   async stream({ history, generation }, callbacks, signal) {
     const currentText = history.filter(message => message.role === "user").at(-1)?.content || "";
-    const webTools = generation.webSearch || (generation.webAuto === true && generation.mode !== "med");
+    const webTools = generation.webSearch || generation.webAuto === true;
     const answeringCoursework = isAwaitingCourseworkAnswer(history);
     if (generation.mode === "code" && generation.codeKind !== "dev" && !generation.agentPlan && (answeringCoursework || isCourseworkRequest(currentText))) {
       // Coursework is built chapter by chapter, then returned as one docx glow-file.
@@ -103,7 +103,7 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
     if (generation.agent) {
       const { mode, autonomy, taskId } = generation.agent;
       const tools = createToolExecutor(taskId);
-      const agentPayload = buildChatPayload(generation.mode, cleanHistory, [generation.systemExtra, workflow].filter(Boolean).join("\n\n"), generation.memory, false, generation.modelId, generation.designMode, false, mode === "plan", true);
+      const agentPayload = buildChatPayload(generation.mode, cleanHistory, [generation.systemExtra, workflow].filter(Boolean).join("\n\n"), generation.memory, generation.modelId, generation.designMode, false, mode === "plan", true);
       const store = () => useAgentStore.getState();
       // A failed checkpoint must not block the task: edits still keep their own per-file snapshots.
       if (mode === "auto") await tools.begin().catch(() => undefined);
@@ -159,7 +159,6 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
       cleanHistory,
       [generation.systemExtra, workflow].filter(Boolean).join("\n\n"),
       generation.memory,
-      false,
       generation.modelId,
       generation.designMode,
       webTools,
@@ -231,11 +230,9 @@ export const smartApiResponseGenerator: ResponseGenerator<LegacyGenerationOption
             const bytes = await readWorkspaceFile(path);
             const file = new File([bytes], path.replace(/[\\/]/g, " · "), { type: "application/octet-stream" });
             const items = await prepareAttachment(file, "ru");
-            let text = items.filter((item) => item.text).map((item) => item.text).join("\n\n");
-            if (generation.mode === "med") text = (await redactPii(text)).text;
+            const text = items.filter((item) => item.text).map((item) => item.text).join("\n\n");
             readChars += text.length;
             const images = items.filter((item) => item.image);
-            if (generation.mode === "med" && images.length) throw new Error(generation.locale === "ru" ? "Режим Med не передаёт изображения рабочей папки, чтобы не отправлять неотредактированные персональные данные. Используйте обезличенную копию." : "Med mode does not send workspace images to avoid sharing unredacted personal data. Use a redacted copy.");
             imageCount += images.length;
             if (imageCount > 4) throw new Error("В задаче можно обработать до четырёх изображений. Уточните, какие файлы важны.");
             result = { path, content: text || "В документе нет извлекаемого текста. Изображение будет передано модели отдельно.", images: images.map((item) => item.name) };

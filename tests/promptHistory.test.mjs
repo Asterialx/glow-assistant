@@ -21,7 +21,7 @@ const js=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES20
 const { buildChatPayload }=await import(`data:text/javascript;base64,${Buffer.from(js).toString('base64')}`);
 
 test('Plan overrides file creation requests and leaves the generated-file contract out',()=>{
- const payload=buildChatPayload('code',[{role:'user',content:'Создай Word документ',status:'done'}],'',[],false,undefined,false,false,true);
+ const payload=buildChatPayload('code',[{role:'user',content:'Создай Word документ',status:'done'}],'',[],undefined,false,false,true);
  assert.match(payload[0].content,/PLAN MODE/);
  assert.match(payload[0].content,/Do not implement/);
  assert.ok(!payload[0].content.includes('glow-file/v1'));

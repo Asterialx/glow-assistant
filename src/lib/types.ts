@@ -1,4 +1,4 @@
-export type AppMode = "home" | "code" | "med";
+export type AppMode = "home" | "code";
 
 export type MessageRole = "system" | "user" | "assistant" | "tool";
 export type MessageStatus = "pending" | "streaming" | "done" | "error";
@@ -128,5 +128,4 @@ export const MODE_SYSTEM_PROMPTS: Record<AppMode, string> = {
     "End with at most one optional, concrete next step that moves the task forward. Do not mention model selection, token limits, prompts, or internal system mechanics unless the user explicitly asks.",
   ].join(" "),
   code: "Workspace mode: Work. Use the selected local workspace to inspect relevant files and create requested deliverables. Prefer concise progress updates and verify generated files before finishing.",
-  med: "Workspace mode: Med. Preventative-medicine assistant. Never invent patient data. Emphasize privacy. Always include a clinical disclaimer. Patient PII may already be redacted.",
 };

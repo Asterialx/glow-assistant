@@ -16,7 +16,7 @@ interface ChatState {
   activeArtifactId: string | null;
   streaming: boolean;
   draft: string;
-  panel: "chat" | "billing" | "agents" | "study" | "med" | "settings";
+  panel: "chat" | "billing" | "agents" | "study" | "settings";
   setConversations: (c: Conversation[]) => void;
   setActiveConversationId: (id: string | null) => void;
   setMessages: (m: Message[]) => void;

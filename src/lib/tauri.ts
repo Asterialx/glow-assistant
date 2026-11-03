@@ -106,15 +106,6 @@ export async function listMcp() {
         category: "browser",
       },
       {
-        id: "medical-db",
-        name: "Medical Drug DB",
-        transport: "stdio",
-        command_or_url: "medical-mcp",
-        args: [],
-        enabled: false,
-        category: "medical",
-      },
-      {
         id: "blender",
         name: "Blender",
         transport: "stdio",

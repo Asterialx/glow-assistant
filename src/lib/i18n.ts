@@ -4,7 +4,6 @@ const dict = {
   en: {
     home: "Home",
     code: "Code",
-    med: "Med",
     newChat: "New",
     projects: "Projects",
     customize: "Customize",
@@ -73,7 +72,6 @@ const dict = {
   ru: {
     home: "Home",
     code: "Code",
-    med: "Med",
     newChat: "New",
     projects: "Projects",
     customize: "Customize",

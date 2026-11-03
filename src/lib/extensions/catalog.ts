@@ -13,7 +13,6 @@ import {
   Presentation,
   Server,
   Terminal,
-  Pill,
   GitBranch,
   Container,
   Camera,
@@ -36,7 +35,6 @@ export type ExtensionId =
   | "git"
   | "roblox"
   | "unity"
-  | "medical-db"
   | "jupyter"
   | "dicom"
   | "clipboard"
@@ -235,18 +233,6 @@ export const EXTENSION_CATALOG: ExtensionDef[] = [
     icon: Cuboid,
     mcpId: "unity",
     capabilities: ["Unity MCP ON."],
-  },
-  {
-    id: "medical-db",
-    name: "Medical Drug DB",
-    description: "Drug interaction checks for Med mode.",
-    descriptionRu: "Проверка взаимодействий препаратов (Med).",
-    category: "medical",
-    icon: Pill,
-    mcpId: "medical-db",
-    capabilities: [
-      "Medical Drug DB ON: use check_drug_interactions style advice; always include disclaimer.",
-    ],
   },
   {
     id: "jupyter",

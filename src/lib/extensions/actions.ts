@@ -96,7 +96,6 @@ export async function runExtensionAction(
     case "vscode":
     case "roblox":
     case "unity":
-    case "medical-db":
     case "mcp-hub":
       return `${id}: no connected runtime is implemented. Enabling its catalog entry does not grant AI tool access.`;
     default:

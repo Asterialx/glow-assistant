@@ -108,15 +108,6 @@ fn default_mcp_servers() -> Vec<McpServerConfig> {
             category: "game-dev".into(),
         },
         McpServerConfig {
-            id: "medical-db".into(),
-            name: "Medical Drug DB".into(),
-            transport: "stdio".into(),
-            command_or_url: "medical-mcp".into(),
-            args: vec![],
-            enabled: false,
-            category: "medical".into(),
-        },
-        McpServerConfig {
             id: "chrome".into(),
             name: "Chrome Agent (Playwright)".into(),
             transport: "stdio".into(),
