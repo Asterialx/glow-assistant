@@ -44,7 +44,7 @@ export type StopReason = "done" | "max_turns" | "budget" | "aborted" | "error";
 /** `error` is set when the model call failed mid-task; the steps and changed files are still returned so the work can be undone. */
 export interface AgentResult { stopped: StopReason; usage: Usage; steps: Step[]; tasks: Task[]; changedFiles: string[]; error?: string }
 
-const RESULT_LIMIT = 12_000;
+const RESULT_LIMIT = 8_000;
 const MAX_CALLS_PER_TURN = 6;
 const REPEAT_LIMIT = 3;
 const KNOWN = new Set<string>([...READ_TOOLS, ...WRITE_TOOLS]);

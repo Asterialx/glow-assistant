@@ -28,7 +28,7 @@ function shrinkArguments(raw: string): string {
  * Results older than the last `keepRecent` become one short line; the call/result pairing stays
  * intact because the provider rejects a tool call without its answer.
  */
-export function compactMessages(messages: ChatMessage[], keepRecent = 10): ChatMessage[] {
+export function compactMessages(messages: ChatMessage[], keepRecent = 6): ChatMessage[] {
   const toolIndexes = messages.flatMap((message, index) => (message.role === "tool" ? [index] : []));
   const old = new Set(toolIndexes.slice(0, Math.max(0, toolIndexes.length - keepRecent)));
   if (!old.size) return messages;

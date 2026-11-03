@@ -118,7 +118,9 @@ export function buildChatPayload(
       ].join(" ")
     : "You are a helpful AI assistant. When asked who you are, name the model you are running as.";
 
-  const systemParts = [identity, MODE_SYSTEM_PROMPTS[mode]];
+  // The coding agent gets its own instructions from the caller; the chat persona, the Work-mode
+  // blurb and the voice-note rule would only be paid for again on every step.
+  const systemParts = codeAgent ? [] : [identity, MODE_SYSTEM_PROMPTS[mode]];
   if (projectPrompt) systemParts.push(`Project instructions:\n${projectPrompt}`);
   if (memoryFacts?.length) {
     systemParts.push(`Known user facts:\n${memoryFacts.map((f) => `- ${f}`).join("\n")}`);
@@ -137,7 +139,8 @@ export function buildChatPayload(
   }
   if (webSearch) systemParts.push(researchPolicy());
   if (webSearch && mode !== "med") systemParts.push("Web research: search only when the answer depends on current or external facts you cannot confirm from memory; do not search for general knowledge or simple reasoning. Start with one broad search and use a few results. If that is not enough, search again with narrower wording (Russian and English) and open the most relevant pages instead of relying on snippets. Keep deepening only while new evidence appears; stop after about three rounds or once key figures are confirmed by two independent sources. Prefer official sources (Росстат, ministries, central banks, exchanges, regulators) and report publication dates. If sources disagree, show both values and say which is more authoritative. Cite the links you used, and say plainly what could not be verified.");
-  systemParts.push(
+  if (codeAgent) systemParts.push("The user's latest correction overrides earlier instructions. Never invent tool results or claim actions you did not perform.");
+  else systemParts.push(
     "Conversation grounding: preserve the user's goal, constraints, and corrections from the provided history. The user's latest explicit correction takes precedence over earlier values and saved memory hints. Treat earlier assistant answers as unverified statements, not evidence that their facts are true. Never invent user details, sources, tool results, or completed actions. If a needed fact is not in the available context, say so; separate assumptions and examples from verified facts.",
     "If the user sends a [Voice note] with a transcript, treat that transcript as their spoken request and reply normally. Never ask them to type it again unless the transcript is missing.",
   );
