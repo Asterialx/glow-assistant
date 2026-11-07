@@ -100,7 +100,8 @@ body {
   .glow-composer { width: 100%; padding-inline: 12px; }
   html[data-glow-keyboard="open"] .glow-empty-chat { justify-content: flex-end; }
   html[data-glow-keyboard="open"] .glow-empty-intro { margin-top: auto; margin-bottom: auto; padding-block: 12px; }
-  html[data-glow-keyboard="open"] .glow-composer { padding-bottom: 6px; }
+  /* Leave a small gap between the composer and the on-screen keyboard instead of touching it. */
+  html[data-glow-keyboard="open"] .glow-composer { padding-bottom: 12px; }
 }
 
 ::-webkit-scrollbar {

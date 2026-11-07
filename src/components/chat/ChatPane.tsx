@@ -146,6 +146,7 @@ export function ChatPane({
   const editRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
   const followMessagesRef = useRef(true);
+  const contentRef = useRef<HTMLDivElement>(null);
   const scrollMetricsRef = useRef({ scrollHeight: 0, clientHeight: 0 });
   const touchYRef = useRef<number | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -168,6 +169,32 @@ export function ChatPane({
   }, [speakingId]);
 
   useLayoutEffect(() => {
+  // Opening another chat always starts at its latest message, even if the previous one was scrolled up.
+  const conversationKey = messages[0]?.conversation_id ?? "";
+  useLayoutEffect(() => {
+    followMessagesRef.current = true;
+    setShowScrollToBottom(false);
+  }, [conversationKey]);
+
+  // Markdown, formulas, code highlighting, images and artifacts grow after the first layout, and the
+  // mobile keyboard shrinks the list; neither fires a scroll event, so keep the bottom pinned here.
+  useEffect(() => {
+    const container = messageListRef.current;
+    const content = contentRef.current;
+    if (!container || !content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (!followMessagesRef.current) return;
+      container.scrollTop = container.scrollHeight;
+      scrollMetricsRef.current = {
+        scrollHeight: container.scrollHeight,
+        clientHeight: container.clientHeight,
+      };
+    });
+    observer.observe(container);
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [empty]);
+
     const container = messageListRef.current;
     if (container && followMessagesRef.current) {
       container.scrollTop = container.scrollHeight;
@@ -313,7 +340,7 @@ export function ChatPane({
         }}
         className="flex-1 overflow-y-auto px-4 py-6 md:px-8"
       >
-        <div className="mx-auto flex max-w-[720px] flex-col gap-7">
+        <div ref={contentRef} className="mx-auto flex max-w-[720px] flex-col gap-7">
           {messages.map((m, idx) => {
             const isUser = m.role === "user";
             const isStreaming = m.status === "streaming";

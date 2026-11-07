@@ -17,14 +17,19 @@ export function useMobileViewport() {
       const editing = document.activeElement?.matches("textarea, input, [contenteditable='true']");
       if (!editing) unfocusedHeight = Math.max(window.innerHeight, viewport.height);
       root.dataset.glowKeyboard = editing && unfocusedHeight - viewport.height > 120 ? "open" : "closed";
+      // iOS scrolls the whole page up to reveal the focused field even though the app already fits the
+      // visible viewport; that pushes the chat off the top. Put the page back.
+      if (viewport.scale <= 1.01 && (window.scrollY !== 0 || viewport.offsetTop !== 0)) window.scrollTo(0, 0);
     };
     update();
     viewport?.addEventListener("resize", update);
+    viewport?.addEventListener("scroll", update);
     compact.addEventListener("change", update);
     document.addEventListener("focusin", update);
     document.addEventListener("focusout", update);
     return () => {
       viewport?.removeEventListener("resize", update);
+      viewport?.removeEventListener("scroll", update);
       compact.removeEventListener("change", update);
       document.removeEventListener("focusin", update);
       document.removeEventListener("focusout", update);
