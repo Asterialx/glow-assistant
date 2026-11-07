@@ -145,8 +145,8 @@ export function ChatPane({
   const [editDraft, setEditDraft] = useState("");
   const editRef = useRef<HTMLTextAreaElement>(null);
   const messageListRef = useRef<HTMLDivElement>(null);
-  const followMessagesRef = useRef(true);
   const contentRef = useRef<HTMLDivElement>(null);
+  const followMessagesRef = useRef(true);
   const scrollMetricsRef = useRef({ scrollHeight: 0, clientHeight: 0 });
   const touchYRef = useRef<number | null>(null);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
@@ -168,7 +168,6 @@ export function ChatPane({
     };
   }, [speakingId]);
 
-  useLayoutEffect(() => {
   // Opening another chat always starts at its latest message, even if the previous one was scrolled up.
   const conversationKey = messages[0]?.conversation_id ?? "";
   useLayoutEffect(() => {
@@ -195,6 +194,7 @@ export function ChatPane({
     return () => observer.disconnect();
   }, [empty]);
 
+  useLayoutEffect(() => {
     const container = messageListRef.current;
     if (container && followMessagesRef.current) {
       container.scrollTop = container.scrollHeight;
