@@ -1,6 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { htmlPresentation, htmlSourceKey, validateHtmlPreviewState, isInlineHtmlArtifact } from '../src/lib/htmlArtifact.ts';
+import { htmlPresentation, htmlSourceKey, validateHtmlPreviewState, isInlineHtmlArtifact, validateHtmlPreviewError, artifactFixPrompt } from '../src/lib/htmlArtifact.ts';
+
+test('error reports from the sandbox are short plain strings only', () => {
+  assert.equal(validateHtmlPreviewError('ReferenceError: x is not defined'), 'ReferenceError: x is not defined');
+  assert.equal(validateHtmlPreviewError('a\n\tb'), 'a b');
+  assert.equal(validateHtmlPreviewError('x'.repeat(900)).length, 500);
+  assert.equal(validateHtmlPreviewError({ message: 'x' }), null);
+  assert.equal(validateHtmlPreviewError('   '), null);
+});
+
+test('the fix prompt lists the errors and carries the code only while it is small', () => {
+  const small = artifactFixPrompt('Калькулятор', ['TypeError: a is null'], '<p>x</p>', 'ru');
+  assert.match(small, /Калькулятор/);
+  assert.match(small, /- TypeError: a is null/);
+  assert.match(small, /```html\n<p>x<\/p>\n```/);
+  assert.doesNotMatch(artifactFixPrompt('Big', ['e'], 'x'.repeat(20_000), 'en'), /```html/);
+});
 
 test('HTML artifacts without a glow-display hint stay in the workspace', () => {
   assert.equal(htmlPresentation('<p>plain</p>'), 'workspace');

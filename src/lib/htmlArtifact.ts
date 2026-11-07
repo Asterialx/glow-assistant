@@ -80,6 +80,23 @@ function isJsonValue(value: unknown, depth = 0): boolean {
 /** Runs only inside the opaque-origin iframe; its only host connection is JSON state. */
 function previewBridge(channel: string, initial: HtmlPreviewState, themed: boolean) {
   let state = initial;
+  // Script errors and blocked external scripts go to the host, which shows them with a Fix button.
+  let reported = 0;
+  const reportError = (message: string) => {
+    if (reported >= 5) return;
+    reported++;
+    window.parent.postMessage({ type: "glow-html-error", channel, message: String(message).slice(0, 500) }, "*");
+  };
+  window.addEventListener("error", (event) => {
+    if (event instanceof ErrorEvent) reportError(event.error instanceof Error ? `${event.error.name}: ${event.error.message}` : event.message || "Script error");
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event.reason;
+    reportError(reason instanceof Error ? `${reason.name}: ${reason.message}` : `Unhandled rejection: ${String(reason)}`);
+  });
+  document.addEventListener("securitypolicyviolation", (event) => {
+    if (event.violatedDirective.startsWith("script-src")) reportError(`Blocked external script: ${event.blockedURI || "inline"}`);
+  });
   if (themed) window.addEventListener("message", (event) => {
     if (event.source !== window.parent || event.data?.channel !== channel || event.data?.type !== "glow-html-theme") return;
     const vars = event.data.vars;
@@ -141,6 +158,22 @@ function previewBridge(channel: string, initial: HtmlPreviewState, themed: boole
     const link = (event.target as Element | null)?.closest?.("a[href]");
     if (link && !(link.getAttribute("href") || "").startsWith("#")) event.preventDefault();
   }, true);
+}
+
+/** Accepts an error report from the sandbox: a short plain string, nothing else. */
+export function validateHtmlPreviewError(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const message = value.replace(/[\u0000-\u001f]+/g, " ").trim().slice(0, 500);
+  return message || null;
+}
+
+/** The message sent to the model when the user asks it to fix a broken artifact. */
+export function artifactFixPrompt(title: string, errors: string[], code: string, locale: "ru" | "en"): string {
+  const list = errors.map((error) => `- ${error}`).join("\n");
+  const source = code.length <= 15_000 ? `\n\n\`\`\`html\n${code}\n\`\`\`` : "";
+  return locale === "ru"
+    ? `Артефакт «${title}» выдаёт ошибки:\n${list}\n\nИсправь их и пришли артефакт целиком. Внешние скрипты и CDN заблокированы, весь код должен быть внутри файла.${source}`
+    : `The artifact "${title}" reports errors:\n${list}\n\nFix them and send the whole artifact again. External scripts and CDNs are blocked, so all code must be inline.${source}`;
 }
 
 export function buildHtmlPreviewDocument(html: string, channel: string, saved?: HtmlPreviewState, theme?: Pick<ThemeDef, "vars" | "kind">): string {

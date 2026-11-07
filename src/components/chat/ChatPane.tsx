@@ -2,6 +2,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
+// Registers \ce and \pu on the shared KaTeX instance, so chemistry renders.
+import "katex/contrib/mhchem";
 import { normalizeMath } from "../../lib/math";
 import { CodeBlock } from "./CodeBlock";
 import type { Artifact, Message, UiWidget } from "../../lib/types";
@@ -451,7 +453,7 @@ export function ChatPane({
                 >
                   {showThinking ? null : prose ? (
                     <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
+                      remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]}
                       rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
                       components={{
                         a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,

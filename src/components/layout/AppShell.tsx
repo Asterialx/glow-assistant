@@ -574,6 +574,18 @@ export function AppShell() {
     void handleSend(message.content, undefined, message.parent_id);
   };
 
+  // The Fix button of a broken HTML artifact sends its errors (and code) to the model as a new message.
+  const handleSendRef = useRef(handleSend);
+  handleSendRef.current = handleSend;
+  useEffect(() => {
+    const onFixArtifact = (event: Event) => {
+      const prompt = (event as CustomEvent<{ prompt?: unknown }>).detail?.prompt;
+      if (typeof prompt === "string" && prompt.trim()) void handleSendRef.current(prompt);
+    };
+    window.addEventListener("glow:fix-artifact", onFixArtifact);
+    return () => window.removeEventListener("glow:fix-artifact", onFixArtifact);
+  }, []);
+
   const handleRegenerate = async (assistantMessage: Message) => {
     const userMessage = conversationService
       .getState()
