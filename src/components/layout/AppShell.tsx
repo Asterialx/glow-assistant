@@ -37,6 +37,7 @@ import {
 } from "../../lib/widgetParse";
 import { PanelLeft, PanelRight, Search, X } from "lucide-react";
 import { feedbackPreferenceHints } from "../../lib/feedbackProfile";
+import { extractMemoryFacts, MEMORY_CAPTURE_PROMPT, sameFact } from "../../lib/memory";
 import { useExtensionsStore } from "../../lib/extensions/registry";
 import { conversationService, type LegacyGenerationOptions } from "../../conversation/conversationService";
 import { cloudDataEnabled } from "../../db";
@@ -251,7 +252,10 @@ export function AppShell() {
     const agent = devKind && workspaceEnabled ? { mode: (useWorkspaceStore.getState().taskMode === "plan" ? "plan" : "auto") as AgentMode, autonomy: useAgentStore.getState().autonomy, taskId: crypto.randomUUID() } : undefined;
     const noFolderCode = "You are Glow Code, a coding assistant. No project folder is connected, so you cannot read or change files or run commands: answer from the conversation, and when real files are involved tell the user to choose a project folder with the button under the input box. Reply in the user's language (Russian by default).";
     const modeInstructions = agent ? [agentInstructions(agent.mode, agent.autonomy)] : devKind ? [noFolderCode] : [workspaceInstructions, taskInstructions];
-    const memory = memoryPaused || localStorage.getItem("glow.memoryFromChats") !== "1" ? [] : await memoryFactsForPrompt();
+    const memoryOn = !memoryPaused && !gameModeActive && localStorage.getItem("glow.memoryFromChats") === "1";
+    const memory = memoryOn ? await memoryFactsForPrompt() : [];
+    // Without this instruction the model never marks facts, so memory would stay empty.
+    const memoryCapture = memoryOn && !agent ? MEMORY_CAPTURE_PROMPT : "";
     const feedback = feedbackPreferenceHints();
     // The experimental catalog must not imply tools that the model cannot call.
     const extensions = "";
@@ -262,7 +266,7 @@ export function AppShell() {
       modelId: agent || splitAttachments(userText).files.some(file => file.image) || branchPath.some(message => splitAttachments(message.content).files.some(file => file.image)) ? "anthropic/claude-haiku-5.5" : selectedModelId,
       temperature,
       maxTokens,
-      systemExtra: [project?.system_prompt, custom, feedback, extensions, artifactContext, ...modeInstructions].filter(Boolean).join("\n\n"),
+      systemExtra: [project?.system_prompt, custom, feedback, memoryCapture, extensions, artifactContext, ...modeInstructions].filter(Boolean).join("\n\n"),
       ...(agent ? { agent } : {}),
       memory,
       designMode,
@@ -287,13 +291,19 @@ export function AppShell() {
 
   const extractMemory = async (assistantText: string) => {
     if (memoryPaused || gameModeActive || localStorage.getItem("glow.memoryFromChats") !== "1") return;
-    const facts = assistantText
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => /^(remember|fact)\s*:/i.test(l))
-      .map((l) => l.replace(/^(remember|fact)\s*:/i, "").trim())
-      .filter(Boolean);
-    for (const f of facts.slice(0, 3)) await addMemory(f, mode, 0.8);
+    const facts = extractMemoryFacts(assistantText);
+    if (!facts.length) return;
+    try {
+      const known = (await listMemory()).map((item) => item.fact);
+      for (const fact of facts) {
+        if (known.some((item) => sameFact(item, fact))) continue;
+        await addMemory(fact, mode, 0.8);
+        known.push(fact);
+      }
+      cachedMemoryFacts = known;
+    } catch {
+      // Saving memory is a side effect: a storage failure must not turn a finished reply into an error.
+    }
   };
 
   const pushArtifact = (art: Artifact) => {
