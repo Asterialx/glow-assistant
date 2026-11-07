@@ -5,7 +5,7 @@ import { supabase } from "./client";
 import { UserUsageDetail, type TokenEntry } from "./UserUsageDetail";
 
 interface Member { user_id: string; email: string; role: string; active: boolean; balance: number; granted: number; used: number }
-interface Invitation { email: string; claimed_by: string | null; expires_at: string; accepted: boolean }
+interface Invitation { email: string; claimed_by: string | null; expires_at: string; accepted: boolean; confirmed?: boolean }
 
 const HOSTED_API = "https://glowai-ashy.vercel.app";
 
@@ -178,7 +178,7 @@ export function AdminPanel() {
           <div><h2 className="text-lg font-semibold">Приглашения</h2><p className="mt-0.5 text-xs text-[var(--fg-muted)]">Повторная отправка сохраняет лимит. Если аккаунт подтверждён, приходит ссылка входа.</p></div>
           <div className="divide-y divide-[var(--border)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--bg-elevated)]">
             {invites.length === 0 && <p className="p-4 text-sm text-[var(--fg-muted)]">Приглашений пока нет.</p>}
-            {invites.map(i => <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="break-all">{i.email}</span><span className="text-xs text-[var(--fg-muted)]">{i.accepted ? "Пользователь вошёл" : i.claimed_by ? "Ожидает завершения профиля" : new Date(i.expires_at).getTime() > Date.now() ? "Ожидает входа" : "Истекло"}</span><button type="button" disabled={busy || (resendAfter[i.email] || 0) > clock} onClick={() => resendInvite(i.email)} className={buttonClass} aria-label={`Отправить снова ${i.email}`}>{(resendAfter[i.email] || 0) > clock ? `Повтор через ${Math.ceil((resendAfter[i.email] - clock) / 1000)} с` : "Отправить снова"} <ArrowUpRight size={15} /></button></div>)}
+            {invites.map(i => <div key={i.email} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"><span className="break-all">{i.email}</span><span className="text-xs text-[var(--fg-muted)]">{i.accepted ? "Пользователь вошёл" : i.claimed_by && i.confirmed ? "Ожидает завершения профиля" : i.claimed_by || new Date(i.expires_at).getTime() > Date.now() ? "Ожидает входа" : "Истекло"}</span><button type="button" disabled={busy || (resendAfter[i.email] || 0) > clock} onClick={() => resendInvite(i.email)} className={buttonClass} aria-label={`Отправить снова ${i.email}`}>{(resendAfter[i.email] || 0) > clock ? `Повтор через ${Math.ceil((resendAfter[i.email] - clock) / 1000)} с` : "Отправить снова"} <ArrowUpRight size={15} /></button></div>)}
           </div>
         </section>
       </>}
