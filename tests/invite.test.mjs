@@ -28,6 +28,9 @@ test('invites reject invalid limits and cross-origin requests',async()=>scenario
  let res=response();await handler({...request(),headers:{...request().headers,origin:'https://evil.example'}},res);assert.equal(res.code,403);assert.equal(calls.length,0);
  res=response();await handler(request({email:'tester@example.com',credits:10000001}),res);assert.equal(res.code,400);assert.ok(!calls.some(c=>c.path.includes('/invite')));
 }));
+test('desktop app origin from the Tauri HTTP plugin is accepted',async()=>scenario({},async()=>{
+ const res=response();await handler({...request(),headers:{...request().headers,origin:'http://tauri.localhost'}},res);assert.equal(res.code,200);
+}));
 test('invite prepares allowance before email and redirects only to current site',async()=>scenario({},async calls=>{
  const res=response();await handler(request(),res);assert.equal(res.code,200);
  const prepared=calls.findIndex(c=>c.path.includes('glow_admin_invite')), mail=calls.findIndex(c=>c.path.includes('/auth/v1/invite'));

@@ -14,7 +14,9 @@ export default async function handler(req, res) {
   const origin = req.headers.origin;
   if (typeof host !== 'string' || !/^[a-z0-9.-]+(?::\d+)?$/i.test(host)) return respond(400, 'origin', 'Некорректный адрес приложения.');
   const expectedOrigin = `${host.startsWith('localhost:') || host.startsWith('127.0.0.1:') ? 'http' : 'https'}://${host}`;
-  if (origin && origin !== expectedOrigin) return respond(403, 'origin', 'Откройте приглашения на сайте Glow.');
+  // The desktop app calls through @tauri-apps/plugin-http, which always sends the webview origin.
+  const desktopOrigins = ['http://tauri.localhost', 'https://tauri.localhost', 'tauri://localhost'];
+  if (origin && origin !== expectedOrigin && !desktopOrigins.includes(origin)) return respond(403, 'origin', 'Откройте приглашения на сайте Glow.');
   try {
     const client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } } });
     const { data: { user }, error: authError } = await client.auth.getUser(token);
